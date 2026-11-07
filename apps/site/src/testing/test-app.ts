@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../server/app";
 import { createInviteCode } from "../server/auth/invites";
-import { setWorkdayOverride } from "../server/billing/peak-hours";
 import { connectDatabase } from "../server/db/client";
 import { unconfiguredGoogle } from "../server/google/port";
 import { noHumanCheck } from "../server/human-check";
@@ -80,9 +79,6 @@ export async function createTestApp(options: TestAppOptions = {}) {
     browser: () => new TestBrowser(app),
     /** 建一个邀请码（管理员在命令行里做的事）。 */
     createInvite: (invite: { expiresAt?: Date } = {}) => createInviteCode(deps, invite),
-    /** 把某一天设成工作日（false）或休息日（true），null 去掉改动（管理员做的事）。 */
-    setWorkday: (date: string, isOffDay: boolean | null) =>
-      setWorkdayOverride(deps, date, isOffDay),
     /** 用 GitHub 注册并登录，把 App 装到这些仓库上。返回登录了的浏览器和假 GitHub 上的用户。 */
     signUpWithGitHub: async (login: string, ...repos: string[]) => {
       const user = github.addUser({ login, email: `${login}@example.com` });

@@ -42,7 +42,6 @@
 - 用户协议、隐私政策的正文在 `apps/site/src/client/legal/*.md`。改了协议，同时改 `packages/protocol` 里的 `LEGAL_VERSION`（注册时记在账户上）。加了运行时依赖，要在 `legal/licenses.ts` 的开源声明里补上，有测试检查。
 - 建邀请码（管理端做好之前用这个）：在 `apps/site` 里运行 `DATABASE_URL=... pnpm invite:create [--count 数量] [--days 有效天数]`。
 - 访问记录（注册、登录、发起会话、发消息时的 IP）在 `apps/site/src/server/access-log.ts`，保存 180 天，删除账户时只断开关联、不删。
-- 高峰时段和工作日历在 `apps/site/src/server/billing/peak-hours.ts`，模型网关计费、用量圆环都用它；国务院的放假安排内置在 `billing/holidays.ts`，每年 11 月前后发了下一年的通知就照原文补上。管理端做好之前，按天改工作日历用 `DATABASE_URL=... pnpm calendar:set <YYYY-MM-DD> <workday|off|default>`。测试里是 `t.setWorkday(日期, 是否休息)`。
 
 ## 合并授权
 

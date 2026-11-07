@@ -8,7 +8,6 @@ import type {
 import { SESSION_STATUSES, TURN_END_REASONS } from "@seekcloud/protocol";
 import {
   boolean,
-  date,
   index,
   integer,
   jsonb,
@@ -294,13 +293,6 @@ export const sessionEvents = pgTable(
   },
   (t) => [primaryKey({ columns: [t.sessionId, t.seq] })],
 );
-
-/** 管理员按天改的工作日历，盖过内置的国务院放假安排和周末。日期是北京时间。 */
-export const workdayOverrides = pgTable("workday_overrides", {
-  date: date("date", { mode: "string" }).primaryKey(),
-  isOffDay: boolean("is_off_day").notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
-});
 
 export const accessEvent = pgEnum("access_event", [
   "register",

@@ -270,7 +270,6 @@ function readme(email: string, now: Date): string {
     AI_NOTICE,
     "",
     "不包含：GitHub 令牌、登录验证码等凭据；代码保存在 GitHub，不在此导出中。",
-    "用量和套餐记录：付费功能上线后加入导出。",
     "",
   ].join("\n");
 }

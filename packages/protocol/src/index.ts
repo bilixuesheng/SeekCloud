@@ -31,7 +31,7 @@ export interface TodoItem {
   status: "pending" | "in_progress" | "completed";
 }
 
-export const TURN_END_REASONS = ["completed", "stopped", "failed", "paused"] as const;
+export const TURN_END_REASONS = ["completed", "stopped", "failed"] as const;
 export type TurnEndReason = (typeof TURN_END_REASONS)[number];
 
 /**
@@ -49,8 +49,6 @@ export const ERROR_CODES = [
   "context_too_long",
   /** 等模型服务超时。 */
   "timeout",
-  /** 用户的额度用完了。 */
-  "quota_exhausted",
   /** 建不了沙箱（宿主机没资源、镜像拉不下来）。 */
   "sandbox_unavailable",
   /** 克隆仓库失败。 */

@@ -157,21 +157,6 @@ describe("Agent 工作时发消息", () => {
     expect(startTurns(sessionId)[0]?.text).toBe("加个登录页\n\n用 Tailwind");
   });
 
-  it("额度用完、回合暂停：排队的消息留着，不自动开始", async () => {
-    const { shortId, sessionId, turnId } = await running();
-    await send(shortId, "继续");
-
-    await t.host.emit({
-      type: "agent",
-      sessionId,
-      turnId,
-      event: { type: "turn.ended", reason: "paused" },
-    });
-
-    expect(startTurns(sessionId)).toHaveLength(1);
-    expect((await events(shortId)).filter((e) => e.type === "message.withdrawn")).toEqual([]);
-  });
-
   it("别人的会话、别人的排队消息：404", async () => {
     const { shortId } = await running();
     const queued = (await (await send(shortId, "私事")).json()) as { queued: { id: string } };

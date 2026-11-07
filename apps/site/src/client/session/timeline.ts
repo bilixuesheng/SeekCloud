@@ -32,7 +32,6 @@ export interface Timeline {
 const endNotices = {
   stopped: { tone: "info", text: "回合已停止" },
   failed: { tone: "error", text: "回合失败" },
-  paused: { tone: "info", text: "额度已用尽，回合已暂停" },
 } as const;
 
 /** 把会话事件整理成界面上的一条条内容。 */

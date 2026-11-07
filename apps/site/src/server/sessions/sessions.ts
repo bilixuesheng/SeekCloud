@@ -572,11 +572,9 @@ export class Sessions {
       .update(turns)
       .set({ status: event.reason, endedAt: this.#deps.clock.now() })
       .where(eq(turns.id, turn.id));
-    // 有排队的消息就直接开始下一个回合；额度用完暂停时留着，等用户点继续。
-    if (event.reason !== "paused") {
-      const next = await this.#startQueued(tx, session);
-      if (next) return next;
-    }
+    // 有排队的消息就直接开始下一个回合。
+    const next = await this.#startQueued(tx, session);
+    if (next) return next;
     await this.#setStatus(tx, session.id, turn.number, { status: "waiting", detail: null });
     return undefined;
   }

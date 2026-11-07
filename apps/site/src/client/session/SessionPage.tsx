@@ -250,7 +250,7 @@ export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
             busy={busy}
             submitLabel="发送"
           />
-          {/* 输入框下面一行：模型和思考强度（以后还有权限模式和用量圆环） */}
+          {/* 输入框下面一行：模型和思考强度（以后还有权限模式） */}
           {models && picked && (
             <div className="composer-below">
               <ModelPicker

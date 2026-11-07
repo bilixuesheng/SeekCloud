@@ -4,7 +4,7 @@ export interface Clock {
   now(): Date;
 }
 
-/** 返回 [0, 1) 之间的随机数，比如额度浮动要用。 */
+/** 返回 [0, 1) 之间的随机数。测试里换成固定的值，结果可以复现。 */
 export interface Random {
   next(): number;
 }
