@@ -38,25 +38,18 @@ describe("访问记录", () => {
   const myId = async (browser: TestBrowser) =>
     ((await (await browser.get("/api/me")).json()) as { id: string }).id;
 
-  /** 用邮箱登录或注册；IP 从 forwardedFor 来（默认用浏览器自己的）。 */
-  async function emailSignIn(browser: TestBrowser, email: string, forwardedFor = browser.ip) {
-    t.clock.advance(2 * 60_000); // 避开每分钟一次的限制
-    await browser.post("/api/auth/email/send-code", { email });
-    const res = await browser.request("/api/auth/email/verify", {
+  /** 用密码登录，IP 是 forwardedFor。 */
+  async function login(forwardedFor: string) {
+    const res = await t.browser().request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json", "x-forwarded-for": forwardedFor },
-      body: JSON.stringify({
-        email,
-        code: t.lastLoginCode(email),
-        inviteCode: await t.createInvite(),
-        acceptTerms: true,
-      }),
+      body: JSON.stringify({ password: t.adminPassword }),
     });
-    expect(res.status).toBeLessThan(300);
+    expect(res.status).toBe(204);
   }
 
-  it("注册、登录、发起会话、发消息时记下 IP；IPv6 只记 /64", async () => {
-    const { browser } = await t.signUpWithGitHub("tracked", "tracked/app");
+  it("设置密码、登录、发起会话、发消息时记下 IP；IPv6 只记 /64", async () => {
+    const { browser } = await t.adminWithGitHub("tracked", "tracked/app");
     const userId = await myId(browser);
     const created = await browser.post("/api/sessions", {
       repo: "tracked/app",
@@ -74,11 +67,10 @@ describe("访问记录", () => {
       404,
     );
 
-    const laptop = t.browser();
-    await emailSignIn(laptop, "tracked@example.com", "2001:db8:aa:bb:1:2:3:4");
+    await login("2001:db8:aa:bb:1:2:3:4");
 
     expect(await logsOf(userId)).toEqual([
-      { event: "register", network: browser.ip },
+      { event: "login", network: browser.ip },
       { event: "session_start", network: browser.ip },
       { event: "message", network: browser.ip },
       { event: "login", network: "2001:db8:aa:bb::/64" },
@@ -86,15 +78,16 @@ describe("访问记录", () => {
   });
 
   it("保存 180 天，过期由定期任务删掉", async () => {
-    const browser = t.browser();
-    await emailSignIn(browser, "keeper@example.com");
-    const userId = await myId(browser);
+    const userId = await myId(await t.admin());
+    t.clock.advance(DAY);
+    await login("203.0.113.8");
 
-    t.clock.advance(179 * DAY);
+    // 之前的记录满 180 天先删掉，后来登录的这条还在。
+    t.clock.advance(179 * DAY + 60_000);
     await t.runMaintenance();
-    expect(await logsOf(userId)).toHaveLength(1);
+    expect(await logsOf(userId)).toEqual([{ event: "login", network: "203.0.113.8" }]);
 
-    t.clock.advance(DAY + 60_000);
+    t.clock.advance(DAY);
     await t.runMaintenance();
     expect(await logsOf(userId)).toHaveLength(0);
   });

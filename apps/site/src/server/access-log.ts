@@ -10,7 +10,7 @@ export type AccessEvent = (typeof accessLogs.$inferInsert)["event"];
 /** 访问记录保存 180 天（《网络安全法》第二十三条：网络日志不少于六个月）。 */
 export const ACCESS_LOG_RETENTION_MS = 180 * 24 * 60 * 60_000;
 
-/** 记一条访问记录：注册、登录、发起会话、发消息时调用。 */
+/** 记一条访问记录：登录、发起会话、发消息时调用。 */
 export async function recordAccess(
   deps: Pick<AppDeps, "db" | "clock">,
   c: Context,

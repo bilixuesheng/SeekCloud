@@ -27,8 +27,6 @@ export interface GitHub {
   exchangeCode(code: string): Promise<GitHubTokens>;
   refreshTokens(refreshToken: string): Promise<GitHubTokens>;
   getUser(accessToken: string): Promise<GitHubUser>;
-  /** 已验证的主邮箱，没有就返回 undefined。 */
-  getPrimaryEmail(accessToken: string): Promise<string | undefined>;
   listInstalledRepos(accessToken: string): Promise<Repo[]>;
   searchPublicRepos(accessToken: string, query: string): Promise<Repo[]>;
   /** 一个公开仓库（只读）。不存在或者是私有仓库时返回 undefined。 */

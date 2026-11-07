@@ -1,27 +1,27 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { AppDeps } from "../app";
-import { githubTokens, identities } from "../db/schema";
+import { githubTokens } from "../db/schema";
 import { GitHubAuthError, type GitHubTokens } from "./port";
 
 const REFRESH_AHEAD_MS = 5 * 60_000;
 
-type Db = Pick<AppDeps["db"], "insert">;
+const sealed = (deps: Pick<AppDeps, "secrets">, tokens: GitHubTokens, now: Date) => ({
+  accessToken: deps.secrets.seal(tokens.accessToken),
+  accessExpiresAt: tokens.accessExpiresAt,
+  refreshToken: deps.secrets.seal(tokens.refreshToken),
+  refreshExpiresAt: tokens.refreshExpiresAt,
+  updatedAt: now,
+});
 
-export async function saveGitHubTokens(
-  db: Db,
-  deps: Pick<AppDeps, "secrets">,
+/** 关联 GitHub 账号。已经关联了别的账号时，换成这个。 */
+export async function connectGitHub(
+  deps: AppDeps,
   userId: string,
+  login: string,
   tokens: GitHubTokens,
-  now: Date,
 ): Promise<void> {
-  const row = {
-    accessToken: deps.secrets.seal(tokens.accessToken),
-    accessExpiresAt: tokens.accessExpiresAt,
-    refreshToken: deps.secrets.seal(tokens.refreshToken),
-    refreshExpiresAt: tokens.refreshExpiresAt,
-    updatedAt: now,
-  };
-  await db
+  const row = { login, ...sealed(deps, tokens, deps.clock.now()) };
+  await deps.db
     .insert(githubTokens)
     .values({ userId, ...row })
     .onConflictDoUpdate({ target: githubTokens.userId, set: row });
@@ -56,7 +56,10 @@ export async function githubAccessToken(deps: AppDeps, userId: string) {
         throw new GitHubAuthError("刷新令牌已过期");
       }
       const tokens = await deps.github.refreshTokens(refreshToken);
-      await saveGitHubTokens(tx, deps, userId, tokens, now);
+      await tx
+        .update(githubTokens)
+        .set(sealed(deps, tokens, now))
+        .where(eq(githubTokens.userId, userId));
       return tokens.accessToken;
     } catch (error) {
       if (!(error instanceof GitHubAuthError)) throw error;
@@ -86,18 +89,21 @@ export async function withGitHubToken<T>(
   }
 }
 
-/** GitHub 不认这个用户的令牌了：删掉，算作没关联。 */
-export async function disconnectGitHub(deps: AppDeps, userId: string): Promise<void> {
-  await deps.db.delete(githubTokens).where(eq(githubTokens.userId, userId));
+/** 解除关联，或者 GitHub 不认这个用户的令牌了：删掉，算作没关联。返回原来有没有关联。 */
+export async function disconnectGitHub(deps: AppDeps, userId: string): Promise<boolean> {
+  const deleted = await deps.db
+    .delete(githubTokens)
+    .where(eq(githubTokens.userId, userId))
+    .returning({ userId: githubTokens.userId });
+  return deleted.length > 0;
 }
 
 /** 用户关联的 GitHub 账号；令牌失效时返回 undefined。 */
 export async function githubConnection(deps: AppDeps, userId: string) {
   const [row] = await deps.db
-    .select({ login: identities.login, refreshExpiresAt: githubTokens.refreshExpiresAt })
-    .from(identities)
-    .innerJoin(githubTokens, eq(githubTokens.userId, identities.userId))
-    .where(and(eq(identities.userId, userId), eq(identities.provider, "github")));
+    .select({ login: githubTokens.login, refreshExpiresAt: githubTokens.refreshExpiresAt })
+    .from(githubTokens)
+    .where(eq(githubTokens.userId, userId));
   if (!row || row.refreshExpiresAt <= deps.clock.now()) return undefined;
   return { login: row.login };
 }

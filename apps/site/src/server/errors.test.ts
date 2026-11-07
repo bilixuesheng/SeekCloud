@@ -28,7 +28,7 @@ describe("错误返回：请求本身有问题", () => {
   afterAll(() => t.close());
 
   it("JSON 写坏了：返回 400 和统一格式", async () => {
-    const res = await t.request("/api/auth/email/send-code", {
+    const res = await t.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{not json",
@@ -41,7 +41,7 @@ describe("错误返回：请求本身有问题", () => {
   });
 
   it("缺字段：说明是中文", async () => {
-    const res = await t.request("/api/auth/email/send-code", {
+    const res = await t.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",

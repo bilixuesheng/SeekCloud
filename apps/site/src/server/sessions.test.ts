@@ -34,7 +34,7 @@ describe("发起会话，宿主机按脚本跑完一个回合", () => {
 
   beforeAll(async () => {
     t = await createTestApp();
-    ({ browser } = await t.signUpWithGitHub("octo", "octo/app"));
+    ({ browser } = await t.adminWithGitHub("octo", "octo/app"));
   });
   afterAll(() => t.close());
 
@@ -268,7 +268,7 @@ describe("实时同步", () => {
 
   beforeAll(async () => {
     t = await createTestApp();
-    ({ browser } = await t.signUpWithGitHub("sync", "sync/app"));
+    ({ browser } = await t.adminWithGitHub("sync", "sync/app"));
     t.host.manual = true;
   });
   afterAll(() => t.close());
@@ -409,17 +409,14 @@ describe("实时同步", () => {
     });
   });
 
-  it("别人的会话：看不到，也打不开事件流，发不了消息", async () => {
+  it("不存在的会话：404，事件流也打不开，发不了消息；没登录：401", async () => {
+    expect((await browser.get("/api/sessions/nope0000")).status).toBe(404);
+    expect((await browser.get("/api/sessions/nope0000/events")).status).toBe(404);
+    expect((await browser.post("/api/sessions/nope0000/messages", { text: "嗨" })).status).toBe(
+      404,
+    );
     const { session } = await startSession(browser, { repo: "sync/app" });
-    const { browser: other } = await t.signUpWithGitHub("other", "other/app");
-
-    expect((await other.get(`/api/sessions/${session.shortId}`)).status).toBe(404);
-    expect((await other.get(`/api/sessions/${session.shortId}/events`)).status).toBe(404);
-    expect(
-      (await other.post(`/api/sessions/${session.shortId}/messages`, { text: "嗨" })).status,
-    ).toBe(404);
-    const theirs = (await (await other.get("/api/sessions")).json()) as { sessions: unknown[] };
-    expect(theirs.sessions).toEqual([]);
+    expect((await t.browser().get(`/api/sessions/${session.shortId}`)).status).toBe(401);
   });
 });
 
@@ -427,7 +424,7 @@ describe("没有宿主机", () => {
   it("新会话留在排队中", async () => {
     const t = await createTestApp({ host: false });
     try {
-      const { browser } = await t.signUpWithGitHub("lonely", "lonely/app");
+      const { browser } = await t.adminWithGitHub("lonely", "lonely/app");
       const { session } = await startSession(browser, { repo: "lonely/app" });
 
       expect(session.status).toBe("queued");
@@ -447,7 +444,7 @@ describe("发起会话时的检查", () => {
 
   beforeAll(async () => {
     t = await createTestApp();
-    ({ browser } = await t.signUpWithGitHub("check", "check/app"));
+    ({ browser } = await t.adminWithGitHub("check", "check/app"));
   });
   afterAll(() => t.close());
 
@@ -484,36 +481,25 @@ describe("发起会话时的检查", () => {
     expect(errorCode(session)).toBe("branch_not_found");
   });
 
-  it("环境不是自己的：404", async () => {
-    const { browser: other } = await t.signUpWithGitHub("check2", "check2/app");
-    const theirs = (await (await other.get("/api/environments")).json()) as {
-      environments: Array<{ id: string }>;
-    };
+  it("环境不存在：404", async () => {
     const { res, session } = await startSession(browser, {
       repo: "check/app",
-      environmentId: theirs.environments[0]?.id,
+      environmentId: "00000000-0000-4000-8000-000000000000",
     });
     expect(res.status).toBe(404);
     expect(errorCode(session)).toBe("environment_not_found");
   });
 
-  it("邮箱注册、还没关联 GitHub：409，引导去关联", async () => {
-    const email = t.browser();
-    await email.post("/api/auth/email/send-code", { email: "mail@example.com" });
-    await email.post("/api/auth/email/verify", {
-      email: "mail@example.com",
-      code: t.lastLoginCode("mail@example.com"),
-      inviteCode: await t.createInvite(),
-      acceptTerms: true,
-    });
+  it("还没关联 GitHub：409，引导去关联", async () => {
+    expect((await browser.post("/api/github/unlink", {})).status).toBe(204);
 
-    const { res, session } = await startSession(email);
+    const { res, session } = await startSession(browser, { repo: "check/app" });
     expect(res.status).toBe(409);
     expect(errorCode(session)).toBe("github_not_connected");
   });
 
   it("用户在 GitHub 上撤销了授权：409，并算作没关联", async () => {
-    const { browser: revoked, user } = await t.signUpWithGitHub("revoked", "revoked/app");
+    const { browser: revoked, user } = await t.adminWithGitHub("revoked", "revoked/app");
     t.github.revoke(user);
 
     const { res, session } = await startSession(revoked, { repo: "revoked/app" });

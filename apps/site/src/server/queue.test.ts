@@ -13,7 +13,7 @@ describe("Agent 工作时发消息", () => {
 
   beforeAll(async () => {
     t = await createTestApp();
-    ({ browser } = await t.signUpWithGitHub("queue", "queue/app"));
+    ({ browser } = await t.adminWithGitHub("queue", "queue/app"));
     t.host.manual = true;
   });
   afterAll(() => t.close());
@@ -157,14 +157,16 @@ describe("Agent 工作时发消息", () => {
     expect(startTurns(sessionId)[0]?.text).toBe("加个登录页\n\n用 Tailwind");
   });
 
-  it("别人的会话、别人的排队消息：404", async () => {
+  it("不存在的会话、不存在的排队消息：404", async () => {
     const { shortId } = await running();
-    const queued = (await (await send(shortId, "私事")).json()) as { queued: { id: string } };
-    const { browser: other } = await t.signUpWithGitHub("queue-other", "queue-other/app");
+    const missing = "00000000-0000-4000-8000-000000000000";
 
-    expect((await other.post(`/api/sessions/${shortId}/messages`, { text: "x" })).status).toBe(404);
+    expect((await browser.post("/api/sessions/nope0000/messages", { text: "x" })).status).toBe(404);
     expect(
-      (await other.post(`/api/sessions/${shortId}/queue/${queued.queued.id}/withdraw`, {})).status,
+      (await browser.post(`/api/sessions/${shortId}/queue/${missing}/withdraw`, {})).status,
+    ).toBe(404);
+    expect(
+      (await browser.post(`/api/sessions/${shortId}/queue/${missing}/send-now`, {})).status,
     ).toBe(404);
   });
 

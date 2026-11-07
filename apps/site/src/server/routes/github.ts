@@ -3,16 +3,16 @@ import type { Context } from "hono";
 import type { AppDeps } from "../app";
 import { currentUser } from "../auth/login-sessions";
 import { apiError, errorResponse, githubNotConnected, notLoggedIn } from "../errors";
-import { finishGitHubSignIn, startGitHubSignIn } from "../github/sign-in";
-import { githubConnection, withGitHubToken } from "../github/tokens";
+import { finishGitHubLink, startGitHubLink } from "../github/link";
+import { disconnectGitHub, githubConnection, withGitHubToken } from "../github/tokens";
 import type { Sessions } from "../sessions/sessions";
 import { jsonBody as json, newRouter } from "./router";
 
-/** 用 GitHub 登录、关联。陌生的 GitHub 账号注册或绑定走 /api/auth/pending。 */
+/** 关联 GitHub：跳到 GitHub 授权，授权后跳回来。 */
 export function githubAuthRoutes(deps: AppDeps) {
   return newRouter()
-    .get("/start", (c) => c.redirect(startGitHubSignIn(deps, c), 302))
-    .get("/callback", async (c) => c.redirect(await finishGitHubSignIn(deps, c), 302));
+    .get("/start", (c) => c.redirect(startGitHubLink(deps, c), 302))
+    .get("/callback", async (c) => c.redirect(await finishGitHubLink(deps, c), 302));
 }
 
 const Repo = z.object({
@@ -34,6 +34,17 @@ const statusRoute = createRoute({
       ),
     },
     401: errorResponse("没有登录"),
+  },
+});
+
+const unlinkRoute = createRoute({
+  method: "post",
+  path: "/unlink",
+  summary: "解除关联 GitHub，删掉 GitHub 令牌",
+  responses: {
+    204: { description: "已解除" },
+    401: errorResponse("没有登录"),
+    404: errorResponse("没有关联 GitHub"),
   },
 });
 
@@ -88,7 +99,7 @@ const PullRequestPayload = z.object({
   }),
 });
 
-/** 关联状态、仓库、分支，以及接收 GitHub webhook 的入口。 */
+/** 关联状态、解除关联、仓库、分支，以及接收 GitHub webhook 的入口。 */
 export function githubRoutes(deps: AppDeps, sessions: Sessions) {
   return newRouter()
     .openapi(statusRoute, async (c) => {
@@ -101,6 +112,14 @@ export function githubRoutes(deps: AppDeps, sessions: Sessions) {
           : { connected: false, installUrl: deps.github.installUrl },
         200,
       );
+    })
+    .openapi(unlinkRoute, async (c) => {
+      const user = await currentUser(deps, c);
+      if (!user) return c.json(notLoggedIn, 401);
+      if (!(await disconnectGitHub(deps, user.id))) {
+        return c.json(apiError("not_linked", "尚未关联 GitHub"), 404);
+      }
+      return c.body(null, 204);
     })
     .openapi(reposRoute, async (c) => {
       const q = c.req.valid("query").q?.trim();

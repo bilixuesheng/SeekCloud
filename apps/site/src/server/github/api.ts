@@ -96,14 +96,6 @@ export function githubApi(options: Options): GitHub {
       return { id: String(user.id), login: user.login };
     },
 
-    async getPrimaryEmail(token) {
-      const emails = await call<Array<{ email: string; primary: boolean; verified: boolean }>>(
-        token,
-        "/user/emails",
-      );
-      return emails.find((e) => e.primary && e.verified)?.email.toLowerCase();
-    },
-
     async listInstalledRepos(token) {
       const { installations } = await call<{ installations: Array<{ id: number }> }>(
         token,

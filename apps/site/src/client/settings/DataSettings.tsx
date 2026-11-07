@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { type ApiError, api } from "../api";
-import { LegalLink } from "../legal/LegalPage";
 import { shortDateTime } from "../session/relative-time";
 
 interface ExportView {
@@ -21,26 +20,8 @@ const fileSize = (bytes: number) =>
     ? `${Math.max(1, Math.round(bytes / 1024))} KB`
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
-/** 隐私：导出数据，以及隐私政策的链接。 */
-export function PrivacySettings() {
-  return (
-    <>
-      <section className="settings-section">
-        <h2>导出数据</h2>
-        <ExportData />
-      </section>
-      <section className="settings-section">
-        <h2>隐私政策</h2>
-        <p className="settings-hint">
-          关于我们收集的信息、共享对象和保存期限，请参阅 <LegalLink doc="privacy" newTab />。
-          我们不会使用你的代码和对话训练模型。
-        </p>
-      </section>
-    </>
-  );
-}
-
-function ExportData() {
+/** 导出数据：后台打包，打包好后出现下载按钮。 */
+export function ExportData() {
   const [overview, setOverview] = useState<Overview>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -77,7 +58,7 @@ function ExportData() {
   const next = overview?.nextAvailableAt ? new Date(overview.nextAvailableAt) : undefined;
 
   let sub = "将账户资料、全部对话（JSON 与 Markdown 格式）及环境配置打包为 zip 文件。";
-  if (working) sub = "正在打包，完成后将通过邮件通知，通常需要几分钟。你可以关闭此窗口。";
+  if (working) sub = "正在打包，通常需要几分钟。完成后可在此处下载。";
   else if (downloadable && latest?.expiresAt)
     sub = `打包已完成，可在 ${shortDateTime(new Date(latest.expiresAt))} 前下载。`;
   else if (latest?.status === "failed") sub = "上次导出失败，请重试。";

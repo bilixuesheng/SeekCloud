@@ -1,7 +1,7 @@
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { strFromU8, unzipSync } from "fflate";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestApp, type TestApp } from "../testing/test-app";
 import { AI_NOTICE } from "./account/transcript";
 
@@ -16,9 +16,9 @@ async function errorCode(res: Response) {
   return ((await res.json()) as { error: { code: string } }).error.code;
 }
 
-/** 用 GitHub 注册，发起一个会话并等 Agent 回完。 */
-async function userWithSession(t: TestApp, login: string, text: string) {
-  const { browser, user } = await t.signUpWithGitHub(login, `${login}/app`);
+/** 管理员关联 GitHub，发起一个会话并等 Agent 回完。 */
+async function adminWithSession(t: TestApp, login: string, text: string) {
+  const { browser } = await t.adminWithGitHub(login, `${login}/app`);
   t.host.script(
     { type: "message", text: "先看一下代码。", thinking: "要找到入口文件" },
     { type: "tool.call", callId: "c1", name: "Bash", input: { command: "echo ```" } },
@@ -32,19 +32,21 @@ async function userWithSession(t: TestApp, login: string, text: string) {
   });
   const { shortId } = (await res.json()) as { shortId: string };
   await t.host.idle();
-  return { browser, user, shortId, email: `${login}@example.com` };
+  return { browser, shortId };
 }
 
 describe("导出数据", () => {
   let t: TestApp;
 
-  beforeAll(async () => {
+  // 每 24 小时只能导出一次，而管理员只有一个：每个用例一个新的主站。
+  beforeEach(async () => {
+    await t?.close();
     t = await createTestApp();
   });
   afterAll(() => t.close());
 
-  it("申请后由后台任务打包，好了发邮件；压缩包里有账户资料、环境、每个会话的 JSON 和 Markdown，没有令牌", async () => {
-    const { browser, shortId, email } = await userWithSession(t, "exporter", "把登录页改一下");
+  it("申请后由后台任务打包，好了在设置里下载；压缩包里有账户资料、环境、每个会话的 JSON 和 Markdown，没有令牌", async () => {
+    const { browser, shortId } = await adminWithSession(t, "exporter", "把登录页改一下");
 
     const requested = await browser.post("/api/account/export", {});
     expect(requested.status).toBe(202);
@@ -56,9 +58,6 @@ describe("导出数据", () => {
     const latest = overview.latest as { id: string; status: string; expiresAt: string };
     expect(latest.status).toBe("ready");
     expect(new Date(latest.expiresAt).getTime()).toBe(t.clock.now().getTime() + DAY);
-    const mail = t.mailer.sent.findLast((m) => m.to === email);
-    expect(mail?.subject).toBe("SeekCloud：数据导出已完成");
-    expect(mail?.text).toContain("https://seekcloud.test/settings/privacy");
 
     const download = await browser.get(`/api/account/export/${latest.id}/download`);
     expect(download.status).toBe(200);
@@ -80,10 +79,14 @@ describe("导出数据", () => {
       `sessions/${shortId}.md`,
     ]);
     const text = (name: string) => strFromU8(files[name] as Uint8Array);
-    expect(text("README.txt").split("\n")[0]).toBe("SeekCloud · 数据导出");
-    expect(JSON.parse(text("account.json"))).toMatchObject({
-      email,
-      identities: [{ provider: "github", login: "exporter" }],
+    expect(text("README.txt").split("\n").slice(0, 3)).toEqual([
+      "SeekCloud · 数据导出",
+      "",
+      "账户：exporter",
+    ]);
+    expect(JSON.parse(text("account.json"))).toEqual({
+      createdAt: expect.any(String),
+      github: "exporter",
     });
     expect(JSON.parse(text("environments.json"))).toEqual([
       expect.objectContaining({ isDefault: true }),
@@ -116,8 +119,23 @@ describe("导出数据", () => {
     }
   });
 
+  it("没关联 GitHub：账户写作管理员", async () => {
+    const browser = await t.admin();
+    await browser.post("/api/account/export", {});
+    await t.runMaintenance();
+    const { id } = (await json(await browser.get("/api/account/export"))).latest as { id: string };
+
+    const download = await browser.get(`/api/account/export/${id}/download`);
+
+    const files = unzipSync(new Uint8Array(await download.arrayBuffer()));
+    expect(strFromU8(files["README.txt"] as Uint8Array)).toContain("账户：管理员\n");
+    expect(JSON.parse(strFromU8(files["account.json"] as Uint8Array))).toMatchObject({
+      github: null,
+    });
+  });
+
   it("每 24 小时只能申请一次；满 24 小时后可以再申请", async () => {
-    const { browser } = await t.signUpWithGitHub("twice", "twice/app");
+    const browser = await t.admin();
     expect((await browser.post("/api/account/export", {})).status).toBe(202);
 
     t.clock.advance(23 * HOUR);
@@ -132,15 +150,13 @@ describe("导出数据", () => {
     expect((await browser.post("/api/account/export", {})).status).toBe(202);
   });
 
-  it("下载链接 24 小时后失效，压缩包也删掉；别人的导出下载不了", async () => {
-    const { browser } = await t.signUpWithGitHub("expiring", "expiring/app");
-    const other = (await t.signUpWithGitHub("someone", "someone/app")).browser;
+  it("下载链接 24 小时后失效，压缩包也删掉；没登录下载不了", async () => {
+    const browser = await t.admin();
     await browser.post("/api/account/export", {});
     await t.runMaintenance();
     const { id } = (await json(await browser.get("/api/account/export"))).latest as { id: string };
     const path = `/api/account/export/${id}/download`;
 
-    expect((await other.get(path)).status).toBe(404);
     expect((await t.browser().get(path)).status).toBe(401);
     expect((await browser.get(path)).status).toBe(200);
 
@@ -153,7 +169,7 @@ describe("导出数据", () => {
   });
 
   it("打包失败：标成失败，不算进 24 小时一次，可以马上重试", async () => {
-    const { browser } = await t.signUpWithGitHub("broken", "broken/app");
+    const browser = await t.admin();
     // 放一个同名文件挡住 exports 目录，写压缩包时就会失败。
     const blocker = join(t.dataDir, "exports");
     await rm(blocker, { recursive: true, force: true });

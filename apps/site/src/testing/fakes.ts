@@ -1,4 +1,4 @@
-import type { Clock, Mail, Mailer } from "../server/ports";
+import type { Clock } from "../server/ports";
 
 export class FakeClock implements Clock {
   #now: Date;
@@ -13,22 +13,5 @@ export class FakeClock implements Clock {
 
   advance(ms: number): void {
     this.#now = new Date(this.#now.getTime() + ms);
-  }
-}
-
-export class FakeMailer implements Mailer {
-  readonly sent: Mail[] = [];
-  #nextFailure: Error | undefined;
-
-  /** 下一次发信失败，模拟发信服务出问题。 */
-  failNext(error = new Error("发信服务不可用")): void {
-    this.#nextFailure = error;
-  }
-
-  async send(mail: Mail): Promise<void> {
-    const failure = this.#nextFailure;
-    this.#nextFailure = undefined;
-    if (failure) throw failure;
-    this.sent.push(mail);
   }
 }

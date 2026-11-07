@@ -8,7 +8,6 @@ const HOUR = 3_600_000;
 export interface FakeUser {
   id: string;
   login: string;
-  email?: string;
   installed: Repo[];
 }
 
@@ -30,7 +29,7 @@ export class FakeGitHub implements GitHub {
     this.#clock = clock;
   }
 
-  addUser(user: { login: string; email?: string }): FakeUser {
+  addUser(user: { login: string }): FakeUser {
     const created = { id: String(1000 + this.#users.size), installed: [], ...user };
     this.#users.set(created.id, created);
     return created;
@@ -104,10 +103,6 @@ export class FakeGitHub implements GitHub {
   async getUser(accessToken: string) {
     const user = this.#userFor(accessToken);
     return { id: user.id, login: user.login };
-  }
-
-  async getPrimaryEmail(accessToken: string) {
-    return this.#userFor(accessToken).email;
   }
 
   async listInstalledRepos(accessToken: string) {

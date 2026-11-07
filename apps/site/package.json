@@ -10,7 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc -p .",
     "db:generate": "drizzle-kit generate",
-    "invite:create": "tsx src/server/cli/create-invite.ts"
+    "admin:reset-password": "tsx src/server/cli/reset-password.ts"
   },
   "dependencies": {
     "@fontsource/noto-serif-sc": "^5.3.1",

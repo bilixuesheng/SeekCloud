@@ -39,7 +39,7 @@ export class RateLimiter {
     return 0;
   }
 
-  /** 退回最近一次 take 记下的次数，比如邮件没发出去时。 */
+  /** 退回最近一次 take 记下的次数，比如密码输对了、不算输错时。 */
   release(rules: Rule[]): void {
     for (const rule of rules) this.#hits.get(storageKey(rule))?.pop();
   }

@@ -126,7 +126,7 @@ export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
       <div className="session-page">
         <div className="session-missing">
           <h1>未找到该会话</h1>
-          <p>该会话可能已被删除，或不属于当前账户。</p>
+          <p>该会话可能已被删除，或链接有误。</p>
         </div>
       </div>
     );

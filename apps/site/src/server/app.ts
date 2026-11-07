@@ -4,7 +4,7 @@ import { csrf } from "hono/csrf";
 import type { Database } from "./db/client";
 import { apiError, handleError } from "./errors";
 import type { GitHub } from "./github/port";
-import type { Clock, Mailer } from "./ports";
+import type { Clock } from "./ports";
 import { RateLimiter } from "./rate-limit";
 import { accountRoutes } from "./routes/account";
 import { authRoutes } from "./routes/auth";
@@ -12,7 +12,6 @@ import { githubAuthRoutes, githubRoutes } from "./routes/github";
 import { meRoutes } from "./routes/me";
 import { newRouter } from "./routes/router";
 import { sessionRoutes } from "./routes/sessions";
-import { pendingIdentityRoutes } from "./routes/third-party";
 import type { SecretBox } from "./secrets";
 import type { HostLink } from "./sessions/host";
 import { Sessions } from "./sessions/sessions";
@@ -21,9 +20,6 @@ export interface AppDeps {
   version: string;
   db: Database;
   clock: Clock;
-  mailer: Mailer;
-  /** 内测席位总数：用户数到了就不能再注册。 */
-  seatLimit: number;
   /** 生产环境里登录 Cookie 只走 HTTPS。 */
   secureCookies: boolean;
   github: GitHub;
@@ -31,8 +27,6 @@ export interface AppDeps {
   secrets: SecretBox;
   /** 沙箱宿主机。还没有接上时，新会话留在排队中。 */
   host?: HostLink;
-  /** 主站对外的地址（PUBLIC_URL），写进邮件里的链接。 */
-  publicUrl: string;
   /** 主站自己的数据目录：导出数据的压缩包放在这里的 exports 下面。 */
   dataDir: string;
 }
@@ -78,7 +72,6 @@ export function createApp(deps: AppDeps) {
 
   const limiter = new RateLimiter(deps.clock);
   app.route("/api/auth/github", githubAuthRoutes(deps));
-  app.route("/api/auth/pending", pendingIdentityRoutes(deps, limiter));
   const sessions = new Sessions(deps);
   app.route("/api/account", accountRoutes(deps));
   app.route("/api/auth", authRoutes(deps, limiter));

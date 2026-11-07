@@ -93,13 +93,6 @@ export const SettingsIcon = () => (
   </svg>
 );
 
-export const MailIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-    <rect x="2" y="3.5" width="12" height="9" rx="1.6" {...line} />
-    <path d="m2.6 4.5 5.4 4 5.4-4" {...line} />
-  </svg>
-);
-
 export const CopyIcon = () => (
   <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
     <rect x="5.5" y="5.5" width="8" height="8" rx="1.6" {...line} />
@@ -115,13 +108,6 @@ export const UndoIcon = () => (
   <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
     <path d="M3.5 6.5h6.2a3.3 3.3 0 0 1 0 6.6H6.5" {...line} />
     <path d="M6 4 3.5 6.5 6 9" {...line} />
-  </svg>
-);
-
-/** 盾牌：隐私。 */
-export const ShieldIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-    <path d="M8 1.8 13 3.6v4.1c0 3.1-2.1 5.4-5 6.5-2.9-1.1-5-3.4-5-6.5V3.6z" {...line} />
   </svg>
 );
 

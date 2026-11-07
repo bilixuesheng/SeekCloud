@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 
-export const SETTINGS_SECTIONS = ["general", "account", "privacy"] as const;
+export const SETTINGS_SECTIONS = ["general", "account"] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
-/** 不用登录也能看的三份文件：用户协议、隐私政策、开源声明。 */
-export const LEGAL_DOCS = ["terms", "privacy", "licenses"] as const;
+/** 不用登录也能看的页面：开源声明。 */
+export const LEGAL_DOCS = ["licenses"] as const;
 export type LegalDoc = (typeof LEGAL_DOCS)[number];
 
 export type Route =

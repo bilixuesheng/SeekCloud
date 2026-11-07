@@ -242,23 +242,6 @@ a.ghost:hover {
   background: var(--hover);
 }
 
-.text-button {
-  border: 0;
-  background: none;
-  padding: 0 0 0 6px;
-  color: var(--accent-fg);
-  font-size: 14px;
-}
-
-.text-button.center {
-  align-self: center;
-  padding: 4px 0;
-}
-
-.text-button:disabled {
-  color: var(--faint);
-}
-
 .icon-button {
   width: 36px;
   height: 36px;
@@ -315,21 +298,6 @@ input:not([type="range"]):focus {
   box-shadow: 0 0 0 3px var(--focus);
 }
 
-.code-input {
-  height: 56px;
-  text-align: center;
-  font-size: 26px;
-  font-weight: 600;
-  letter-spacing: 0.45em;
-  padding-left: calc(14px + 0.45em);
-  font-variant-numeric: tabular-nums;
-}
-
-.invite-input {
-  letter-spacing: 0.12em;
-  font-weight: 600;
-}
-
 .stack {
   display: flex;
   flex-direction: column;
@@ -349,20 +317,11 @@ input:not([type="range"]):focus {
   word-break: break-all;
 }
 
-.divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--faint);
-  font-size: 13px;
-}
-
-.divider::before,
-.divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--border);
+/* 登录页上忘记密码时要运行的命令 */
+.hint code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  color: var(--fg);
 }
 
 .notice,
@@ -593,7 +552,7 @@ input:not([type="range"]):focus {
   font-weight: 600;
 }
 
-.account-email {
+.account-name {
   flex: 1;
   min-width: 0;
   font-size: 13px;
@@ -2434,12 +2393,6 @@ details > summary::-webkit-details-marker {
   font-size: 14px;
 }
 
-/* 登录后请用户确认绑定第三方账号 */
-.pending-link {
-  margin-top: 16px;
-  animation: rise-in 0.3s var(--ease-out);
-}
-
 /* 设置弹窗：左边分类，右边内容；手机上占满整个屏幕 */
 .dialog-scrim {
   position: fixed;
@@ -2735,7 +2688,7 @@ details > summary::-webkit-details-marker {
   transform-origin: bottom left;
 }
 
-.account-menu-email {
+.account-menu-name {
   padding: 6px 10px 8px;
   font-size: 12.5px;
   color: var(--muted);
@@ -3304,7 +3257,7 @@ a.button:active,
   }
 }
 
-/* ---------- 用户协议、隐私政策、开源声明 ---------- */
+/* ---------- 开源声明 ---------- */
 
 .legal-page {
   min-height: 100dvh;
@@ -3327,36 +3280,6 @@ a.button:active,
   border-bottom: 1px solid var(--border);
 }
 
-.legal-tabs {
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.legal-tabs a {
-  flex: none;
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: 14px;
-  color: var(--muted);
-  text-decoration: none;
-  transition:
-    background-color 0.15s var(--ease-out),
-    color 0.15s var(--ease-out);
-}
-
-.legal-tabs a:hover {
-  background: var(--hover);
-  color: var(--fg);
-}
-
-.legal-tabs a.current {
-  background: var(--active);
-  color: var(--accent-fg);
-  font-weight: 550;
-}
-
 .legal-body {
   width: 100%;
   max-width: 760px;
@@ -3372,20 +3295,6 @@ a.button:active,
   font-size: 30px;
   font-weight: 600;
   letter-spacing: 0.02em;
-}
-
-.legal-date {
-  margin: 0 0 28px;
-  font-size: 13px;
-  color: var(--faint);
-}
-
-.legal-body .markdown blockquote {
-  padding: 10px 14px;
-  border-left: 3px solid var(--warning);
-  border-radius: 0 8px 8px 0;
-  background: color-mix(in srgb, var(--warning) 9%, transparent);
-  color: var(--fg-2);
 }
 
 .legal-foot {
@@ -3462,33 +3371,12 @@ a.button:active,
   line-height: 1.6;
 }
 
-/* 注册表单里的"我已阅读并同意" */
-.consent {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.consent input {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  margin: 1px 0 0;
-  accent-color: var(--accent);
-}
-
-.consent a,
 .auth-footer-links a,
 .account-menu-legal a {
   color: var(--accent-fg);
   text-decoration: none;
 }
 
-.consent a:hover,
 .auth-footer-links a:hover,
 .account-menu-legal a:hover {
   text-decoration: underline;
@@ -3520,14 +3408,6 @@ a.button:active,
 }
 
 @media (max-width: 480px) {
-  /* 手机上两行的顶栏太占地方：不跟着滚动 */
-  .legal-head {
-    position: static;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
   .legal-body {
     padding-top: 28px;
   }

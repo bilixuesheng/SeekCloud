@@ -1,24 +1,17 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { type ApiError, api } from "../api";
-import { type Provider, providerNames } from "../auth-results";
+import type { GitHubStatus } from "../GitHubConnectCard";
 import { GitHubMark } from "../GitHubMark";
-import { CloseIcon, MailIcon, MoonIcon, SettingsIcon, ShieldIcon, UserIcon } from "../Icons";
+import { CloseIcon, MoonIcon, SettingsIcon, UserIcon } from "../Icons";
+import { LegalLink } from "../legal/LegalPage";
 import { navigate, type SettingsSection } from "../router";
 import { currentTheme, setTheme, type Theme } from "../theme";
-import { PrivacySettings } from "./DataSettings";
-
-interface Identities {
-  email: string;
-  identities: Array<{ provider: Provider; login: string }>;
-}
-
-const marks: Record<Provider, ReactNode> = { github: <GitHubMark size={16} /> };
+import { ExportData } from "./DataSettings";
 
 const sections: Array<{ id: SettingsSection; name: string; icon: ReactNode }> = [
   { id: "general", name: "通用", icon: <SettingsIcon /> },
   { id: "account", name: "账户", icon: <UserIcon /> },
-  { id: "privacy", name: "隐私", icon: <ShieldIcon /> },
 ];
 
 /**
@@ -30,12 +23,14 @@ export function SettingsDialog({
   notice,
   onClose,
   onSignedOut,
+  onGitHubChanged,
 }: {
   section: SettingsSection;
-  /** 绑定第三方账号跳回来时的结果。 */
+  /** 关联 GitHub 跳回来时出的问题。 */
   notice?: string;
   onClose: () => void;
   onSignedOut: () => void;
+  onGitHubChanged: () => void;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
 
@@ -92,10 +87,12 @@ export function SettingsDialog({
           <div className="settings-content" key={section}>
             {section === "general" ? (
               <GeneralSettings />
-            ) : section === "privacy" ? (
-              <PrivacySettings />
             ) : (
-              <AccountSettings notice={notice} onSignedOut={onSignedOut} />
+              <AccountSettings
+                notice={notice}
+                onSignedOut={onSignedOut}
+                onGitHubChanged={onGitHubChanged}
+              />
             )}
           </div>
         </div>
@@ -151,19 +148,18 @@ function GeneralSettings() {
   );
 }
 
-/** 账户：登录方式、退出。 */
-function AccountSettings({ notice, onSignedOut }: { notice?: string; onSignedOut: () => void }) {
-  const [data, setData] = useState<Identities>();
+/** 账户：密码、GitHub、导出数据、登录状态、开源声明。 */
+function AccountSettings({
+  notice,
+  onSignedOut,
+  onGitHubChanged,
+}: {
+  notice?: string;
+  onSignedOut: () => void;
+  onGitHubChanged: () => void;
+}) {
   const [error, setError] = useState(notice);
   const [confirmLogout, setConfirmLogout] = useState(false);
-
-  const load = useCallback(() => {
-    api<Identities>("/api/account/identities").then(setData, (e: ApiError) => setError(e.message));
-  }, []);
-
-  useEffect(load, [load]);
-
-  const providers: Provider[] = ["github"];
 
   return (
     <>
@@ -174,29 +170,20 @@ function AccountSettings({ notice, onSignedOut }: { notice?: string; onSignedOut
       )}
 
       <section className="settings-section">
-        <h2>登录方式</h2>
-        <p className="settings-hint">邮箱验证码登录始终可用，因此第三方账号均可解绑。</p>
+        <h2>密码</h2>
+        <PasswordRow />
+      </section>
+
+      <section className="settings-section">
+        <h2>GitHub</h2>
         <ul className="settings-list">
-          <li className="settings-row">
-            <span className="settings-icon">
-              <MailIcon />
-            </span>
-            <span className="settings-row-text">
-              <span className="settings-row-name">邮箱验证码</span>
-              <span className="settings-row-sub">{data?.email}</span>
-            </span>
-          </li>
-          {data &&
-            providers.map((provider) => (
-              <IdentityRow
-                key={provider}
-                provider={provider}
-                login={data.identities.find((i) => i.provider === provider)?.login}
-                onChange={load}
-                onError={setError}
-              />
-            ))}
+          <GitHubRow onChanged={onGitHubChanged} onError={setError} />
         </ul>
+      </section>
+
+      <section className="settings-section">
+        <h2>导出数据</h2>
+        <ExportData />
       </section>
 
       <section className="settings-section">
@@ -234,32 +221,159 @@ function AccountSettings({ notice, onSignedOut }: { notice?: string; onSignedOut
           </li>
         </ul>
       </section>
+
+      <section className="settings-section">
+        <h2>开源声明</h2>
+        <p className="settings-hint">
+          SeekCloud 使用的开源软件及其许可证，请参阅 <LegalLink doc="licenses" newTab />。
+        </p>
+      </section>
     </>
   );
 }
 
-function IdentityRow({
-  provider,
-  login,
-  onChange,
+/** 修改密码：先输当前密码，新密码填两遍。改完后当前设备保持登录，其他设备退出。 */
+function PasswordRow() {
+  const [editing, setEditing] = useState(false);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: "alert" | "notice"; text: string }>();
+
+  const close = () => {
+    setEditing(false);
+    setCurrent("");
+    setNext("");
+    setConfirm("");
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (next !== confirm) {
+      setMessage({ tone: "alert", text: "两次输入的新密码不一致" });
+      return;
+    }
+    setBusy(true);
+    setMessage(undefined);
+    try {
+      await api("/api/auth/password", { currentPassword: current, newPassword: next });
+      close();
+      setMessage({ tone: "notice", text: "密码已修改，其他设备已退出登录。" });
+    } catch (e) {
+      setMessage({ tone: "alert", text: (e as ApiError).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="settings-card">
+      <div className="settings-row">
+        <span className="settings-row-text">
+          <span className="settings-row-name">管理员密码</span>
+          <span className="settings-row-sub">修改后，其他设备将退出登录。</span>
+        </span>
+        {!editing && (
+          <button
+            type="button"
+            className="pill-button"
+            onClick={() => {
+              setEditing(true);
+              setMessage(undefined);
+            }}
+          >
+            修改
+          </button>
+        )}
+      </div>
+      {editing && (
+        <form className="settings-form" onSubmit={submit}>
+          {/* 和登录页一样放一个看不见的用户名，密码管理器才能更新存着的密码 */}
+          <input
+            type="text"
+            name="username"
+            autoComplete="username"
+            value="admin"
+            hidden
+            readOnly
+          />
+          <label className="field">
+            <span>当前密码</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              required
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>新密码（至少 8 位）</span>
+            <input
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              required
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>确认新密码</span>
+            <input
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              required
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+            />
+          </label>
+          <div className="settings-form-actions">
+            <button type="button" className="secondary" onClick={close}>
+              取消
+            </button>
+            <button type="submit" className="primary" disabled={busy}>
+              {busy ? "请稍候…" : "修改密码"}
+            </button>
+          </div>
+        </form>
+      )}
+      {message && (
+        <p className={message.tone} role={message.tone === "alert" ? "alert" : "status"}>
+          {message.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** GitHub：关联了就显示账号，可以解除关联；没关联时跳到 GitHub 授权，回来还是这一页。 */
+function GitHubRow({
+  onChanged,
   onError,
 }: {
-  provider: Provider;
-  login?: string;
-  onChange: () => void;
+  onChanged: () => void;
   onError: (message: string) => void;
 }) {
-  // 解绑要点两下：第一下变成"确认解绑"，免得误点。
+  const [status, setStatus] = useState<GitHubStatus>();
+  // 解除关联要点两下：第一下变成"确认解除"，免得误点。
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
-  const name = providerNames[provider];
+
+  const load = useCallback(() => {
+    api<GitHubStatus>("/api/github/status").then(setStatus, (e: ApiError) => onError(e.message));
+  }, [onError]);
+  useEffect(load, [load]);
 
   const unlink = async () => {
     setBusy(true);
     try {
-      await api("/api/account/identities/unlink", { provider });
+      await api("/api/github/unlink", {});
       setConfirming(false);
-      onChange();
+      load();
+      onChanged();
     } catch (e) {
       onError((e as ApiError).message);
     } finally {
@@ -267,17 +381,20 @@ function IdentityRow({
     }
   };
 
+  const login = status?.connected ? status.login : undefined;
   return (
     <li className="settings-row">
-      <span className="settings-icon">{marks[provider]}</span>
+      <span className="settings-icon">
+        <GitHubMark size={16} />
+      </span>
       <span className="settings-row-text">
-        <span className="settings-row-name">{name}</span>
+        <span className="settings-row-name">GitHub</span>
         <span className="settings-row-sub">
-          {login ?? "未绑定"}
-          {confirming && provider === "github" && " · 解绑后 Agent 将无法访问你的仓库"}
+          {status ? (login ?? "未关联") : ""}
+          {confirming && " · 解除关联后 Agent 将无法访问你的仓库"}
         </span>
       </span>
-      {login ? (
+      {!status ? null : login ? (
         confirming ? (
           <span className="settings-actions">
             <button type="button" className="pill-button" onClick={() => setConfirming(false)}>
@@ -289,17 +406,17 @@ function IdentityRow({
               disabled={busy}
               onClick={() => void unlink()}
             >
-              确认解绑
+              确认解除
             </button>
           </span>
         ) : (
           <button type="button" className="pill-button" onClick={() => setConfirming(true)}>
-            解绑
+            解除关联
           </button>
         )
       ) : (
-        <a className="pill-button accent" href={`/api/auth/${provider}/start?next=/settings`}>
-          绑定
+        <a className="pill-button accent" href="/api/auth/github/start?next=/settings">
+          关联
         </a>
       )}
     </li>
