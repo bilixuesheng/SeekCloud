@@ -1,0 +1,36 @@
+#!/bin/sh
+# 沙箱里给 git 提交签名的助手，配在 git 的 gpg.ssh.program 上（见 README.md）。
+# git 调用它的方式和 ssh-keygen 一样：seekcloud-sign -Y sign -n git -f <公钥> [-U] <文件>，
+# 签名写到 <文件>.sig。签名由宿主机做，密钥不在沙箱里；验证之类的其他用法交给真正的 ssh-keygen。
+set -eu
+
+if [ "${1:-}" = "-Y" ] && [ "${2:-}" = "sign" ]; then
+  shift 2
+  namespace=git
+  file=
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -n) namespace=$2; shift 2 ;;
+      -f | -O) shift 2 ;;
+      -*) shift ;;
+      *) file=$1; shift ;;
+    esac
+  done
+  if [ -z "$file" ]; then
+    echo "seekcloud-sign: 没有要签名的文件" >&2
+    exit 1
+  fi
+  if ! curl -sS --noproxy '*' --fail-with-body -X POST \
+    -H "Authorization: Bearer ${SEEKCLOUD_SESSION_TOKEN:?没有会话令牌}" \
+    -H "Content-Type: application/octet-stream" \
+    --data-binary "@$file" \
+    -o "$file.sig" \
+    "${SEEKCLOUD_SIGN_URL:?没有签名服务的地址}?namespace=$namespace"; then
+    echo "seekcloud-sign: 宿主机没有签名：$(cat "$file.sig" 2>/dev/null)" >&2
+    rm -f "$file.sig"
+    exit 1
+  fi
+  exit 0
+fi
+
+exec ssh-keygen "$@"

@@ -1,0 +1,30 @@
+#!/bin/sh
+# 沙箱里所有 git 钩子的入口（见 ../README.md）。core.hooksPath 用环境变量指到这个目录，盖过仓库自己的设置，
+# 所以每个钩子都先接着跑仓库原本会跑的同名钩子（.git/hooks，或仓库设的 core.hooksPath，比如 husky）。
+set -eu
+
+name=$(basename "$0")
+here=$(cd "$(dirname "$0")" && pwd)
+# 去掉环境变量里的配置，读到的就是仓库原本的 core.hooksPath
+own=$(GIT_CONFIG_COUNT=0 git config --get core.hooksPath 2>/dev/null || true)
+# git init、clone 建仓库的过程中也会调 reference-transaction，那时 rev-parse 还认不出仓库，仓库自己也还没有钩子
+if [ -z "$own" ] && common=$(git rev-parse --git-common-dir 2>/dev/null); then own="$common/hooks"; fi
+if [ -n "$own" ] && [ "$(cd "$own" 2>/dev/null && pwd)" != "$here" ] && [ -x "$own/$name" ]; then
+  "$own/$name" "$@"
+fi
+
+# 提交说明加上 AI 生成的尾注，用户要求去掉也照加（用户协议写明了不得删除标识）。
+# --no-verify 会跳过 commit-msg，所以 prepare-commit-msg 先加一次（只打编辑器的提交这时还没有说明，留给 commit-msg）。
+# commit-msg 在仓库的钩子改过说明之后再确认一次；说明是空的不加，否则空说明不再中止提交。
+trailer="Generated-by: SeekCloud Agent (AI)"
+add_trailer() {
+  # 压缩几个提交时，各自的尾注会留在说明中间：先全部去掉，再在末尾加一次。
+  # stripspace 顺带补上末尾的换行（git merge -m 写的没有，interpret-trailers 会把尾注接进正文那一段）。
+  grep -vxF "$trailer" "$1" | git stripspace > "$1.seekcloud"
+  mv "$1.seekcloud" "$1"
+  git interpret-trailers --in-place --trailer "$trailer" "$1"
+}
+case "$name" in
+  prepare-commit-msg) if [ -n "${2:-}" ] && [ "$2" != template ]; then add_trailer "$1"; fi ;;
+  commit-msg) if [ -n "$(git stripspace --strip-comments < "$1")" ]; then add_trailer "$1"; fi ;;
+esac

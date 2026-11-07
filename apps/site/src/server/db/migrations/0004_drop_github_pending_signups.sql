@@ -1,0 +1,1 @@
+DROP TABLE "github_pending_signups" CASCADE;

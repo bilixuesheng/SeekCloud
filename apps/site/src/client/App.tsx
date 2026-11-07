@@ -1,0 +1,296 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "./api";
+import { type AuthResult, takeAuthResult } from "./auth-results";
+import { LogoutIcon, MenuIcon, PlusIcon, SearchIcon, SettingsIcon } from "./Icons";
+import { LoginPage } from "./LoginPage";
+import { Brand, Logo } from "./Logo";
+import { LegalLink, LegalPage } from "./legal/LegalPage";
+import { PendingLinkCard } from "./PendingLinkCard";
+import { navigate, pathOf, type Route, useRoute } from "./router";
+import { NewSession } from "./session/NewSession";
+import { SessionList } from "./session/SessionList";
+import { SessionPage } from "./session/SessionPage";
+import { useSessions } from "./session/useSessions";
+import { SettingsDialog } from "./settings/SettingsDialog";
+
+interface Me {
+  id: string;
+  email: string;
+}
+
+export function App() {
+  const [me, setMe] = useState<Me | null>();
+  const [authResult] = useState(takeAuthResult);
+  const route = useRoute();
+
+  const refresh = useCallback(() => {
+    api<Me>("/api/me").then(setMe, () => setMe(null));
+  }, []);
+
+  useEffect(refresh, [refresh]);
+
+  // 用户协议、隐私政策、开源声明：登没登录都能看。
+  if (route.page === "legal") return <LegalPage doc={route.doc} />;
+
+  // 等登录状态的时候先空着；超过一小会儿还没回来，才淡入一个标志（见 .splash），快的时候什么都不闪。
+  if (me === undefined) {
+    return (
+      <div className="splash" aria-hidden="true">
+        <Logo size={56} />
+      </div>
+    );
+  }
+  if (me === null) return <LoginPage onSignedIn={refresh} authResult={authResult} />;
+  return (
+    <Shell
+      me={me}
+      authResult={authResult}
+      onSignedOut={refresh}
+      onEmailChanged={(email) => setMe({ ...me, email })}
+    />
+  );
+}
+
+function HomeLink() {
+  return (
+    <a
+      href="/"
+      className="home-link"
+      onClick={(e) => {
+        e.preventDefault();
+        navigate("/");
+      }}
+    >
+      <Brand size={28} />
+    </a>
+  );
+}
+
+/** 登录后的页面：左边是会话列表（手机上收进抽屉），右边是首页或会话页。 */
+function Shell({
+  me,
+  authResult,
+  onSignedOut,
+  onEmailChanged,
+}: {
+  me: Me;
+  authResult: AuthResult | null;
+  onSignedOut: () => void;
+  onEmailChanged: (email: string) => void;
+}) {
+  const route = useRoute();
+  // 设置是盖在原来页面上的弹窗：记住打开设置之前在哪一页，底下照常显示它，关掉时回去。
+  const lastPage = useRef<Route>({ page: "home" });
+  if (route.page !== "settings") lastPage.current = route;
+  const page = route.page === "settings" ? lastPage.current : route;
+  const closeSettings = useCallback(() => navigate(pathOf(lastPage.current)), []);
+  const settingsOpen = route.page === "settings";
+  const { sessions, loaded, upsert } = useSessions();
+  const [drawer, setDrawer] = useState(false);
+  const [search, setSearch] = useState("");
+  const currentId = page.page === "session" ? page.id : undefined;
+  const current = sessions.find((s) => s.shortId === currentId);
+  const query = search.trim().toLowerCase();
+  const shown = query
+    ? sessions.filter(
+        (s) =>
+          s.title.toLowerCase().includes(query) ||
+          s.repos.some((r) => r.fullName.toLowerCase().includes(query)),
+      )
+    : sessions;
+  const notice = authResult?.message;
+  const newSession = () => {
+    navigate("/");
+    setDrawer(false);
+  };
+
+  return (
+    <div className="shell">
+      {/* 设置窗口打开时，底下的页面不能用 Tab 或读屏摸到 */}
+      <aside
+        className={`sidebar${drawer ? " open" : ""}`}
+        aria-label="会话列表"
+        inert={settingsOpen}
+      >
+        <div className="sidebar-head">
+          <HomeLink />
+        </div>
+        <button type="button" className="new-session-button" onClick={newSession}>
+          <span className="new-session-icon">
+            <PlusIcon size={14} />
+          </span>
+          新会话
+        </button>
+        <label className="sidebar-search">
+          <SearchIcon />
+          <input
+            type="search"
+            placeholder="搜索会话"
+            aria-label="搜索会话"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
+        <div className="sidebar-section">最近</div>
+        <div className="sidebar-list">
+          <SessionList
+            sessions={shown}
+            loaded={loaded}
+            currentId={currentId}
+            onPick={() => setDrawer(false)}
+          />
+        </div>
+        <AccountFoot
+          email={me.email}
+          onSettings={() => {
+            navigate("/settings/general");
+            setDrawer(false);
+          }}
+          onSignedOut={onSignedOut}
+        />
+      </aside>
+      {/* 遮罩一直在，开关时淡入淡出；收起时不挡点击，也不进 Tab 顺序 */}
+      <button
+        type="button"
+        className={`scrim${drawer ? " open" : ""}`}
+        aria-label="收起会话列表"
+        aria-hidden={!drawer}
+        tabIndex={drawer ? 0 : -1}
+        onClick={() => setDrawer(false)}
+      />
+
+      <div className="main" inert={settingsOpen}>
+        <header className="mobile-bar">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="会话列表"
+            aria-expanded={drawer}
+            onClick={() => setDrawer(true)}
+          >
+            <MenuIcon />
+          </button>
+          <span className="mobile-title">
+            {page.page === "session" ? (current?.title ?? "") : "新会话"}
+          </span>
+          <button type="button" className="icon-button" aria-label="新会话" onClick={newSession}>
+            <PlusIcon size={20} />
+          </button>
+        </header>
+
+        {page.page === "session" ? (
+          <SessionPage key={page.id} id={page.id} listed={current} />
+        ) : (
+          <main className="home">
+            <div className="home-inner">
+              {notice && route.page !== "settings" && (
+                <p className="alert" role="alert">
+                  {notice}
+                </p>
+              )}
+              <PendingLinkCard />
+              <NewSession onCreated={upsert} />
+            </div>
+          </main>
+        )}
+      </div>
+      {route.page === "settings" && (
+        <SettingsDialog
+          section={route.section}
+          notice={notice}
+          onClose={closeSettings}
+          onEmailChanged={onEmailChanged}
+          onSignedOut={onSignedOut}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * 侧边栏底部的账户：点一下弹出菜单（设置、退出登录）；右边的齿轮直接打开设置。
+ */
+function AccountFoot({
+  email,
+  onSettings,
+  onSignedOut,
+}: {
+  email: string;
+  onSettings: () => void;
+  onSignedOut: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="sidebar-foot" ref={root}>
+      {open && (
+        <div className="popover account-menu" role="menu">
+          <div className="account-menu-email">{email}</div>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onSettings();
+            }}
+          >
+            <SettingsIcon />
+            设置
+          </button>
+          <div className="popover-divider" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => api("/api/auth/logout", {}).then(onSignedOut)}
+          >
+            <LogoutIcon />
+            退出登录
+          </button>
+          <div className="account-menu-legal">
+            <LegalLink doc="terms" newTab />
+            <LegalLink doc="privacy" newTab />
+            <LegalLink doc="licenses" newTab />
+          </div>
+        </div>
+      )}
+      <button
+        type="button"
+        className={`account-button${open ? " active" : ""}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <span className="avatar" aria-hidden="true">
+          {email[0]?.toUpperCase()}
+        </span>
+        <span className="account-email" title={email}>
+          {email}
+        </span>
+      </button>
+      <button
+        type="button"
+        className="icon-button"
+        aria-label="设置"
+        title="设置"
+        onClick={onSettings}
+      >
+        <SettingsIcon />
+      </button>
+    </div>
+  );
+}
