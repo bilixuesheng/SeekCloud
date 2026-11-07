@@ -30,8 +30,6 @@ export const users = pgTable("users", {
   // 注册时同意的用户协议和隐私政策的版本（LEGAL_VERSION）和时间。
   termsVersion: text("terms_version"),
   termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }),
-  // 用户删除了账户：立即停用，邮箱换成占位、可以重新注册；过一段时间清理任务删掉整个账户。
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
 export const inviteCodes = pgTable("invite_codes", {
@@ -132,29 +130,6 @@ export const pendingIdentities = pgTable("pending_identities", {
   // GitHub 的授权令牌（JSON，加密存放）。
   githubTokens: text("github_tokens"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-});
-
-/** 换邮箱：发到新邮箱的验证码，只存哈希，10 分钟有效。一个账户同时只有一条。 */
-export const emailChanges = pgTable("email_changes", {
-  userId: uuid("user_id")
-    .primaryKey()
-    .references(() => users.id, { onDelete: "cascade" }),
-  newEmail: text("new_email").notNull(),
-  codeHash: text("code_hash").notNull(),
-  attempts: integer("attempts").notNull().default(0),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  createdAt: createdAt(),
-});
-
-/** 删除账户前发到邮箱的验证码。一个账户同时只有一个。 */
-export const accountDeletionCodes = pgTable("account_deletion_codes", {
-  userId: uuid("user_id")
-    .primaryKey()
-    .references(() => users.id, { onDelete: "cascade" }),
-  codeHash: text("code_hash").notNull(),
-  attempts: integer("attempts").notNull().default(0),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  createdAt: createdAt(),
 });
 
 /**
@@ -303,15 +278,13 @@ export const accessEvent = pgEnum("access_event", [
 
 /**
  * 注册、登录、发起会话、发消息时的客户端网络。《网络安全法》要求网络日志留存不少于 6 个月，保存 180 天。
- * 删除账户时这些记录要按期留存：user_id 清空，换成一个随机的 deleted_account，同一个已删除账户的记录还能归到一起，
- * 但查不回是哪个账户。只存储，不用于别的用途。
+ * 只存储，不用于别的用途。
  */
 export const accessLogs = pgTable(
   "access_logs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
-    deletedAccount: uuid("deleted_account"),
     event: accessEvent("event").notNull(),
     // IPv4 原样；IPv6 只留前 64 位（一台设备的 IPv6 地址经常变），写成 2001:db8:1:2::/64
     network: text("network").notNull(),

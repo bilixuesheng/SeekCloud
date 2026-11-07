@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { isIPv4, isIPv6 } from "node:net";
-import { eq, lt } from "drizzle-orm";
+import { lt } from "drizzle-orm";
 import type { Context } from "hono";
 import type { AppDeps } from "./app";
 import { accessLogs } from "./db/schema";
@@ -40,18 +39,7 @@ export function networkOf(ip: string): string {
     .join(":")}::/64`;
 }
 
-/** 删除账户时：断开和账户的关联，换成一个随机编号，记录照常按期留存。 */
-export async function detachAccessLogs(
-  db: Pick<AppDeps["db"], "update">,
-  userId: string,
-): Promise<void> {
-  await db
-    .update(accessLogs)
-    .set({ userId: null, deletedAccount: randomUUID() })
-    .where(eq(accessLogs.userId, userId));
-}
-
-/** 定期任务：删掉满 180 天的访问记录，已删除账户留下的也一样。 */
+/** 定期任务：删掉满 180 天的访问记录。 */
 export async function purgeAccessLogs(deps: Pick<AppDeps, "db" | "clock">): Promise<number> {
   const cutoff = new Date(deps.clock.now().getTime() - ACCESS_LOG_RETENTION_MS);
   const deleted = await deps.db

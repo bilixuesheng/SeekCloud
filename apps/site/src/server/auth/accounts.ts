@@ -73,8 +73,7 @@ export async function registerAccount(
 ): Promise<string> {
   const { now } = input;
   await lockRegistrations(tx);
-  // 已经删除、等着清理的账户不占席位。
-  const [seats] = await tx.select({ taken: count() }).from(users).where(isNull(users.deletedAt));
+  const [seats] = await tx.select({ taken: count() }).from(users);
   if ((seats?.taken ?? 0) >= deps.seatLimit) throw new Abort("seats_full");
 
   if (!input.inviteCode) throw new Abort("invite_required");

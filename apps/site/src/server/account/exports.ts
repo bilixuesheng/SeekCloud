@@ -129,12 +129,8 @@ async function claimNext(deps: AppDeps): Promise<ExportRow | undefined> {
 }
 
 async function buildOne(deps: AppDeps, row: ExportRow): Promise<void> {
-  const [user] = await deps.db.select().from(users).where(eq(users.id, row.userId));
-  // 申请以后删了账户：不打包，也不发信。
-  if (!user || user.deletedAt) {
-    await deps.db.update(dataExports).set({ status: "expired" }).where(eq(dataExports.id, row.id));
-    return;
-  }
+  // 导出跟着账户级联删除，账户一定还在。
+  const [user] = (await deps.db.select().from(users).where(eq(users.id, row.userId))) as [UserRow];
   const zip = zipSync(await collectFiles(deps, user, deps.clock.now()), { level: 6 });
   const path = exportFile(deps, row.id);
   await mkdir(join(deps.dataDir, "exports"), { recursive: true });

@@ -36,11 +36,11 @@
 - 主站的测试用 `apps/site/src/testing/test-app.ts` 的 `createTestApp()`：进程内调用接口，每调用一次建一个独立的库（一般一个测试文件一次），时钟、邮件都是假的。`t.browser()` 模拟一个有自己 Cookie 和 IP 的浏览器。
 - 接口出错时统一返回 `{ error: { code, message } }`：`code` 给程序判断，`message` 是给人看的中文。用 `apps/site/src/server/errors.ts` 的 `apiError()`。
 - 加表：改 `apps/site/src/server/db/schema.ts`，然后在 `apps/site` 里运行 `pnpm db:generate --name <名字>` 生成迁移。主站启动时自动跑迁移。
-- 后台的定期任务在 `apps/site/src/server/maintenance.ts`：打包数据导出、删过期的导出、清理已删除的账户。main.ts 每分钟跑一次；测试里调用 `t.runMaintenance()`，导出的压缩包写在 `t.dataDir`（临时目录）。
+- 后台的定期任务在 `apps/site/src/server/maintenance.ts`：打包数据导出、删过期的导出、删满 180 天的访问记录。main.ts 每分钟跑一次；测试里调用 `t.runMaintenance()`，导出的压缩包写在 `t.dataDir`（临时目录）。
 - 主站的环境变量：`SEEKCLOUD_DATA_DIR`（主站的数据目录，导出的压缩包放这里，默认 `./data`，要放在会备份的磁盘上）、`DATABASE_URL`、`PORT`（默认 3000）、`SEEKCLOUD_VERSION`、`SEEKCLOUD_SEAT_LIMIT`（内测席位，默认 30）、`RESEND_API_KEY` 和 `MAIL_FROM`（没配就发不了信）、`NODE_ENV=production`（登录 Cookie 只走 HTTPS）、`SEEKCLOUD_SECRET_KEY`（加密令牌用的 32 字节密钥，base64，用 `openssl rand -base64 32` 生成）、`PUBLIC_URL`（主站对外的地址）、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_APP_SLUG`、`GITHUB_WEBHOOK_SECRET`（没配 GitHub 时，GitHub 相关功能直接报错）。部署时只有一层反向代理，它把客户端地址追加到 `X-Forwarded-For` 末尾；频率限制只认最后一个值。
 - 用户协议、隐私政策的正文在 `apps/site/src/client/legal/*.md`。改了协议，同时改 `packages/protocol` 里的 `LEGAL_VERSION`（注册时记在账户上）。加了运行时依赖，要在 `legal/licenses.ts` 的开源声明里补上，有测试检查。
 - 建邀请码（管理端做好之前用这个）：在 `apps/site` 里运行 `DATABASE_URL=... pnpm invite:create [--count 数量] [--days 有效天数]`。
-- 访问记录（注册、登录、发起会话、发消息时的 IP）在 `apps/site/src/server/access-log.ts`，保存 180 天，删除账户时只断开关联、不删。
+- 访问记录（注册、登录、发起会话、发消息时的 IP）在 `apps/site/src/server/access-log.ts`，保存 180 天。
 
 ## 合并授权
 

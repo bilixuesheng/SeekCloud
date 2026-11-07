@@ -191,7 +191,6 @@ button:disabled {
 
 .primary,
 .secondary,
-.danger-button,
 a.button {
   height: 44px;
   display: inline-flex;
@@ -228,21 +227,6 @@ a.button {
 }
 
 .primary:disabled {
-  opacity: 0.55;
-}
-
-/* 删除账户这类不能撤销的操作 */
-.danger-button {
-  border: 0;
-  background: var(--danger);
-  color: #fff;
-}
-
-.danger-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 86%, #000);
-}
-
-.danger-button:disabled {
   opacity: 0.55;
 }
 
@@ -2445,8 +2429,7 @@ details > summary::-webkit-details-marker {
 }
 
 .settings-form-actions .primary,
-.settings-form-actions .secondary,
-.settings-form-actions .danger-button {
+.settings-form-actions .secondary {
   height: 38px;
   font-size: 14px;
 }
@@ -3319,20 +3302,6 @@ a.button:active,
   details::details-content {
     transition: none;
   }
-}
-
-/* ---------- 删除账户 ---------- */
-
-.settings-card.danger-zone {
-  border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
-}
-
-.danger-list {
-  margin: 0;
-  padding-left: 18px;
-  font-size: 13.5px;
-  line-height: 1.75;
-  color: var(--fg-2);
 }
 
 /* ---------- 用户协议、隐私政策、开源声明 ---------- */

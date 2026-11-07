@@ -80,7 +80,7 @@ export function createApp(deps: AppDeps) {
   app.route("/api/auth/github", githubAuthRoutes(deps));
   app.route("/api/auth/pending", pendingIdentityRoutes(deps, limiter));
   const sessions = new Sessions(deps);
-  app.route("/api/account", accountRoutes(deps, limiter, sessions));
+  app.route("/api/account", accountRoutes(deps));
   app.route("/api/auth", authRoutes(deps, limiter));
   app.route("/api/github", githubRoutes(deps, sessions));
   app.route("/api", sessionRoutes(deps, sessions));

@@ -39,7 +39,6 @@ export function LoginPage({
   const [error, setError] = useState<string | undefined>(
     authResult?.kind === "notice" ? authResult.message : undefined,
   );
-  const info = authResult?.kind === "info" ? authResult.message : undefined;
   const [busy, setBusy] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   const codeInput = useRef<HTMLInputElement>(null);
@@ -270,8 +269,8 @@ export function LoginPage({
               void sendCode();
             }}
           >
-            {linkHint || info ? (
-              <p className="notice">{linkHint ?? info}</p>
+            {linkHint ? (
+              <p className="notice">{linkHint}</p>
             ) : (
               <p className="hint">我们将向你的邮箱发送 6 位验证码。</p>
             )}

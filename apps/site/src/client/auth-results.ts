@@ -13,9 +13,9 @@ const messages: Record<string, (name: string) => string> = {
 export interface AuthResult {
   /**
    * pending：陌生的第三方账号，要选创建新账户还是绑定已有账户；
-   * notice：出了问题（红色提示）；info：告知一件事（比如账户已删除，普通提示）。
+   * notice：出了问题（红色提示）。
    */
-  kind: "pending" | "notice" | "info";
+  kind: "pending" | "notice";
   message?: string;
 }
 
@@ -27,12 +27,6 @@ export function takeAuthResult(): AuthResult | null {
   if (!signin && !provider) return null;
   window.history.replaceState(null, "", window.location.pathname);
   if (signin === "pending") return { kind: "pending" };
-  if (signin === "deleted") {
-    return {
-      kind: "info",
-      message: "账户已删除。相关数据将在 15 天内彻底清除，该邮箱可重新注册。",
-    };
-  }
   const result = provider ? params.get(provider) : null;
   const message = provider && result ? messages[result]?.(providerNames[provider]) : undefined;
   return message ? { kind: "notice", message } : null;

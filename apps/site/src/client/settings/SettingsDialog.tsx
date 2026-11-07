@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { type ApiError, api } from "../api";
 import { type Provider, providerNames } from "../auth-results";
@@ -6,7 +6,7 @@ import { GitHubMark } from "../GitHubMark";
 import { CloseIcon, MailIcon, MoonIcon, SettingsIcon, ShieldIcon, UserIcon } from "../Icons";
 import { navigate, type SettingsSection } from "../router";
 import { currentTheme, setTheme, type Theme } from "../theme";
-import { DeleteAccount, PrivacySettings } from "./DataSettings";
+import { PrivacySettings } from "./DataSettings";
 
 interface Identities {
   email: string;
@@ -29,14 +29,12 @@ export function SettingsDialog({
   section,
   notice,
   onClose,
-  onEmailChanged,
   onSignedOut,
 }: {
   section: SettingsSection;
   /** 绑定第三方账号跳回来时的结果。 */
   notice?: string;
   onClose: () => void;
-  onEmailChanged: (email: string) => void;
   onSignedOut: () => void;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
@@ -97,11 +95,7 @@ export function SettingsDialog({
             ) : section === "privacy" ? (
               <PrivacySettings />
             ) : (
-              <AccountSettings
-                notice={notice}
-                onEmailChanged={onEmailChanged}
-                onSignedOut={onSignedOut}
-              />
+              <AccountSettings notice={notice} onSignedOut={onSignedOut} />
             )}
           </div>
         </div>
@@ -157,16 +151,8 @@ function GeneralSettings() {
   );
 }
 
-/** 账户：邮箱、登录方式、退出。 */
-function AccountSettings({
-  notice,
-  onEmailChanged,
-  onSignedOut,
-}: {
-  notice?: string;
-  onEmailChanged: (email: string) => void;
-  onSignedOut: () => void;
-}) {
+/** 账户：登录方式、退出。 */
+function AccountSettings({ notice, onSignedOut }: { notice?: string; onSignedOut: () => void }) {
   const [data, setData] = useState<Identities>();
   const [error, setError] = useState(notice);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -186,19 +172,6 @@ function AccountSettings({
           {error}
         </p>
       )}
-
-      <section className="settings-section">
-        <h2>邮箱</h2>
-        {data && (
-          <EmailRow
-            email={data.email}
-            onChanged={(email) => {
-              setData({ ...data, email });
-              onEmailChanged(email);
-            }}
-          />
-        )}
-      </section>
 
       <section className="settings-section">
         <h2>登录方式</h2>
@@ -261,13 +234,6 @@ function AccountSettings({
           </li>
         </ul>
       </section>
-
-      {data && (
-        <section className="settings-section">
-          <h2>删除账户</h2>
-          <DeleteAccount email={data.email} />
-        </section>
-      )}
     </>
   );
 }
@@ -337,118 +303,5 @@ function IdentityRow({
         </a>
       )}
     </li>
-  );
-}
-
-/** 换邮箱：填新邮箱 → 新邮箱收验证码 → 填验证码确认。旧邮箱会收到通知。 */
-function EmailRow({ email, onChanged }: { email: string; onChanged: (email: string) => void }) {
-  const [step, setStep] = useState<"idle" | "new" | "code">("idle");
-  const [newEmail, setNewEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ tone: "alert" | "notice"; text: string }>();
-
-  const run = async (action: () => Promise<void>) => {
-    setBusy(true);
-    setMessage(undefined);
-    try {
-      await action();
-    } catch (e) {
-      setMessage({ tone: "alert", text: (e as ApiError).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const send = (event: FormEvent) => {
-    event.preventDefault();
-    void run(async () => {
-      await api("/api/account/email/send-code", { email: newEmail });
-      setStep("code");
-    });
-  };
-
-  const confirm = (event: FormEvent) => {
-    event.preventDefault();
-    void run(async () => {
-      const result = await api<{ email: string }>("/api/account/email/confirm", { code });
-      onChanged(result.email);
-      setStep("idle");
-      setNewEmail("");
-      setCode("");
-      setMessage({ tone: "notice", text: `邮箱已更换为 ${result.email}，原邮箱将收到通知。` });
-    });
-  };
-
-  return (
-    <div className="settings-card">
-      <div className="settings-row">
-        <span className="settings-row-text">
-          <span className="settings-row-name">{email}</span>
-          <span className="settings-row-sub">用于接收登录验证码和通知</span>
-        </span>
-        {step === "idle" && (
-          <button type="button" className="pill-button" onClick={() => setStep("new")}>
-            更换
-          </button>
-        )}
-      </div>
-      {step === "new" && (
-        <form className="settings-form" onSubmit={send}>
-          <label className="field">
-            <span>新邮箱</span>
-            <input
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              required
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-            />
-          </label>
-          <div className="settings-form-actions">
-            <button type="button" className="secondary" onClick={() => setStep("idle")}>
-              取消
-            </button>
-            <button type="submit" className="primary" disabled={busy}>
-              {busy ? "正在发送…" : "发送验证码"}
-            </button>
-          </div>
-        </form>
-      )}
-      {step === "code" && (
-        <form className="settings-form" onSubmit={confirm}>
-          <p className="hint">
-            验证码已发送至 <strong>{newEmail}</strong>，10 分钟内有效。
-          </p>
-          <label className="field">
-            <span>验证码</span>
-            <input
-              className="code-input"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="\d{6}"
-              maxLength={6}
-              required
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-            />
-          </label>
-          <div className="settings-form-actions">
-            <button type="button" className="secondary" onClick={() => setStep("new")}>
-              返回
-            </button>
-            <button type="submit" className="primary" disabled={busy}>
-              {busy ? "请稍候…" : "确认更换"}
-            </button>
-          </div>
-        </form>
-      )}
-      {message && (
-        <p className={message.tone} role={message.tone === "alert" ? "alert" : "status"}>
-          {message.text}
-        </p>
-      )}
-    </div>
   );
 }

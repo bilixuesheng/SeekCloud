@@ -7,18 +7,9 @@ CREATE TYPE "public"."turn_status" AS ENUM('running', 'completed', 'stopped', 'f
 CREATE TABLE "access_logs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid,
-	"deleted_account" uuid,
 	"event" "access_event" NOT NULL,
 	"network" text NOT NULL,
 	"at" timestamp with time zone NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "account_deletion_codes" (
-	"user_id" uuid PRIMARY KEY NOT NULL,
-	"code_hash" text NOT NULL,
-	"attempts" integer DEFAULT 0 NOT NULL,
-	"expires_at" timestamp with time zone NOT NULL,
-	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "data_exports" (
@@ -29,15 +20,6 @@ CREATE TABLE "data_exports" (
 	"started_at" timestamp with time zone,
 	"ready_at" timestamp with time zone,
 	"expires_at" timestamp with time zone,
-	"created_at" timestamp with time zone NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "email_changes" (
-	"user_id" uuid PRIMARY KEY NOT NULL,
-	"new_email" text NOT NULL,
-	"code_hash" text NOT NULL,
-	"attempts" integer DEFAULT 0 NOT NULL,
-	"expires_at" timestamp with time zone NOT NULL,
 	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
@@ -174,14 +156,11 @@ CREATE TABLE "users" (
 	"created_at" timestamp with time zone NOT NULL,
 	"terms_version" text,
 	"terms_accepted_at" timestamp with time zone,
-	"deleted_at" timestamp with time zone,
 	CONSTRAINT "users_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
 ALTER TABLE "access_logs" ADD CONSTRAINT "access_logs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "account_deletion_codes" ADD CONSTRAINT "account_deletion_codes_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "data_exports" ADD CONSTRAINT "data_exports_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "email_changes" ADD CONSTRAINT "email_changes_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "environments" ADD CONSTRAINT "environments_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "github_tokens" ADD CONSTRAINT "github_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "identities" ADD CONSTRAINT "identities_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

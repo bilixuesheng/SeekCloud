@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { type AccessEvent, recordAccess } from "../access-log";
@@ -46,8 +46,6 @@ export async function currentUser(deps: AppDeps, c: Context) {
       and(
         eq(loginSessions.tokenHash, hashSecret(token)),
         gt(loginSessions.expiresAt, deps.clock.now()),
-        // 删除账户时登录状态已经一起删了；这里再挡一次。
-        isNull(users.deletedAt),
       ),
     );
   return row;
@@ -60,11 +58,6 @@ export async function endAllLoginSessions(
   userId: string,
 ): Promise<void> {
   await deps.db.delete(loginSessions).where(eq(loginSessions.userId, userId));
-  deleteCookie(c, COOKIE, { path: "/" });
-}
-
-/** 只清掉浏览器里的登录 Cookie（数据库里的登录状态已经另外删了）。 */
-export function forgetLoginCookie(c: Context): void {
   deleteCookie(c, COOKIE, { path: "/" });
 }
 

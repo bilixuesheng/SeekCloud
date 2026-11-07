@@ -41,14 +41,7 @@ export function App() {
     );
   }
   if (me === null) return <LoginPage onSignedIn={refresh} authResult={authResult} />;
-  return (
-    <Shell
-      me={me}
-      authResult={authResult}
-      onSignedOut={refresh}
-      onEmailChanged={(email) => setMe({ ...me, email })}
-    />
-  );
+  return <Shell me={me} authResult={authResult} onSignedOut={refresh} />;
 }
 
 function HomeLink() {
@@ -71,12 +64,10 @@ function Shell({
   me,
   authResult,
   onSignedOut,
-  onEmailChanged,
 }: {
   me: Me;
   authResult: AuthResult | null;
   onSignedOut: () => void;
-  onEmailChanged: (email: string) => void;
 }) {
   const route = useRoute();
   // 设置是盖在原来页面上的弹窗：记住打开设置之前在哪一页，底下照常显示它，关掉时回去。
@@ -199,7 +190,6 @@ function Shell({
           section={route.section}
           notice={notice}
           onClose={closeSettings}
-          onEmailChanged={onEmailChanged}
           onSignedOut={onSignedOut}
         />
       )}

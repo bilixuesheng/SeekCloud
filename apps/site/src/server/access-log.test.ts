@@ -55,13 +55,6 @@ describe("访问记录", () => {
     expect(res.status).toBeLessThan(300);
   }
 
-  async function deleteAccount(browser: TestBrowser, email: string) {
-    t.clock.advance(2 * 60_000);
-    expect((await browser.post("/api/account/delete/send-code", {})).status).toBe(204);
-    const code = t.lastLoginCode(email);
-    expect((await browser.post("/api/account/delete", { code })).status).toBe(204);
-  }
-
   it("注册、登录、发起会话、发消息时记下 IP；IPv6 只记 /64", async () => {
     const { browser } = await t.signUpWithGitHub("tracked", "tracked/app");
     const userId = await myId(browser);
@@ -104,44 +97,5 @@ describe("访问记录", () => {
     t.clock.advance(DAY + 60_000);
     await t.runMaintenance();
     expect(await logsOf(userId)).toHaveLength(0);
-  });
-
-  it("删除账户后照样留存：和账户断开、清理账户时不跟着删，重新注册的账户也拿不到，满 180 天才删", async () => {
-    const browser = t.browser();
-    await emailSignIn(browser, "leaver@example.com");
-    const userId = await myId(browser);
-    await emailSignIn(t.browser(), "leaver@example.com");
-    const ids = (await t.db.select().from(accessLogs).where(eq(accessLogs.userId, userId))).map(
-      (row) => row.id,
-    );
-    expect(ids).toHaveLength(2);
-
-    await deleteAccount(browser, "leaver@example.com");
-    const retained = () =>
-      t.db
-        .select()
-        .from(accessLogs)
-        .then((rows) => rows.filter((row) => ids.includes(row.id)));
-    const [first, second] = await retained();
-    expect(first?.userId).toBeNull();
-    expect(first?.deletedAccount).toEqual(expect.any(String));
-    expect(second?.deletedAccount).toBe(first?.deletedAccount);
-    expect(first?.deletedAccount).not.toBe(userId);
-
-    // 停用满 14 天，账户整个删掉，访问记录还在
-    t.clock.advance(15 * DAY);
-    await t.runMaintenance();
-    expect(await retained()).toHaveLength(2);
-
-    // 同一个邮箱重新注册：是新账户，旧记录不归它
-    const again = t.browser();
-    await emailSignIn(again, "leaver@example.com");
-    const newId = await myId(again);
-    expect(newId).not.toBe(userId);
-    expect(await logsOf(newId)).toEqual([{ event: "register", network: again.ip }]);
-
-    t.clock.advance(166 * DAY);
-    await t.runMaintenance();
-    expect(await retained()).toHaveLength(0);
   });
 });
