@@ -11,10 +11,9 @@
 
 ## 当前进度
 
-- 代码从 SeekCloud 收费版迁移而来。
+- 代码从 SeekCloud 收费版迁移而来，已经去掉计费、改成单管理员（ADR 0008）、改了 Agent 的叫法（ADR 0004），也写好了 README。
 - Agent 执行尚未实现：主站还没接上沙箱宿主机，新会话会停在排队。
-- **接下来**依次是四个 PR：去掉计费、改成单管理员、改 Agent 的叫法、写 README。
-- 之后的新功能先写规格，再拆工单：
+- **接下来**从新功能的规格开始，每项先写规格，再拆工单：
   - 网页图形化部署：Linux 一条命令、Windows 一条 PowerShell 命令，其余在网页向导里完成；
   - 多渠道通知：SMTP 邮件、PWA 推送、飞书/钉钉/企业微信机器人、通用 Webhook；
   - 主站和沙箱宿主机都能装在 Windows 上（通过 WSL2）；
@@ -41,6 +40,7 @@
 - 加了运行时依赖，要在 `apps/site/src/client/legal/licenses.ts` 的开源声明里补上，有测试检查。
 - 忘记管理员密码：在 `apps/site` 里运行 `DATABASE_URL=... pnpm admin:reset-password`，打印一个随机的新密码，所有设备退出登录。
 - 访问记录（登录、发起会话、发消息时的 IP）在 `apps/site/src/server/access-log.ts`，保存 180 天。
+- README 有中英两份（`README.md`、`README.en.md`），改的时候两份一起改。
 
 ## 合并授权
 
