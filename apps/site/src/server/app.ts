@@ -6,7 +6,7 @@ import { apiError, handleError } from "./errors";
 import type { GitHub } from "./github/port";
 import type { Google } from "./google/port";
 import type { HumanCheck } from "./human-check";
-import type { Clock, Mailer, Random } from "./ports";
+import type { Clock, Mailer } from "./ports";
 import { RateLimiter } from "./rate-limit";
 import { accountRoutes } from "./routes/account";
 import { authRoutes } from "./routes/auth";
@@ -23,7 +23,6 @@ export interface AppDeps {
   version: string;
   db: Database;
   clock: Clock;
-  random: Random;
   mailer: Mailer;
   /** 内测席位总数：用户数到了就不能再注册。 */
   seatLimit: number;

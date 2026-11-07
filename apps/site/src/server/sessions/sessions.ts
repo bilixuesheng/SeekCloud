@@ -73,7 +73,7 @@ export type SendOutcome = { started: Session } | { queued: { id: string; text: s
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-// 去掉了容易看混的 i、l、o、u。短 ID 不走 deps.random：它要难以猜到，测试里也不能撞号。
+// 去掉了容易看混的 i、l、o、u。短 ID 要难以猜到，所以用 node:crypto 的随机数。
 const SHORT_ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 const newShortId = () =>
   Array.from({ length: 8 }, () => SHORT_ID_ALPHABET[randomInt(SHORT_ID_ALPHABET.length)]).join("");

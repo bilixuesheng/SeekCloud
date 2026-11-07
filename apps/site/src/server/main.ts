@@ -9,7 +9,7 @@ import { unconfiguredGoogle } from "./google/port";
 import { noHumanCheck, turnstile } from "./human-check";
 import { resendMailer } from "./mail/resend";
 import { startMaintenance } from "./maintenance";
-import { mathRandom, systemClock, unconfiguredMailer } from "./ports";
+import { systemClock, unconfiguredMailer } from "./ports";
 import { SecretBox } from "./secrets";
 
 function required(name: string): string {
@@ -32,7 +32,6 @@ const deps: AppDeps = {
   dataDir: process.env.SEEKCLOUD_DATA_DIR ?? "./data",
   db,
   clock: systemClock,
-  random: mathRandom,
   mailer: process.env.RESEND_API_KEY
     ? resendMailer({
         apiKey: process.env.RESEND_API_KEY,

@@ -13,15 +13,13 @@ import { FakeGitHub } from "./fake-github";
 import { FakeGoogle } from "./fake-google";
 import { FakeHost } from "./fake-host";
 import { FakeHumanCheck } from "./fake-human-check";
-import { FakeClock, FakeMailer, FixedRandom } from "./fakes";
+import { FakeClock, FakeMailer } from "./fakes";
 import { TestBrowser } from "./test-browser";
 
 export interface TestAppOptions {
   version?: string;
   /** 假时钟的起始时间。 */
   now?: Date;
-  /** 随机数依次返回的值。 */
-  random?: number[];
   /** 内测席位总数，默认足够大。 */
   seatLimit?: number;
   /** 不建新库，直接连这个地址（比如测数据库连不上的情况）。 */
@@ -39,7 +37,6 @@ export async function createTestApp(options: TestAppOptions = {}) {
   const database = options.databaseUrl ? undefined : await createTestDatabase();
   const { db, close } = connectDatabase(options.databaseUrl ?? (database?.url as string));
   const clock = new FakeClock(options.now);
-  const random = new FixedRandom(options.random);
   const mailer = new FakeMailer();
   const github = new FakeGitHub(clock);
   const host = new FakeHost();
@@ -53,7 +50,6 @@ export async function createTestApp(options: TestAppOptions = {}) {
     version: options.version ?? "test",
     db,
     clock,
-    random,
     mailer,
     seatLimit: options.seatLimit ?? 1000,
     secureCookies: false,
@@ -68,7 +64,6 @@ export async function createTestApp(options: TestAppOptions = {}) {
   return {
     db,
     clock,
-    random,
     mailer,
     github,
     host,

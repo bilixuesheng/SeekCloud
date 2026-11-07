@@ -36,10 +36,10 @@ export type TurnEndReason = (typeof TURN_END_REASONS)[number];
 
 /**
  * 出错时的类别。给用户看的只有类别、上游的 HTTP 状态码和参考号（ADR 0007）：
- * 上游的原始报错可能带着后台配置的 API 端点、线路名或密钥片段，一律不进协议，只记在宿主机的日志里，用参考号查。
+ * 上游的原始报错可能带着后台配置的 API 端点或密钥片段，一律不进协议，只记在宿主机的日志里，用参考号查。
  */
 export const ERROR_CODES = [
-  /** 模型服务连不上或返回 5xx（所有线路都试过了）。 */
+  /** 模型服务连不上或返回 5xx。 */
   "model_unavailable",
   /** 模型服务限流（429）。 */
   "model_rate_limited",
