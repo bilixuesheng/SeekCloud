@@ -107,7 +107,7 @@ export function LoginPage({
         </form>
       </main>
       <footer className="auth-footer">
-        <p>内测版 · 非 DeepSeek 官方产品</p>
+        <p>非 DeepSeek 官方产品</p>
         <p className="auth-footer-links">
           <LegalLink doc="licenses" />
         </p>

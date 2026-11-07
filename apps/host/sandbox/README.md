@@ -19,7 +19,7 @@
 
 ```ini
 [user]
-	name = SeekCloud Agent
+	name = SeekCloud
 	email = <SeekCloud 账号的邮箱>
 	signingkey = key::<SeekCloud 签名公钥，一行 ssh-ed25519 …>
 [gpg]
@@ -45,7 +45,7 @@
 Agent 的每个提交，说明末尾都有一行尾注：
 
 ```
-Generated-by: SeekCloud Agent (AI)
+Generated-by: SeekCloud (AI)
 ```
 
 这是《人工智能生成合成内容标识办法》要求的标识，所以用户在会话里要求去掉也照加。
@@ -75,7 +75,7 @@ Generated-by: SeekCloud Agent (AI)
 - 这个地址是沙箱直连宿主机，不经过 `HTTPS_PROXY`。
 - 工具以用户本人的 GitHub 账号操作，只能碰本会话挂载的仓库：每个 REST 请求都先过 Git 代理的同一套规则（`src/git-proxy/rules.ts`），所以工具能做的不会比沙箱里的 `gh` 多。
 - 只有 GraphQL 能做的几件事，由服务用写死的查询代为调用，调用前先确认仓库挂载在本会话上：评审线程的读取、解决和重开，开关自动合并，往未提交的 review 里加行内评论。搜索也一样，服务会把查询限定在本会话的仓库里。
-- 写到 GitHub 上的正文（issue、PR、评论、review）末尾统一加一次"由 SeekCloud Agent 生成"的署名，重复的会去掉。
-- 工具建的提交（`create_or_update_file`、`delete_file`、`push_files`）说明末尾带 `Generated-by: SeekCloud Agent (AI)`，和沙箱里的 git 钩子一样。这些提交以用户本人的账号提交（照官方），不是 SeekCloud 账号。分支和沙箱里的 git 一样任何分支都能写，删分支、建标签不放行。
+- 写到 GitHub 上的正文（issue、PR、评论、review）末尾统一加一次"由 SeekCloud 生成（AI）"的署名，重复的会去掉。
+- 工具建的提交（`create_or_update_file`、`delete_file`、`push_files`）说明末尾带 `Generated-by: SeekCloud (AI)`，和沙箱里的 git 钩子一样。这些提交以用户本人的账号提交（照官方），不是 SeekCloud 账号。分支和沙箱里的 git 一样任何分支都能写，删分支、建标签不放行。
 - 组织级的工具（团队、issue 类型和字段）只查挂载了仓库的所有者。
 - 代码在 `apps/host/src/github-tools/`，测试接一个假的 GitHub API（`github-tools.test.ts`），在普通 CI 上跑。

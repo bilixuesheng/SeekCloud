@@ -2,7 +2,12 @@
 
 Claude Code 网页版在云端跑的是 Anthropic 自家的 Claude Code。为了对标这一点，SeekCloud 在沙箱里跑 DeepSeek 官方的 DeepSeek Harness（`dsh`，MIT 许可）。DeepSeek 说过它的模型专门为 dsh 调过。
 
-对外只称"SeekCloud Agent"。DeepSeek 开放平台协议 §5.3 禁止把它的名称放在显著位置，也禁止使用"官方合作"一类的说法，所以"内置官方 Agent"不能当卖点。只在开源声明页按 MIT 许可证的要求注明使用了 DeepSeek Harness。
+Agent 的叫法分两处：
+
+- 管理员自己看的界面和导出的文件写 DeepSeek，比如"DeepSeek 已读取""DeepSeek 是 AI，可能会犯错。"；
+- 留在 GitHub 上的署名、提交尾注和提交作者的名字写 SeekCloud：`_由 SeekCloud 生成（AI）_`、`Generated-by: SeekCloud (AI)`。这些是公开的，DeepSeek 开放平台协议 §5.3(2) 不允许把 DeepSeek 的名称、模型名称放在显著位置。
+
+协议 §5.3(3) 还禁止使用"官方合作"一类的说法，所以"内置官方 Agent"不能当卖点。只在开源声明页按 MIT 许可证的要求注明使用了 DeepSeek Harness。
 
 dsh 目前是开发者预览版：会有破坏性变更，也没做过安全审计。因此：
 
