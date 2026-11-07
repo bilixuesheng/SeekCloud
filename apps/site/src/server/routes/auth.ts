@@ -9,11 +9,15 @@ import {
   loginTokenHash,
   startLoginSession,
 } from "../auth/login-sessions";
+import { MAX_PASSWORD_LENGTH } from "../auth/password";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
 import { clientIp, HOUR, type RateLimiter, tooFrequent } from "../rate-limit";
 import { jsonBody as json, newRouter } from "./router";
 
-const NewPassword = z.string().min(8, { error: "密码至少 8 位" });
+const NewPassword = z
+  .string()
+  .min(8, { error: "密码至少 8 位" })
+  .max(MAX_PASSWORD_LENGTH, { error: `密码最长 ${MAX_PASSWORD_LENGTH} 位` });
 
 const setupRoute = createRoute({
   method: "post",
@@ -22,7 +26,7 @@ const setupRoute = createRoute({
   request: { body: json(z.object({ password: NewPassword })) },
   responses: {
     204: { description: "已设置并登录" },
-    400: errorResponse("密码不足 8 位"),
+    400: errorResponse("密码不足 8 位或超过 256 位"),
     409: errorResponse("已经设置过管理员密码"),
   },
 });
@@ -49,7 +53,7 @@ const passwordRoute = createRoute({
   },
   responses: {
     204: { description: "已修改" },
-    400: errorResponse("当前密码错误，或新密码不足 8 位"),
+    400: errorResponse("当前密码错误，或新密码不足 8 位、超过 256 位"),
     401: errorResponse("没有登录"),
     429: errorResponse("输错密码太多次"),
   },

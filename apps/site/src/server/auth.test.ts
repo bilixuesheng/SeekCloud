@@ -3,6 +3,8 @@ import { createTestApp, type TestApp } from "../testing/test-app";
 import { resetAdminPassword } from "./auth/admin";
 
 const DAY = 24 * 60 * 60_000;
+/** 最长允许 256 位，多一位就超长。 */
+const TOO_LONG = "a".repeat(257);
 
 async function errorCode(res: Response) {
   return ((await res.json()) as { error: { code: string } }).error.code;
@@ -31,6 +33,16 @@ describe("首次设置管理员密码", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: { code: "invalid_request", message: "密码至少 8 位" },
+    });
+    expect(await errorCode(await t.browser().get("/api/me"))).toBe("setup_required");
+  });
+
+  it("密码超过 256 位：400，不建账户", async () => {
+    const res = await t.browser().post("/api/auth/setup", { password: TOO_LONG });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "invalid_request", message: "密码最长 256 位" },
     });
     expect(await errorCode(await t.browser().get("/api/me"))).toBe("setup_required");
   });
@@ -96,6 +108,13 @@ describe("登录", () => {
     expect(await me.json()).toEqual({ error: { code: "unauthorized", message: "请先登录" } });
   });
 
+  it("密码超过 256 位：按密码错误处理", async () => {
+    const res = await t.browser().post("/api/auth/login", { password: TOO_LONG });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: { code: "wrong_password", message: "密码错误" } });
+  });
+
   it("退出登录后，再访问需要登录的接口返回 401", async () => {
     const browser = await t.admin();
 
@@ -150,6 +169,26 @@ describe("修改密码", () => {
     expect(await errorCode(res)).toBe("invalid_request");
   });
 
+  it("新密码超过 256 位：400；当前密码超过 256 位：按当前密码错误处理", async () => {
+    const browser = await t.admin();
+
+    const longNew = await browser.post("/api/auth/password", {
+      currentPassword: t.adminPassword,
+      newPassword: TOO_LONG,
+    });
+    const longCurrent = await browser.post("/api/auth/password", {
+      currentPassword: TOO_LONG,
+      newPassword: "new-password",
+    });
+
+    expect(longNew.status).toBe(400);
+    expect(await longNew.json()).toEqual({
+      error: { code: "invalid_request", message: "密码最长 256 位" },
+    });
+    expect(longCurrent.status).toBe(400);
+    expect(await errorCode(longCurrent)).toBe("wrong_password");
+  });
+
   it("没登录：401", async () => {
     const res = await t.browser().post("/api/auth/password", {
       currentPassword: t.adminPassword,
@@ -177,6 +216,20 @@ describe("修改密码", () => {
     expect((await t.browser().post("/api/auth/login", { password: "new-password" })).status).toBe(
       204,
     );
+  });
+
+  it("正好 256 位的新密码可以用", async () => {
+    const browser = t.browser();
+    expect((await browser.post("/api/auth/login", { password: "new-password" })).status).toBe(204);
+    const longest = "b".repeat(256);
+
+    const res = await browser.post("/api/auth/password", {
+      currentPassword: "new-password",
+      newPassword: longest,
+    });
+
+    expect(res.status).toBe(204);
+    expect((await t.browser().post("/api/auth/login", { password: longest })).status).toBe(204);
   });
 });
 

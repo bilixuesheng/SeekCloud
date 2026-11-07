@@ -9,6 +9,9 @@ const scryptAsync = promisify(scrypt) as (
 
 const KEY_LENGTH = 64;
 
+/** 密码最长几位。再长的直接拒绝：免得有人提交超长的字符串，让 scrypt 白白占着 CPU。 */
+export const MAX_PASSWORD_LENGTH = 256;
+
 /** 存进数据库的写法：scrypt$盐$哈希（base64url）。每个密码一个随机盐，scrypt 用 Node 的默认参数。 */
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
@@ -17,6 +20,7 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  if (password.length > MAX_PASSWORD_LENGTH) return false;
   const [scheme, salt, hash] = stored.split("$");
   if (scheme !== "scrypt" || !salt || !hash) return false;
   const expected = Buffer.from(hash, "base64url");

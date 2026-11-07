@@ -76,6 +76,7 @@ export function LoginPage({
               type="password"
               autoComplete={setup ? "new-password" : "current-password"}
               minLength={setup ? 8 : undefined}
+              maxLength={setup ? 256 : undefined}
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -88,6 +89,7 @@ export function LoginPage({
                 type="password"
                 autoComplete="new-password"
                 minLength={8}
+                maxLength={256}
                 required
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}

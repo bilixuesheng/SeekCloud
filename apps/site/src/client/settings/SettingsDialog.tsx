@@ -314,6 +314,7 @@ function PasswordRow() {
               type="password"
               autoComplete="new-password"
               minLength={8}
+              maxLength={256}
               required
               value={next}
               onChange={(e) => setNext(e.target.value)}
@@ -325,6 +326,7 @@ function PasswordRow() {
               type="password"
               autoComplete="new-password"
               minLength={8}
+              maxLength={256}
               required
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
