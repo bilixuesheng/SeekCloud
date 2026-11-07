@@ -1,17 +1,14 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { type ApiError, api } from "./api";
 import { type AuthResult, type Provider, providerNames } from "./auth-results";
-import { clientConfig } from "./config";
 import { useSerifReady } from "./fonts";
 import { GitHubMark } from "./GitHubMark";
-import { GoogleMark } from "./GoogleMark";
-import { useHumanCheck } from "./human-check";
 import { Logo } from "./Logo";
 import { LegalLink } from "./legal/LegalPage";
 
 type Step = "email" | "code" | "pending";
 
-/** 陌生的第三方账号（GitHub、Google）：见服务端 auth/third-party.ts。 */
+/** 陌生的第三方账号（GitHub）：见服务端 auth/third-party.ts。 */
 interface Pending {
   provider: Provider;
   login: string;
@@ -34,7 +31,6 @@ export function LoginPage({
   const [registering, setRegistering] = useState(false);
   // 选了"登录已有账户再绑定"：登录页上提示一句，登录后再确认绑定。
   const [linkHint, setLinkHint] = useState<string>();
-  const [googleLogin, setGoogleLogin] = useState(false);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -46,15 +42,8 @@ export function LoginPage({
   const info = authResult?.kind === "info" ? authResult.message : undefined;
   const [busy, setBusy] = useState(false);
   const [resendIn, setResendIn] = useState(0);
-  // 人机验证：发验证码一个，注册一个（令牌和操作绑定）。
-  const sendCheck = useHumanCheck("send_code", step !== "pending");
-  const signupCheck = useHumanCheck("signup", needInvite || registering);
   const codeInput = useRef<HTMLInputElement>(null);
   const inviteInput = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    clientConfig().then((config) => setGoogleLogin(config.googleLogin));
-  }, []);
 
   useEffect(() => {
     if (step !== "pending") return;
@@ -93,10 +82,7 @@ export function LoginPage({
 
   const sendCode = () =>
     run(async () => {
-      await api("/api/auth/email/send-code", {
-        email,
-        humanCheckToken: await sendCheck.token(),
-      });
+      await api("/api/auth/email/send-code", { email });
       setStep("code");
       setResendIn(60);
     });
@@ -108,11 +94,7 @@ export function LoginPage({
         await api("/api/auth/email/verify", {
           email,
           code,
-          ...(needInvite && {
-            inviteCode,
-            acceptTerms: agreed,
-            humanCheckToken: await signupCheck.token(),
-          }),
+          ...(needInvite && { inviteCode, acceptTerms: agreed }),
         });
         onSignedIn();
       } catch (e) {
@@ -134,11 +116,7 @@ export function LoginPage({
   const registerFromPending = (event: FormEvent) => {
     event.preventDefault();
     return run(async () => {
-      await api("/api/auth/pending/register", {
-        inviteCode,
-        acceptTerms: agreed,
-        humanCheckToken: await signupCheck.token(),
-      });
+      await api("/api/auth/pending/register", { inviteCode, acceptTerms: agreed });
       onSignedIn();
     });
   };
@@ -319,11 +297,6 @@ export function LoginPage({
             <a className="button secondary" href="/api/auth/github/start">
               <GitHubMark /> 使用 GitHub 继续
             </a>
-            {googleLogin && (
-              <a className="button secondary" href="/api/auth/google/start">
-                <GoogleMark /> 使用 Google 继续
-              </a>
-            )}
           </form>
         ) : (
           <form className="stack" onSubmit={verify}>
@@ -371,9 +344,6 @@ export function LoginPage({
             </button>
           </form>
         )}
-        {/* 人机验证的小部件：平时看不见，需要人点一下时才出现在这里 */}
-        {sendCheck.widget}
-        {signupCheck.widget}
       </main>
       <footer className="auth-footer">
         <p>内测版 · 非 DeepSeek 官方产品</p>

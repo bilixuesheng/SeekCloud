@@ -1,6 +1,6 @@
 CREATE TYPE "public"."access_event" AS ENUM('register', 'login', 'session_start', 'message');--> statement-breakpoint
 CREATE TYPE "public"."export_status" AS ENUM('pending', 'building', 'ready', 'failed', 'expired');--> statement-breakpoint
-CREATE TYPE "public"."identity_provider" AS ENUM('github', 'google');--> statement-breakpoint
+CREATE TYPE "public"."identity_provider" AS ENUM('github');--> statement-breakpoint
 CREATE TYPE "public"."network_access" AS ENUM('none', 'default', 'custom', 'full');--> statement-breakpoint
 CREATE TYPE "public"."session_status" AS ENUM('queued', 'running', 'waiting', 'dormant', 'archived', 'failed');--> statement-breakpoint
 CREATE TYPE "public"."turn_status" AS ENUM('running', 'completed', 'stopped', 'failed');--> statement-breakpoint

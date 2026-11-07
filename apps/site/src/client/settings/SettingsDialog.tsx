@@ -2,9 +2,7 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useStat
 import { flushSync } from "react-dom";
 import { type ApiError, api } from "../api";
 import { type Provider, providerNames } from "../auth-results";
-import { clientConfig } from "../config";
 import { GitHubMark } from "../GitHubMark";
-import { GoogleMark } from "../GoogleMark";
 import { CloseIcon, MailIcon, MoonIcon, SettingsIcon, ShieldIcon, UserIcon } from "../Icons";
 import { navigate, type SettingsSection } from "../router";
 import { currentTheme, setTheme, type Theme } from "../theme";
@@ -15,10 +13,7 @@ interface Identities {
   identities: Array<{ provider: Provider; login: string }>;
 }
 
-const marks: Record<Provider, ReactNode> = {
-  github: <GitHubMark size={16} />,
-  google: <GoogleMark size={16} />,
-};
+const marks: Record<Provider, ReactNode> = { github: <GitHubMark size={16} /> };
 
 const sections: Array<{ id: SettingsSection; name: string; icon: ReactNode }> = [
   { id: "general", name: "通用", icon: <SettingsIcon /> },
@@ -173,7 +168,6 @@ function AccountSettings({
   onSignedOut: () => void;
 }) {
   const [data, setData] = useState<Identities>();
-  const [googleLogin, setGoogleLogin] = useState(false);
   const [error, setError] = useState(notice);
   const [confirmLogout, setConfirmLogout] = useState(false);
 
@@ -181,16 +175,9 @@ function AccountSettings({
     api<Identities>("/api/account/identities").then(setData, (e: ApiError) => setError(e.message));
   }, []);
 
-  useEffect(() => {
-    load();
-    clientConfig().then((config) => setGoogleLogin(config.googleLogin));
-  }, [load]);
+  useEffect(load, [load]);
 
-  const providers: Provider[] = ["github", ...(googleLogin ? (["google"] as const) : [])];
-  // 已经绑定的 Google 也要显示（哪怕后来关掉了 Google 登录），好让人解绑。
-  for (const linked of data?.identities ?? []) {
-    if (!providers.includes(linked.provider)) providers.push(linked.provider);
-  }
+  const providers: Provider[] = ["github"];
 
   return (
     <>

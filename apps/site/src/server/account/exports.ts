@@ -262,7 +262,7 @@ function readme(email: string, now: Date): string {
     `账户：${email}`,
     `导出时间：${utcTime(now)}`,
     "",
-    "account.json        账户资料：邮箱、注册时间、已同意的协议版本、已绑定的 GitHub / Google 账号",
+    "account.json        账户资料：邮箱、注册时间、已同意的协议版本、已绑定的 GitHub 账号",
     "environments.json   环境配置",
     "sessions/*.json     各会话的完整记录（机器可读），文件名为会话短 ID",
     "sessions/*.md       各会话的可读版本",

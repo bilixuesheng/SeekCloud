@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { FakeGoogleUser } from "../testing/fake-google";
 import { createTestApp, type TestApp } from "../testing/test-app";
 import type { TestBrowser } from "../testing/test-browser";
 
@@ -11,23 +10,6 @@ async function json(res: Response) {
 
 async function errorCode(res: Response) {
   return ((await res.json()) as { error: { code: string } }).error.code;
-}
-
-/** 点"用 Google 继续"，在 Google 上同意，再跳回来。返回跳回来那一步的响应。 */
-async function googleSignIn(
-  t: TestApp,
-  browser: TestBrowser,
-  user: FakeGoogleUser,
-  options: { next?: string; nonce?: string } = {},
-) {
-  const start = await browser.get(
-    `/api/auth/google/start${options.next ? `?next=${encodeURIComponent(options.next)}` : ""}`,
-  );
-  expect(start.status).toBe(302);
-  const url = start.headers.get("location") as string;
-  const state = new URL(url).searchParams.get("state");
-  const code = t.google.authorize(user, url, { nonce: options.nonce });
-  return browser.get(`/api/auth/google/callback?code=${code}&state=${state}`);
 }
 
 /** 用邮箱验证码注册并登录一个新账户。 */
@@ -53,214 +35,7 @@ async function emailLogin(t: TestApp, browser: TestBrowser, email: string) {
   expect(res.status).toBe(200);
 }
 
-describe("用 Google 注册和登录", () => {
-  let t: TestApp;
-
-  beforeAll(async () => {
-    t = await createTestApp();
-  });
-  afterAll(() => t.close());
-
-  it("浏览器配置里说明可以用 Google 登录", async () => {
-    expect(await json(await t.browser().get("/api/client-config"))).toMatchObject({
-      googleLogin: true,
-    });
-  });
-
-  it("新的 Google 账号：先让用户选，选创建新账户就填邀请码注册，账户邮箱用 Google 的邮箱", async () => {
-    const google = t.google.addUser({ email: "new-g@example.com" });
-    const browser = t.browser();
-
-    const callback = await googleSignIn(t, browser, google);
-    expect(callback.headers.get("location")).toBe("/?signin=pending");
-    expect(await json(await browser.get("/api/auth/pending"))).toEqual({
-      provider: "google",
-      login: "new-g@example.com",
-      email: "new-g@example.com",
-      emailTaken: false,
-      canRegister: true,
-    });
-
-    // 没同意用户协议和隐私政策：不注册，待处理的身份还在，同意后接着注册。
-    const invite = await t.createInvite();
-    const refused = await browser.post("/api/auth/pending/register", { inviteCode: invite });
-    expect(refused.status).toBe(400);
-    expect(await errorCode(refused)).toBe("terms_required");
-    expect((await browser.get("/api/auth/pending")).status).toBe(200);
-
-    const done = await browser.post("/api/auth/pending/register", {
-      inviteCode: invite,
-      acceptTerms: true,
-    });
-    expect(done.status).toBe(201);
-    expect(await json(await browser.get("/api/me"))).toMatchObject({ email: "new-g@example.com" });
-    expect(await json(await browser.get("/api/account/identities"))).toEqual({
-      email: "new-g@example.com",
-      identities: [{ provider: "google", login: "new-g@example.com" }],
-    });
-    expect((await browser.get("/api/auth/pending")).status).toBe(404);
-  });
-
-  it("已经绑定过的 Google 账号直接登录", async () => {
-    const google = t.google.addUser({ email: "again@example.com" });
-    const first = t.browser();
-    await googleSignIn(t, first, google);
-    await first.post("/api/auth/pending/register", {
-      inviteCode: await t.createInvite(),
-      acceptTerms: true,
-    });
-
-    const later = t.browser();
-    const callback = await googleSignIn(t, later, google);
-
-    expect(callback.headers.get("location")).toBe("/");
-    expect(await json(await later.get("/api/me"))).toMatchObject({ email: "again@example.com" });
-  });
-
-  it("Google 的邮箱已经是别的账户的：不能注册，要先登录那个账户，确认后才绑定", async () => {
-    await emailAccount(t, "owner@example.com");
-    const google = t.google.addUser({ email: "owner@example.com" });
-    const browser = t.browser();
-
-    await googleSignIn(t, browser, google);
-    expect(await json(await browser.get("/api/auth/pending"))).toMatchObject({
-      provider: "google",
-      emailTaken: true,
-      canRegister: false,
-    });
-    const register = await browser.post("/api/auth/pending/register", {
-      inviteCode: await t.createInvite(),
-      acceptTerms: true,
-    });
-    expect(register.status).toBe(409);
-    expect(await errorCode(register)).toBe("email_taken");
-
-    // 登录以后不会自动绑定：要用户确认。
-    await emailLogin(t, browser, "owner@example.com");
-    expect((await json(await browser.get("/api/account/identities"))).identities).toEqual([]);
-    const link = await browser.post("/api/auth/pending/link", {});
-    expect(link.status).toBe(200);
-    expect(await json(link)).toEqual({ provider: "google", login: "owner@example.com" });
-
-    const viaGoogle = t.browser();
-    expect((await googleSignIn(t, viaGoogle, google)).headers.get("location")).toBe("/");
-    expect(await json(await viaGoogle.get("/api/me"))).toMatchObject({
-      email: "owner@example.com",
-    });
-  });
-
-  it("陌生的 Google 账号、邮箱也对不上：可以选登录已有账户再绑定", async () => {
-    await emailAccount(t, "someone@example.com");
-    const google = t.google.addUser({ email: "personal@gmail.example" });
-    const browser = t.browser();
-
-    await googleSignIn(t, browser, google);
-    await emailLogin(t, browser, "someone@example.com");
-    const link = await browser.post("/api/auth/pending/link", {});
-
-    expect(link.status).toBe(200);
-    expect(await json(await browser.get("/api/account/identities"))).toEqual({
-      email: "someone@example.com",
-      identities: [{ provider: "google", login: "personal@gmail.example" }],
-    });
-  });
-
-  it("不想绑定：放弃以后待处理的身份就没了", async () => {
-    const google = t.google.addUser({ email: "cancel@example.com" });
-    const browser = t.browser();
-    await googleSignIn(t, browser, google);
-
-    expect((await browser.post("/api/auth/pending/cancel", {})).status).toBe(204);
-    expect((await browser.get("/api/auth/pending")).status).toBe(404);
-  });
-
-  it("没登录不能绑定；待处理的身份 10 分钟后过期", async () => {
-    const google = t.google.addUser({ email: "slow@example.com" });
-    const browser = t.browser();
-    await googleSignIn(t, browser, google);
-
-    const anonymous = await browser.post("/api/auth/pending/link", {});
-    expect(anonymous.status).toBe(401);
-
-    t.clock.advance(11 * MINUTE);
-    expect((await browser.get("/api/auth/pending")).status).toBe(404);
-  });
-
-  it("账户已经绑定了一个 Google 账号，再绑另一个：拒绝并说明原因", async () => {
-    const browser = await emailAccount(t, "two-googles@example.com");
-    const first = t.google.addUser({ email: "g1@example.com" });
-    const second = t.google.addUser({ email: "g2@example.com" });
-    expect(
-      (await googleSignIn(t, browser, first, { next: "/settings" })).headers.get("location"),
-    ).toBe("/settings");
-
-    const again = await googleSignIn(t, browser, second, { next: "/settings" });
-
-    expect(again.headers.get("location")).toBe("/settings?google=already_linked");
-  });
-
-  it("已经属于别的账户的 Google 账号：不能再绑定", async () => {
-    const google = t.google.addUser({ email: "taken-g@example.com" });
-    const owner = t.browser();
-    await googleSignIn(t, owner, google);
-    await owner.post("/api/auth/pending/register", {
-      inviteCode: await t.createInvite(),
-      acceptTerms: true,
-    });
-    const other = await emailAccount(t, "thief@example.com");
-
-    const callback = await googleSignIn(t, other, google, { next: "/settings" });
-
-    expect(callback.headers.get("location")).toBe("/settings?google=identity_taken");
-  });
-
-  it("跳回来时 state 或 nonce 对不上：拒绝", async () => {
-    const google = t.google.addUser({ email: "replay@example.com" });
-    const browser = t.browser();
-
-    const badNonce = await googleSignIn(t, browser, google, { nonce: "attacker" });
-    expect(badNonce.headers.get("location")).toBe("/?google=failed");
-
-    const noState = await browser.get("/api/auth/google/callback?code=x&state=y");
-    expect(noState.headers.get("location")).toBe("/?google=failed");
-  });
-
-  it("Google 没确认过的邮箱：不接受", async () => {
-    const google = t.google.addUser({ email: "unverified@example.com", emailVerified: false });
-
-    const callback = await googleSignIn(t, t.browser(), google);
-
-    expect(callback.headers.get("location")).toBe("/?google=unverified_email");
-  });
-
-  it("next 只能是站内的几个页面，防止跳到别的网站", async () => {
-    const google = t.google.addUser({ email: "redirect@example.com" });
-    const browser = await emailAccount(t, "redirect-owner@example.com");
-
-    const callback = await googleSignIn(t, browser, google, { next: "//evil.example.com" });
-
-    expect(callback.headers.get("location")).toBe("/");
-  });
-});
-
-describe("没配 Google", () => {
-  let t: TestApp;
-
-  beforeAll(async () => {
-    t = await createTestApp({ google: false });
-  });
-  afterAll(() => t.close());
-
-  it("登录页不显示 Google；直接访问登录地址会提示不可用", async () => {
-    expect(await json(await t.browser().get("/api/client-config"))).toMatchObject({
-      googleLogin: false,
-    });
-    const start = await t.browser().get("/api/auth/google/start");
-    expect(start.headers.get("location")).toBe("/?google=unavailable");
-  });
-});
-
-describe("用 GitHub 时也一样", () => {
+describe("陌生的 GitHub 账号：登录已有账户后绑定", () => {
   let t: TestApp;
 
   beforeAll(async () => {
@@ -303,20 +78,6 @@ describe("账户设置：解绑", () => {
   });
   afterAll(() => t.close());
 
-  it("解绑 Google 以后不能再用它登录到这个账户", async () => {
-    const browser = await emailAccount(t, "unlink@example.com");
-    const google = t.google.addUser({ email: "unlink-g@example.com" });
-    await googleSignIn(t, browser, google, { next: "/settings" });
-
-    expect(
-      (await browser.post("/api/account/identities/unlink", { provider: "google" })).status,
-    ).toBe(204);
-
-    expect((await json(await browser.get("/api/account/identities"))).identities).toEqual([]);
-    const later = t.browser();
-    expect((await googleSignIn(t, later, google)).headers.get("location")).toBe("/?signin=pending");
-  });
-
   it("解绑 GitHub：GitHub 令牌也删掉，显示为未关联", async () => {
     const { browser } = await t.signUpWithGitHub("unlink-gh", "unlink-gh/app");
 
@@ -333,7 +94,7 @@ describe("账户设置：解绑", () => {
 
   it("没绑定的身份：404", async () => {
     const browser = await emailAccount(t, "nothing@example.com");
-    const res = await browser.post("/api/account/identities/unlink", { provider: "google" });
+    const res = await browser.post("/api/account/identities/unlink", { provider: "github" });
     expect(res.status).toBe(404);
   });
 });

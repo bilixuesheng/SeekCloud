@@ -25,7 +25,7 @@ import type { Sessions } from "../sessions/sessions";
 import { Email } from "./auth";
 import { jsonBody as json, newRouter } from "./router";
 
-const Provider = z.enum(["github", "google"]);
+const Provider = z.enum(["github"]);
 
 const Code = z.string().regex(/^\d{6}$/, { error: "验证码为 6 位数字" });
 

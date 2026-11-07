@@ -17,24 +17,23 @@ import {
 import { currentUser, startLoginSession } from "./login-sessions";
 
 /**
- * 第三方登录（GitHub、Google）的共同规则：
- * - 一个 GitHub 账号、一个 Google 账号各自最多属于一个账户；一个账户每种最多绑一个；
+ * 第三方登录（GitHub）的规则：
+ * - 一个 GitHub 账号最多属于一个账户；一个账户最多绑一个；
  * - 陌生的第三方账号：让用户选"创建新账户"（要邀请码）还是"登录已有账户再绑定"；
  * - 第三方的邮箱对上了已有账户：不自动合并，先登录那个账户，再由用户确认绑定；
  * - 登录以后绑定待处理的身份也要用户确认：公用电脑上前一个人授权过的账号，不能悄悄绑进下一个人的账户。
  */
 
-export type Provider = "github" | "google";
+export type Provider = "github";
 
 export interface ThirdPartyIdentity {
   provider: Provider;
   /** 第三方那边不会变的用户 ID。 */
   subject: string;
-  /** 显示用的名字：GitHub 的 login，Google 的邮箱。 */
+  /** 显示用的名字：GitHub 的 login。 */
   login: string;
   /** 第三方确认过的邮箱；没有时为 null。 */
   email: string | null;
-  /** 只有 GitHub 有。 */
   githubTokens?: GitHubTokens;
 }
 
@@ -48,7 +47,7 @@ export type NextPage = (typeof NEXT_PAGES)[number];
 export const parseNext = (value: string | undefined): NextPage =>
   NEXT_PAGES.find((page) => page === value) ?? "/";
 
-/** 带上结果参数的回跳地址，比如 /settings?google=identity_taken。 */
+/** 带上结果参数的回跳地址，比如 /settings?github=identity_taken。 */
 const withResult = (next: NextPage, provider: Provider, result: string) =>
   `${next}?${provider}=${result}`;
 
@@ -283,5 +282,5 @@ export async function cancelPending(deps: AppDeps, c: Context): Promise<void> {
   deleteCookie(c, PENDING_COOKIE, { path: PENDING_PATH });
 }
 
-/** OAuth 跳转用的随机串（state、nonce、PKCE 的 verifier）。 */
+/** OAuth 跳转用的随机串（state）。 */
 export const randomToken = () => randomBytes(24).toString("base64url");

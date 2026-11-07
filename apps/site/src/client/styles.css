@@ -472,16 +472,6 @@ input:not([type="range"]):focus {
   font-size: 19px;
 }
 
-/* 人机验证：平时看不见，高度是 0，用负的外边距抵掉卡片里的间距；需要人点一下时才占位置、淡入 */
-.human-check {
-  margin-top: -18px;
-}
-
-.human-check.visible {
-  margin-top: 0;
-  animation: fade-in 0.25s var(--ease-out);
-}
-
 .auth-footer {
   margin: 0;
   font-size: 12px;

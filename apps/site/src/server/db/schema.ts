@@ -83,9 +83,9 @@ export const environments = pgTable("environments", {
   createdAt: createdAt(),
 });
 
-export const identityProvider = pgEnum("identity_provider", ["github", "google"]);
+export const identityProvider = pgEnum("identity_provider", ["github"]);
 
-/** 第三方登录身份。一个 GitHub 或 Google 账号只能属于一个账户；一个账户只关联一个 GitHub 账号。 */
+/** 第三方登录身份。一个 GitHub 账号只能属于一个账户；一个账户只关联一个 GitHub 账号。 */
 export const identities = pgTable(
   "identities",
   {
@@ -119,7 +119,7 @@ export const githubTokens = pgTable("github_tokens", {
 });
 
 /**
- * 用陌生的第三方账号（GitHub、Google）登录以后、用户选好"创建新账户"还是"登录已有账户再绑定"之前，
+ * 用陌生的第三方账号（GitHub）登录以后、用户选好"创建新账户"还是"登录已有账户再绑定"之前，
  * 第三方那边的信息先放在这里，10 分钟有效。浏览器里只放这一行的 ID。
  */
 export const pendingIdentities = pgTable("pending_identities", {
@@ -129,7 +129,7 @@ export const pendingIdentities = pgTable("pending_identities", {
   login: text("login").notNull(),
   // 第三方确认过的邮箱；GitHub 没有已验证的主邮箱时为空，这时只能绑定到已有账户。
   email: text("email"),
-  // GitHub 的授权令牌（JSON，加密存放）；Google 没有。
+  // GitHub 的授权令牌（JSON，加密存放）。
   githubTokens: text("github_tokens"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });

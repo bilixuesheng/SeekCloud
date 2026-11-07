@@ -1,5 +1,5 @@
 {
-  "id": "43172d56-8cd0-4e3d-9ed3-2afb3f0ce45b",
+  "id": "43b16815-e880-4d28-97db-1aaf49605ea0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1390,8 +1390,7 @@
       "name": "identity_provider",
       "schema": "public",
       "values": [
-        "github",
-        "google"
+        "github"
       ]
     },
     "public.network_access": {

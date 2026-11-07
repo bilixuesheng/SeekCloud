@@ -9,20 +9,11 @@ import {
   registerFromPending,
 } from "../auth/third-party";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
-import { finishGoogleSignIn, startGoogleSignIn } from "../google/sign-in";
-import { humanCheckErrors } from "../human-check";
 import { clientIp, HOUR, type RateLimiter, tooFrequent } from "../rate-limit";
-import { AcceptTerms, HumanCheckToken } from "./auth";
+import { AcceptTerms } from "./auth";
 import { jsonBody as json, newRouter } from "./router";
 
-/** 用 Google 登录、绑定。 */
-export function googleAuthRoutes(deps: AppDeps) {
-  return newRouter()
-    .get("/start", (c) => c.redirect(startGoogleSignIn(deps, c), 302))
-    .get("/callback", async (c) => c.redirect(await finishGoogleSignIn(deps, c), 302));
-}
-
-const Provider = z.enum(["github", "google"]);
+const Provider = z.enum(["github"]);
 
 const pendingRoute = createRoute({
   method: "get",
@@ -50,24 +41,17 @@ const registerRoute = createRoute({
   path: "/register",
   summary: "用待处理的第三方身份创建新账户：填邀请码，注册并登录",
   request: {
-    body: json(
-      z.object({
-        inviteCode: z.string(),
-        acceptTerms: AcceptTerms,
-        humanCheckToken: HumanCheckToken,
-      }),
-    ),
+    body: json(z.object({ inviteCode: z.string(), acceptTerms: AcceptTerms })),
   },
   responses: {
     201: {
       description: "已注册并登录",
       ...json(z.object({ user: z.object({ id: z.string(), email: z.string() }) })),
     },
-    400: errorResponse("邀请码有问题、没有同意协议、授权已过期或人机验证没通过"),
+    400: errorResponse("邀请码有问题、没有同意协议或授权已过期"),
     403: errorResponse("内测名额已满"),
     409: errorResponse("邮箱或第三方账号已被占用"),
     429: errorResponse("填错邀请码太多次"),
-    503: errorResponse("人机验证服务暂时连不上"),
   },
 });
 
@@ -101,14 +85,7 @@ export function pendingIdentityRoutes(deps: AppDeps, limiter: RateLimiter) {
     .openapi(registerRoute, async (c) => {
       const wait = limiter.take([{ key: `invite-ip:${clientIp(c)}`, limit: 10, windowMs: HOUR }]);
       if (wait > 0) return tooFrequent(c, wait);
-      const { inviteCode, acceptTerms, humanCheckToken } = c.req.valid("json");
-      const check = await deps.humanCheck.verify(humanCheckToken, {
-        action: "signup",
-        ip: clientIp(c),
-      });
-      if (check === "failed") return c.json(humanCheckErrors.failed, 400);
-      if (check === "unavailable") return c.json(humanCheckErrors.unavailable, 503);
-      const result = await registerFromPending(deps, c, { inviteCode, acceptTerms });
+      const result = await registerFromPending(deps, c, c.req.valid("json"));
       if (!result.ok) {
         const { status, message } = accountErrors[result.error];
         return c.json(apiError(result.error, message), status as 400 | 403 | 409);

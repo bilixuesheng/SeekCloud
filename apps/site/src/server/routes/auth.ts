@@ -9,7 +9,6 @@ import {
   startLoginSession,
 } from "../auth/login-sessions";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
-import { humanCheckErrors } from "../human-check";
 import { clientIp, HOUR, MINUTE, type RateLimiter, type Rule, tooFrequent } from "../rate-limit";
 import { jsonBody as json, newRouter } from "./router";
 
@@ -28,23 +27,15 @@ export const AcceptTerms = z
   .optional()
   .openapi({ description: "注册时必须为 true：同意用户协议和隐私政策" });
 
-/** 浏览器从 Turnstile 拿到的令牌。 */
-export const HumanCheckToken = z
-  .string()
-  .max(4096)
-  .optional()
-  .openapi({ description: "Cloudflare Turnstile 给的令牌" });
-
 const sendCodeRoute = createRoute({
   method: "post",
   path: "/email/send-code",
   summary: "发邮箱验证码",
   request: {
-    body: json(z.object({ email: Email, humanCheckToken: HumanCheckToken })),
+    body: json(z.object({ email: Email })),
   },
   responses: {
     204: { description: "已发送" },
-    400: errorResponse("人机验证没通过"),
     429: errorResponse("操作太频繁"),
     502: errorResponse("邮件没发出去"),
   },
@@ -62,8 +53,6 @@ const verifyRoute = createRoute({
         inviteCode: z.string().optional(),
         /** 注册时必须为 true。 */
         acceptTerms: AcceptTerms,
-        /** 带邀请码（注册）时必须有。 */
-        humanCheckToken: HumanCheckToken,
       }),
     ),
   },
@@ -74,7 +63,6 @@ const verifyRoute = createRoute({
     403: errorResponse("内测名额已满"),
     409: errorResponse("账户冲突"),
     429: errorResponse("填错邀请码太多次"),
-    503: errorResponse("人机验证服务暂时连不上"),
   },
 });
 
@@ -95,31 +83,14 @@ const logoutRoute = createRoute({
 export function authRoutes(deps: AppDeps, limiter: RateLimiter) {
   return newRouter()
     .openapi(sendCodeRoute, async (c) => {
-      const { email, humanCheckToken } = c.req.valid("json");
-      const ip = clientIp(c);
+      const { email } = c.req.valid("json");
       const rules: Rule[] = [
         { key: `send:${email}`, limit: 1, windowMs: MINUTE },
         { key: `send:${email}`, limit: 5, windowMs: HOUR },
-        { key: `send-ip:${ip}`, limit: 20, windowMs: HOUR },
+        { key: `send-ip:${clientIp(c)}`, limit: 20, windowMs: HOUR },
       ];
-      // 浏览器连不上 Cloudflare、拿不到令牌时也让老用户能登录，只是同一个 IP 限得更紧。
-      const unverified = deps.humanCheck.siteKey !== null && !humanCheckToken;
-      if (unverified) {
-        console.warn(`发验证码没带人机验证令牌（IP ${ip}）`);
-        rules.push({ key: `send-unverified-ip:${ip}`, limit: 3, windowMs: HOUR });
-      }
       const wait = limiter.take(rules);
       if (wait > 0) return tooFrequent(c, wait);
-      if (!unverified) {
-        const check = await deps.humanCheck.verify(humanCheckToken, { action: "send_code", ip });
-        // 主站连不上 Cloudflare 时照常发：老用户不能因为第三方出问题登不进来，有频率限制兜底。
-        if (check === "failed") {
-          // 只退回按邮箱的次数（真用户重试不受影响）；按 IP 的照扣，
-          // 免得有人拿伪造的令牌无限次打这个接口，每次都让主站去问 Cloudflare。
-          limiter.release(rules.filter((rule) => rule.key.startsWith("send:")));
-          return c.json(humanCheckErrors.failed, 400);
-        }
-      }
       try {
         await sendLoginCode(deps, email);
       } catch (error) {
@@ -141,15 +112,6 @@ export function authRoutes(deps: AppDeps, limiter: RateLimiter) {
       }
       const wait = limiter.take(rules);
       if (wait > 0) return tooFrequent(c, wait);
-      // 注册要过人机验证；老用户登录不用。没通过就不往下走，验证码和邀请码都不算用掉。
-      if (input.inviteCode) {
-        const check = await deps.humanCheck.verify(input.humanCheckToken, {
-          action: "signup",
-          ip: clientIp(c),
-        });
-        if (check === "failed") return c.json(humanCheckErrors.failed, 400);
-        if (check === "unavailable") return c.json(humanCheckErrors.unavailable, 503);
-      }
       const result = await verifyEmailLogin(deps, input);
       if (!result.ok) {
         const { status, message } = accountErrors[result.error];

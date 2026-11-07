@@ -4,15 +4,11 @@ import { join } from "node:path";
 import { createApp } from "../server/app";
 import { createInviteCode } from "../server/auth/invites";
 import { connectDatabase } from "../server/db/client";
-import { unconfiguredGoogle } from "../server/google/port";
-import { noHumanCheck } from "../server/human-check";
 import { runMaintenance } from "../server/maintenance";
 import { SecretBox } from "../server/secrets";
 import { createTestDatabase } from "./database";
 import { FakeGitHub } from "./fake-github";
-import { FakeGoogle } from "./fake-google";
 import { FakeHost } from "./fake-host";
-import { FakeHumanCheck } from "./fake-human-check";
 import { FakeClock, FakeMailer } from "./fakes";
 import { TestBrowser } from "./test-browser";
 
@@ -26,10 +22,6 @@ export interface TestAppOptions {
   databaseUrl?: string;
   /** false：没有宿主机连上来。 */
   host?: false;
-  /** true：打开人机验证（用假的 Turnstile）；默认不验证。 */
-  humanCheck?: boolean;
-  /** false：没配 Google 登录。 */
-  google?: false;
 }
 
 /** 测试缝 ①：在进程内调用主站。每调用一次建一个独立的真实数据库（一般一个测试文件一次），外部依赖全是假的。 */
@@ -40,8 +32,6 @@ export async function createTestApp(options: TestAppOptions = {}) {
   const mailer = new FakeMailer();
   const github = new FakeGitHub(clock);
   const host = new FakeHost();
-  const humanCheck = new FakeHumanCheck();
-  const google = new FakeGoogle();
   // 导出数据的压缩包写到临时目录，测试结束删掉。
   const dataDir = await mkdtemp(join(tmpdir(), "seekcloud-test-"));
   const deps = {
@@ -56,8 +46,6 @@ export async function createTestApp(options: TestAppOptions = {}) {
     github,
     secrets: new SecretBox(Buffer.alloc(32, 7)),
     host: options.host === false ? undefined : host,
-    humanCheck: options.humanCheck ? humanCheck : noHumanCheck,
-    google: options.google === false ? unconfiguredGoogle : google,
   };
   const app = createApp(deps);
 
@@ -67,8 +55,6 @@ export async function createTestApp(options: TestAppOptions = {}) {
     mailer,
     github,
     host,
-    humanCheck,
-    google,
     request: (path: string, init?: RequestInit) => app.request(path, init),
     /** 一个有自己 Cookie 的浏览器，用来模拟一个已登录或正在登录的用户。 */
     browser: () => new TestBrowser(app),
