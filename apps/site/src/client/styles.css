@@ -2921,22 +2921,29 @@ details > summary::-webkit-details-marker {
 }
 
 /*
- * Agent 回复的文字浮现（live-text.ts）：每段新字往上浮约 0.3 个字高，同时淡入，字从左往右错开；
- * 代码块、表格里的字只淡入。用 top 而不用 transform，行内的字也能动。
+ * Agent 回复的文字浮现（live-text.ts）：每段新字从下方约一个字高的地方往上浮，同时淡入，字从左往右错开。
+ * 位移的曲线照欠阻尼弹簧拟合：冲过头约 14%，0.65 秒左右落回；淡入 0.24 秒就完成。
+ * 代码块、表格里的字只淡入：.chunk-fade 只留第一个动画，所以淡入写在前面。
+ * 用 top 而不用 transform，行内的字也能动。
  */
 .chunk > span {
   position: relative;
-  animation: chunk-rise 0.3s var(--ease-out) both;
+  animation:
+    fade-in 0.24s var(--ease-out) both,
+    chunk-rise 0.7s cubic-bezier(0.29, 1.74, 0.47, 0.96) both;
 }
 
 .chunk-fade > span {
   animation-name: fade-in;
 }
 
+/* 终点要写明 0：不写就是 auto，从 1em 到 auto 不能插值，字会在半路直接跳过去 */
 @keyframes chunk-rise {
   from {
-    opacity: 0;
-    top: 0.3em;
+    top: 1em;
+  }
+  to {
+    top: 0;
   }
 }
 

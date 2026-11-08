@@ -1,6 +1,7 @@
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { charDelay, type LiveChunk } from "./live-text";
+import { charDelay, type LiveChunk, SETTLE_MS } from "./live-text";
 import { githubRef, Markdown, SessionLinks } from "./Markdown";
 
 const chunk = (from: number, to: number): LiveChunk => ({ id: from, from, to, born: 0 });
@@ -44,6 +45,13 @@ describe("Agent 回复的文字浮现", () => {
   it("长的一段整体在 0.24 秒里扫过去，短的一段每个字错开 14 毫秒", () => {
     expect(charDelay(2, 5)).toBe(28);
     expect(charDelay(999, 1000)).toBeLessThanOrEqual(240);
+  });
+
+  it("合并回普通文字时，最后一个字的动画已经播完", () => {
+    const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+    const rise = Number(css.match(/chunk-rise ([\d.]+)s/)?.[1]) * 1000;
+    expect(rise).toBeGreaterThan(0);
+    expect(SETTLE_MS).toBeGreaterThanOrEqual(rise + charDelay(999, 1000));
   });
 });
 
