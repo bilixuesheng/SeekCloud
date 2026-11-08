@@ -24,6 +24,7 @@ import {
   UndoIcon,
 } from "../Icons";
 import { usePresence } from "../Motion";
+import { catchUpBubble } from "./bubble-in";
 import { Composer } from "./Composer";
 import { contentKey, ScrollFollower } from "./follow-scroll";
 import { LiveMarkdown, SessionLinks } from "./Markdown";
@@ -183,8 +184,10 @@ export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
                 item={item}
                 nameOf={nameOf}
                 live={item.key > liveAfter}
-                // 服务器回推的正是刚才先显示的那条：不再播一遍出现的动画，免得闪一下，只让 ✓✓ 淡入。
-                replacesPending={item.kind === "user" && item.text === pending?.text}
+                // 服务器回推的正是刚才先显示的那条：不从头再播出现的动画，免得闪一下；刚才没播完的接着播，✓✓ 淡入。
+                pendingAt={
+                  item.kind === "user" && item.text === pending?.text ? pending.at : undefined
+                }
                 now={now}
                 onRetry={canRetry ? (text) => void send(text, false) : undefined}
               />
@@ -195,7 +198,7 @@ export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
                 sessionId={id}
                 id={item.id}
                 text={item.text}
-                fresh={item.text !== pending?.text}
+                pendingAt={item.text === pending?.text ? pending.at : undefined}
                 onRestore={(text) =>
                   setReply((current) => (current ? `${text}\n${current}` : text))
                 }
@@ -276,19 +279,20 @@ function QueuedMessage({
   sessionId,
   id,
   text,
-  fresh,
+  pendingAt,
   onRestore,
   onError,
 }: {
   sessionId: string;
   id: string;
   text: string;
-  fresh: boolean;
+  pendingAt?: string;
   onRestore: (text: string) => void;
   onError: (message: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [copied, copy] = useCopy(text);
+  const catchUp = useCatchUp(pendingAt);
 
   const act = async (action: "withdraw" | "send-now", restore = false) => {
     setBusy(true);
@@ -305,7 +309,10 @@ function QueuedMessage({
   };
 
   return (
-    <div className={`queued${fresh ? " fresh" : ""}${busy ? " busy" : ""}`}>
+    <div
+      className={`queued${pendingAt === undefined ? " fresh" : ""}${catchUp ? ` ${catchUp.className}` : ""}${busy ? " busy" : ""}`}
+      style={catchUp?.style}
+    >
       <div className="user-message">{text}</div>
       <div className="queued-actions">
         <span className="queued-label">排队中</span>
@@ -341,6 +348,17 @@ function QueuedMessage({
       </div>
     </div>
   );
+}
+
+/**
+ * 换上来的气泡接着播出现的动画（bubble-in.ts）。只在换上来的那一刻算一次，之后重新渲染也不变：
+ * 延迟一改，正在播的动画会跳。
+ */
+function useCatchUp(pendingAt: string | undefined) {
+  const [catchUp] = useState(() =>
+    pendingAt === undefined ? undefined : catchUpBubble(pendingAt, Date.now()),
+  );
+  return catchUp;
 }
 
 /** 复制到剪贴板，复制后的一会儿显示成勾。 */
@@ -472,13 +490,14 @@ function useNow(intervalMs: number): Date {
  * 重试就是把这句话再发一次；Agent 在工作时是灰的（onRetry 为空）。
  * 提示用 data-tip（样式见 styles.css 的 [data-tip]）。✓✓ 和时间是只用来看提示的按钮（meta-info），手机上点一下也能看到。
  * motion：fresh 是时间线统一的轻轻浮上来；bubble-in 是刚发的消息从输入框的方向进来（和下面那一行一起）；
- * delivered 是服务器回推了刚才先显示的那条，气泡不动，只有 ✓✓ 淡入。
+ * delivered 是服务器回推了刚才先显示的那条，✓✓ 淡入；pendingAt 是那条的发送时间，出现的动画没播完就接着播。
  * sending：刚发出去、服务器还没确认，没有 ✓✓，不能重试。
  */
 function SentMessage({
   text,
   at,
   motion = "",
+  pendingAt,
   now,
   sending = false,
   onRetry,
@@ -486,14 +505,19 @@ function SentMessage({
   text: string;
   at: string;
   motion?: "fresh" | "bubble-in" | "delivered" | "";
+  pendingAt?: string;
   now: Date;
   sending?: boolean;
   onRetry?: (text: string) => void;
 }) {
   const [copied, copy] = useCopy(text);
+  const catchUp = useCatchUp(pendingAt);
   const time = new Date(at);
   return (
-    <div className={`sent ${motion}${sending ? " sending" : ""}`}>
+    <div
+      className={`sent ${motion}${catchUp ? ` ${catchUp.className}` : ""}${sending ? " sending" : ""}`}
+      style={catchUp?.style}
+    >
       <div className="user-message">{text}</div>
       <div className="message-meta">
         {!sending && (
@@ -598,20 +622,20 @@ function Working({ text, since }: { text: string; since?: string }) {
  * 时间线上的一条。刚出现时轻轻浮上来（.fresh 的动画只在元素第一次挂上时播一次，
  * 之后内容更新不会再播；打开会话时历史一起浮上来，就是进场效果）。
  * live：打开会话以后才收到的。这时 Agent 回复的字一段段浮现，整条不再浮上来；别处发的用户消息照刚发的气泡进来。
- * replacesPending：服务器回推了刚才先显示的那条消息。
+ * pendingAt：服务器回推的是刚才先显示的那条消息时，那条的发送时间。
  */
 function TimelineEntry({
   item,
   nameOf,
   live,
-  replacesPending,
+  pendingAt,
   now,
   onRetry,
 }: {
   item: TimelineItem;
   nameOf: (model: string) => string;
   live: boolean;
-  replacesPending: boolean;
+  pendingAt?: string;
   now: Date;
   onRetry?: (text: string) => void;
 }) {
@@ -622,7 +646,8 @@ function TimelineEntry({
         <SentMessage
           text={item.text}
           at={item.at}
-          motion={replacesPending ? "delivered" : live ? "bubble-in" : "fresh"}
+          motion={pendingAt ? "delivered" : live ? "bubble-in" : "fresh"}
+          pendingAt={pendingAt}
           now={now}
           onRetry={onRetry}
         />

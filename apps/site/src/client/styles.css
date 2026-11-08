@@ -2903,8 +2903,9 @@ details > summary::-webkit-details-marker {
  * 刚发的消息从输入框的方向进来：以右下角为原点从 0.92 倍放大，同时往上滑 3 像素（气泡下沿一共上移约 5 像素），并淡入；
  * 下面"✓✓ 刚刚"那一行在同一个元素里，一起进来。
  * 缩放和位移的曲线照欠阻尼弹簧拟合：0.23 秒到位，冲过头约 3%，0.42 秒落回；淡入单独 0.24 秒完成。
+ * 服务器确认后换上来的那条（时间线里的或排队的）接着播完，见 session/bubble-in.ts。
  */
-.sent.bubble-in {
+.bubble-in {
   transform-origin: 100% 100%;
   animation:
     fade-in 0.24s cubic-bezier(0.22, 0.5, 0.61, 0.93) both,
@@ -2921,9 +2922,25 @@ details > summary::-webkit-details-marker {
   }
 }
 
-/* 服务器确认了刚才先显示的那条：气泡不动，✓✓ 淡入 */
+/* 服务器确认了刚才先显示的那条：✓✓ 淡入 */
 .sent.delivered .message-delivered {
   animation: fade-in 0.2s var(--ease-out) both;
+}
+
+/*
+ * 出现的动画接着播时，气泡也从发送中的淡色（.sending 的 0.7）接着变深：
+ * 换上来的是新元素，不然在换的那一刻会一下变亮。
+ */
+.delivered.bubble-in .user-message,
+.queued.bubble-in .user-message {
+  animation: sending-done 0.2s var(--ease-out) both;
+}
+
+/* 终点不写，落到各自原来的透明度：确认的是 1，排队的是 0.78 */
+@keyframes sending-done {
+  from {
+    opacity: 0.7;
+  }
 }
 
 /*
@@ -3232,8 +3249,10 @@ a.button:active,
   .popover,
   .popover.closing,
   .fresh,
-  .sent.bubble-in,
+  .bubble-in,
   .sent.delivered .message-delivered,
+  .delivered.bubble-in .user-message,
+  .queued.bubble-in .user-message,
   .chunk > span,
   .to-bottom,
   .bounce-dots span,
