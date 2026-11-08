@@ -6,13 +6,12 @@ import { apiError, handleError } from "./errors";
 import type { GitHub } from "./github/port";
 import type { Google } from "./google/port";
 import type { HumanCheck } from "./human-check";
-import type { Clock, Mailer, Random } from "./ports";
+import type { Clock, Mailer } from "./ports";
 import { RateLimiter } from "./rate-limit";
 import { accountRoutes } from "./routes/account";
 import { authRoutes } from "./routes/auth";
 import { githubAuthRoutes, githubRoutes } from "./routes/github";
 import { meRoutes } from "./routes/me";
-import { peakHoursRoutes } from "./routes/peak-hours";
 import { newRouter } from "./routes/router";
 import { sessionRoutes } from "./routes/sessions";
 import { googleAuthRoutes, pendingIdentityRoutes } from "./routes/third-party";
@@ -24,7 +23,6 @@ export interface AppDeps {
   version: string;
   db: Database;
   clock: Clock;
-  random: Random;
   mailer: Mailer;
   /** 内测席位总数：用户数到了就不能再注册。 */
   seatLimit: number;
@@ -120,7 +118,6 @@ export function createApp(deps: AppDeps) {
   app.route("/api/github", githubRoutes(deps, sessions));
   app.route("/api", sessionRoutes(deps, sessions));
   app.route("/api", meRoutes(deps));
-  app.route("/api", peakHoursRoutes(deps));
 
   app.onError(handleError);
   app.notFound((c) => c.json(apiError("not_found", "接口不存在"), 404));

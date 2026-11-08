@@ -44,7 +44,6 @@ const errorNote = (error?: { code: string; ref?: string }) =>
 const endReasons: Record<string, string> = {
   stopped: "回合已停止",
   failed: "回合失败",
-  paused: "额度已用尽，回合已暂停",
 };
 
 /** 把一个会话写成人能读的 Markdown：你说的话、Agent 的回复、它调用的工具和结果。 */

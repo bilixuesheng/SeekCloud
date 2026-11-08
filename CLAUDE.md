@@ -34,7 +34,7 @@
 - 主站和宿主机之间的消息定义在 `packages/protocol`。主站通过 `apps/site/src/server/sessions/host.ts` 的 `HostLink` 和宿主机通信；测试里是 `t.host`（`src/testing/fake-host.ts`，按脚本回放 Agent 事件，`manual = true` 时由测试自己 `emit`）。会话编排在 `src/server/sessions/sessions.ts`。
 - 宿主机（`apps/host`）：GitHub 工具服务（MCP，`/mcp`）在 `src/github-tools/`，测试接假的 GitHub API；dsh 怎么接见 `apps/host/sandbox/README.md`。Git 代理在 `src/git-proxy/`，提交签名在 `src/signing/`，沙箱里要装的签名助手和 git 配置在 `apps/host/sandbox/`。测试用真的 `git`（`git http-backend` 当假 GitHub）、`openssl` 和 `ssh-keygen`，云端会话里先运行 `apt-get install -y openssh-client`。生成签名密钥：`pnpm --filter @seekcloud/host signing-key <私钥路径>`，打印出来的公钥加到 SeekCloud 账号的 GitHub 签名密钥里。宿主机的环境变量：`SEEKCLOUD_SIGNING_KEY`（签名私钥路径）、`SEEKCLOUD_SIGNER_EMAIL`（SeekCloud 账号的邮箱）、`SEEKCLOUD_GIT_PROXY_HOST`、`SEEKCLOUD_GIT_PROXY_PORT`、`SEEKCLOUD_HOST_DATA`。
 - SSE 接口用 `browser.stream(path)` 测（`src/testing/event-stream.ts`），用完要 `close()`。`t.signUpWithGitHub(login, ...仓库)` 直接得到一个关联了 GitHub、装好 App 的已登录浏览器。
-- 主站的测试用 `apps/site/src/testing/test-app.ts` 的 `createTestApp()`：进程内调用接口，每调用一次建一个独立的库（一般一个测试文件一次），时钟、随机数、邮件都是假的。`t.browser()` 模拟一个有自己 Cookie 和 IP 的浏览器。
+- 主站的测试用 `apps/site/src/testing/test-app.ts` 的 `createTestApp()`：进程内调用接口，每调用一次建一个独立的库（一般一个测试文件一次），时钟、邮件都是假的。`t.browser()` 模拟一个有自己 Cookie 和 IP 的浏览器。
 - 接口出错时统一返回 `{ error: { code, message } }`：`code` 给程序判断，`message` 是给人看的中文。用 `apps/site/src/server/errors.ts` 的 `apiError()`。
 - 加表：改 `apps/site/src/server/db/schema.ts`，然后在 `apps/site` 里运行 `pnpm db:generate --name <名字>` 生成迁移。主站启动时自动跑迁移。
 - 后台的定期任务在 `apps/site/src/server/maintenance.ts`：打包数据导出、删过期的导出、清理已删除的账户。main.ts 每分钟跑一次；测试里调用 `t.runMaintenance()`，导出的压缩包写在 `t.dataDir`（临时目录）。
@@ -42,7 +42,6 @@
 - 用户协议、隐私政策的正文在 `apps/site/src/client/legal/*.md`。改了协议，同时改 `packages/protocol` 里的 `LEGAL_VERSION`（注册时记在账户上）。加了运行时依赖，要在 `legal/licenses.ts` 的开源声明里补上，有测试检查。
 - 建邀请码（管理端做好之前用这个）：在 `apps/site` 里运行 `DATABASE_URL=... pnpm invite:create [--count 数量] [--days 有效天数]`。
 - 访问记录（注册、登录、发起会话、发消息时的 IP）在 `apps/site/src/server/access-log.ts`，保存 180 天，删除账户时只断开关联、不删。
-- 高峰时段和工作日历在 `apps/site/src/server/billing/peak-hours.ts`，模型网关计费、用量圆环都用它；国务院的放假安排内置在 `billing/holidays.ts`，每年 11 月前后发了下一年的通知就照原文补上。管理端做好之前，按天改工作日历用 `DATABASE_URL=... pnpm calendar:set <YYYY-MM-DD> <workday|off|default>`。测试里是 `t.setWorkday(日期, 是否休息)`。
 
 ## 合并授权
 

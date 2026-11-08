@@ -6,7 +6,6 @@ const messages: Record<ErrorCode, string> = {
   model_rejected: "模型服务拒绝了本次请求",
   context_too_long: "对话长度超出模型上限",
   timeout: "模型服务响应超时",
-  quota_exhausted: "额度已用尽",
   sandbox_unavailable: "沙箱暂时无法创建",
   repo_clone_failed: "克隆仓库失败",
   internal: "服务内部错误",

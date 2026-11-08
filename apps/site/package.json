@@ -10,8 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc -p .",
     "db:generate": "drizzle-kit generate",
-    "invite:create": "tsx src/server/cli/create-invite.ts",
-    "calendar:set": "tsx src/server/cli/set-workday.ts"
+    "invite:create": "tsx src/server/cli/create-invite.ts"
   },
   "dependencies": {
     "@fontsource/noto-serif-sc": "^5.3.1",

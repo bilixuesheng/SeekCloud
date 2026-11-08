@@ -1,4 +1,4 @@
-import type { Clock, Mail, Mailer, Random } from "../server/ports";
+import type { Clock, Mail, Mailer } from "../server/ports";
 
 export class FakeClock implements Clock {
   #now: Date;
@@ -13,25 +13,6 @@ export class FakeClock implements Clock {
 
   advance(ms: number): void {
     this.#now = new Date(this.#now.getTime() + ms);
-  }
-}
-
-/** 按顺序返回给定的值，用完后从头再来。 */
-export class FixedRandom implements Random {
-  #values: number[];
-  #index = 0;
-
-  constructor(values: number[] = [0]) {
-    if (values.length === 0 || values.some((v) => v < 0 || v >= 1)) {
-      throw new Error("FixedRandom 需要至少一个 [0, 1) 之间的值");
-    }
-    this.#values = values;
-  }
-
-  next(): number {
-    const value = this.#values[this.#index % this.#values.length] as number;
-    this.#index++;
-    return value;
   }
 }
 

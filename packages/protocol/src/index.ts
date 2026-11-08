@@ -31,15 +31,15 @@ export interface TodoItem {
   status: "pending" | "in_progress" | "completed";
 }
 
-export const TURN_END_REASONS = ["completed", "stopped", "failed", "paused"] as const;
+export const TURN_END_REASONS = ["completed", "stopped", "failed"] as const;
 export type TurnEndReason = (typeof TURN_END_REASONS)[number];
 
 /**
  * 出错时的类别。给用户看的只有类别、上游的 HTTP 状态码和参考号（ADR 0007）：
- * 上游的原始报错可能带着后台配置的 API 端点、线路名或密钥片段，一律不进协议，只记在宿主机的日志里，用参考号查。
+ * 上游的原始报错可能带着后台配置的 API 端点或密钥片段，一律不进协议，只记在宿主机的日志里，用参考号查。
  */
 export const ERROR_CODES = [
-  /** 模型服务连不上或返回 5xx（所有线路都试过了）。 */
+  /** 模型服务连不上或返回 5xx。 */
   "model_unavailable",
   /** 模型服务限流（429）。 */
   "model_rate_limited",
@@ -49,8 +49,6 @@ export const ERROR_CODES = [
   "context_too_long",
   /** 等模型服务超时。 */
   "timeout",
-  /** 用户的额度用完了。 */
-  "quota_exhausted",
   /** 建不了沙箱（宿主机没资源、镜像拉不下来）。 */
   "sandbox_unavailable",
   /** 克隆仓库失败。 */

@@ -5,78 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1793442691330,
-      "tag": "0000_accounts",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1793443857418,
-      "tag": "0001_github",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1793446100177,
-      "tag": "0002_sessions",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1793522839311,
-      "tag": "0003_identities",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1793522840659,
-      "tag": "0004_drop_github_pending_signups",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1793533440819,
-      "tag": "0005_queued_messages",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1793533584369,
-      "tag": "0006_pull_requests",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1793533966649,
-      "tag": "0007_terms_consent",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1793535000444,
-      "tag": "0008_account_export_delete",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1794032375350,
-      "tag": "0009_workday_calendar",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1794033250999,
-      "tag": "0010_access_logs",
+      "when": 1794064856809,
+      "tag": "0000_init",
       "breakpoints": true
     }
   ]

@@ -73,7 +73,7 @@ export type SendOutcome = { started: Session } | { queued: { id: string; text: s
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-// 去掉了容易看混的 i、l、o、u。短 ID 不走 deps.random：它要难以猜到，测试里也不能撞号。
+// 去掉了容易看混的 i、l、o、u。短 ID 要难以猜到，所以用 node:crypto 的随机数。
 const SHORT_ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 const newShortId = () =>
   Array.from({ length: 8 }, () => SHORT_ID_ALPHABET[randomInt(SHORT_ID_ALPHABET.length)]).join("");
@@ -572,11 +572,9 @@ export class Sessions {
       .update(turns)
       .set({ status: event.reason, endedAt: this.#deps.clock.now() })
       .where(eq(turns.id, turn.id));
-    // 有排队的消息就直接开始下一个回合；额度用完暂停时留着，等用户点继续。
-    if (event.reason !== "paused") {
-      const next = await this.#startQueued(tx, session);
-      if (next) return next;
-    }
+    // 有排队的消息就直接开始下一个回合。
+    const next = await this.#startQueued(tx, session);
+    if (next) return next;
     await this.#setStatus(tx, session.id, turn.number, { status: "waiting", detail: null });
     return undefined;
   }

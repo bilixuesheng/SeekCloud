@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../server/app";
 import { createInviteCode } from "../server/auth/invites";
-import { setWorkdayOverride } from "../server/billing/peak-hours";
 import { connectDatabase } from "../server/db/client";
 import { unconfiguredGoogle } from "../server/google/port";
 import { noHumanCheck } from "../server/human-check";
@@ -14,15 +13,13 @@ import { FakeGitHub } from "./fake-github";
 import { FakeGoogle } from "./fake-google";
 import { FakeHost } from "./fake-host";
 import { FakeHumanCheck } from "./fake-human-check";
-import { FakeClock, FakeMailer, FixedRandom } from "./fakes";
+import { FakeClock, FakeMailer } from "./fakes";
 import { TestBrowser } from "./test-browser";
 
 export interface TestAppOptions {
   version?: string;
   /** 假时钟的起始时间。 */
   now?: Date;
-  /** 随机数依次返回的值。 */
-  random?: number[];
   /** 内测席位总数，默认足够大。 */
   seatLimit?: number;
   /** 不建新库，直接连这个地址（比如测数据库连不上的情况）。 */
@@ -40,7 +37,6 @@ export async function createTestApp(options: TestAppOptions = {}) {
   const database = options.databaseUrl ? undefined : await createTestDatabase();
   const { db, close } = connectDatabase(options.databaseUrl ?? (database?.url as string));
   const clock = new FakeClock(options.now);
-  const random = new FixedRandom(options.random);
   const mailer = new FakeMailer();
   const github = new FakeGitHub(clock);
   const host = new FakeHost();
@@ -54,7 +50,6 @@ export async function createTestApp(options: TestAppOptions = {}) {
     version: options.version ?? "test",
     db,
     clock,
-    random,
     mailer,
     seatLimit: options.seatLimit ?? 1000,
     secureCookies: false,
@@ -69,7 +64,6 @@ export async function createTestApp(options: TestAppOptions = {}) {
   return {
     db,
     clock,
-    random,
     mailer,
     github,
     host,
@@ -80,9 +74,6 @@ export async function createTestApp(options: TestAppOptions = {}) {
     browser: () => new TestBrowser(app),
     /** 建一个邀请码（管理员在命令行里做的事）。 */
     createInvite: (invite: { expiresAt?: Date } = {}) => createInviteCode(deps, invite),
-    /** 把某一天设成工作日（false）或休息日（true），null 去掉改动（管理员做的事）。 */
-    setWorkday: (date: string, isOffDay: boolean | null) =>
-      setWorkdayOverride(deps, date, isOffDay),
     /** 用 GitHub 注册并登录，把 App 装到这些仓库上。返回登录了的浏览器和假 GitHub 上的用户。 */
     signUpWithGitHub: async (login: string, ...repos: string[]) => {
       const user = github.addUser({ login, email: `${login}@example.com` });
