@@ -218,7 +218,7 @@ export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
             {status !== "running" &&
               status !== "queued" &&
               timeline.items.some((item) => item.kind === "assistant") && (
-                <p className="ai-notice">DeepSeek 是 AI，可能会犯错。</p>
+                <p className="ai-notice">DeepSeek 是 AI 并且可能会犯错。</p>
               )}
             {status === "queued" && <Working text="排队中，等待空闲资源" since={timeline.since} />}
             {status === "running" && (
