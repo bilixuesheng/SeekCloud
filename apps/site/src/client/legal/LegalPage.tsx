@@ -58,9 +58,36 @@ export function LegalPage({ doc }: { doc: LegalDoc }) {
   );
 }
 
-function Licenses() {
+const SOURCE_URL = "https://github.com/bilixuesheng/SeekCloud";
+
+/**
+ * 开头是 SeekCloud 自己的声明：
+ * - "基于 SeekCloud"这句署名是 NOTICE 里的附加条款（AGPL-3.0 第 7 条 (b) 项）要求保留的，改过的版本也不能删；
+ * - 仓库地址同时是 AGPL-3.0 第 13 条要求的源代码获取方式。
+ */
+export function Licenses() {
   return (
     <div className="markdown">
+      <p>
+        基于 SeekCloud（
+        <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
+          {SOURCE_URL}
+        </a>
+        ）
+      </p>
+      <p>Copyright (C) 2026 XUESHENG</p>
+      <p>
+        SeekCloud 依据{" "}
+        <a
+          href="https://www.gnu.org/licenses/agpl-3.0.html"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          GNU Affero 通用公共许可证第 3 版
+        </a>
+        （AGPL-3.0）授权，不提供任何担保。你可以依据该许可证的条款再分发和修改
+        SeekCloud，源代码可从上述地址获取。
+      </p>
       <p>SeekCloud 使用了以下开源软件，谨向各项目的作者致谢。</p>
       <ul className="license-list">
         {OPEN_SOURCE.map((item) => (
