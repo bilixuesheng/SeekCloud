@@ -1,5 +1,10 @@
 SeekCloud
-Copyright 2026 XUESHENG
+Copyright (C) 2026 XUESHENG
 
-This product includes software developed as part of SeekCloud
-(https://github.com/bilixuesheng/SeekCloud).
+本程序依据 GNU Affero 通用公共许可证第 3 版（AGPL-3.0）授权，许可证全文见 LICENSE 文件。
+
+附加条款（依据 AGPL-3.0 第 7 条 (b) 项）：本程序及其修改版本，必须在其交互界面显示的“适当的法律声明”（Appropriate Legal Notices，在本程序中即“开源声明”页）中，保留“基于 SeekCloud（https://github.com/bilixuesheng/SeekCloud）”这一署名。
+
+This program is licensed under the GNU Affero General Public License, version 3 (AGPL-3.0). See the LICENSE file for the full text.
+
+Additional term (under section 7(b) of the AGPL-3.0): This program and any modified version of it must preserve the attribution "基于 SeekCloud（https://github.com/bilixuesheng/SeekCloud）" (meaning "Based on SeekCloud") in the Appropriate Legal Notices displayed by its interactive user interfaces (in this program, the "开源声明" (Open Source Notices) page).

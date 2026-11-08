@@ -101,4 +101,6 @@ pnpm dev
 
 ## 许可证
 
-本项目采用 [Apache License 2.0](LICENSE) 许可证，另见 [NOTICE](NOTICE)。
+本项目依据 [GNU Affero 通用公共许可证第 3 版](LICENSE)（AGPL-3.0）授权，并附有一项署名附加条款（依据 AGPL-3.0 第 7 条 (b) 项）：SeekCloud 及其修改版本，必须在界面的“开源声明”页保留“基于 SeekCloud（https://github.com/bilixuesheng/SeekCloud）”这一署名。条款原文见 [NOTICE](NOTICE)。
+
+参与贡献之前，请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。

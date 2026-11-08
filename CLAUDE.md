@@ -39,23 +39,24 @@
 - 加表：改 `apps/site/src/server/db/schema.ts`，然后在 `apps/site` 里运行 `pnpm db:generate --name <名字>` 生成迁移。主站启动时自动跑迁移。
 - 后台的定期任务在 `apps/site/src/server/maintenance.ts`：打包数据导出、删过期的导出、删满 180 天的访问记录。main.ts 每分钟跑一次；测试里调用 `t.runMaintenance()`，导出的压缩包写在 `t.dataDir`（临时目录）。
 - 主站的环境变量：`SEEKCLOUD_DATA_DIR`（主站的数据目录，导出的压缩包放这里，默认 `./data`，要放在会备份的磁盘上）、`DATABASE_URL`、`PORT`（默认 3000）、`SEEKCLOUD_VERSION`、`NODE_ENV=production`（登录 Cookie 只走 HTTPS）、`SEEKCLOUD_SECRET_KEY`（加密令牌用的 32 字节密钥，base64，用 `openssl rand -base64 32` 生成）、`PUBLIC_URL`（主站对外的地址）、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_APP_SLUG`、`GITHUB_WEBHOOK_SECRET`（没配 GitHub 时，GitHub 相关功能直接报错）。部署时只有一层反向代理，它把客户端地址追加到 `X-Forwarded-For` 末尾；频率限制只认最后一个值。
-- 加了运行时依赖，要在 `apps/site/src/client/legal/licenses.ts` 的开源声明里补上，有测试检查。
+- 许可证是 AGPL-3.0，加了署名附加条款（ADR 0009，条款原文在 `NOTICE`）。不要拷贝许可证和 AGPL-3.0 不兼容的代码；借用 DSH Go 的代码要保留它的版权声明。
+- 加了运行时依赖，要在 `apps/site/src/client/legal/licenses.ts` 的开源声明里补上，有测试检查。开源声明页开头 SeekCloud 自己的署名（`legal/LegalPage.tsx`）不能删，这是附加条款要求的。
 - 忘记管理员密码：在 `apps/site` 里运行 `DATABASE_URL=... pnpm admin:reset-password`，打印一个随机的新密码，所有设备退出登录。
 - 访问记录（登录、发起会话、发消息时的 IP）在 `apps/site/src/server/access-log.ts`，保存 180 天。
 - README 有中英两份（`README.md`、`README.en.md`），改的时候两份一起改。
 
 ## 合并授权
 
-Claude 会话在本仓库里开的 PR，合并到 `main` 之前必须先给用户看，用户同意后才合并。
+Claude 会话在本仓库里开的 PR，写好、CI 全部通过后直接 squash 合并到 `main`，不用再等用户看（2026-11-08 用户要求）。
 
 - 合并前先跑一遍仓库现有的检查。CI 没有全部通过时，先修好再合并。
-- 合并方式用 squash。
 - 合并之后，后续工作从最新的 `main` 重新开分支。
 - 发版之前先问用户。
 
 ## 和用户协作的方式
 
 - 请用户做决定时，先说明 Claude Code 网页版在这个问题上是怎么做的，再给出你的建议。
+- 涉及 Agent 能力的决定，先查 dsh 原版有没有这个功能，再问用户（2026-11-08 用户要求）。
 - 约时间、设定时提醒一律用洛杉矶时间（America/Los_Angeles）。
 - 主动想一想边界情况和异常场景。用户希望在动手之前，把所有问题都理清楚。
 - 界面上的文字（包括错误提示）用书面语，照 `docs/brand/README.md` 的"界面文案规范"写，不要口语化。

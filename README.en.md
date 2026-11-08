@@ -101,4 +101,6 @@ If you forget the admin password, run `DATABASE_URL=... pnpm admin:reset-passwor
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE). See also [NOTICE](NOTICE).
+This project is licensed under the [GNU Affero General Public License, version 3](LICENSE) (AGPL-3.0), with an additional attribution term under section 7(b) of the AGPL-3.0: SeekCloud and any modified version of it must preserve the attribution "基于 SeekCloud（https://github.com/bilixuesheng/SeekCloud）" (meaning "Based on SeekCloud") on the "开源声明" (Open Source Notices) page of the interface. See [NOTICE](NOTICE) for the exact terms.
+
+Before contributing, please read [CONTRIBUTING.md](CONTRIBUTING.md).
