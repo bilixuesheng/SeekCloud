@@ -7,18 +7,18 @@ import type { AppDeps } from "../app";
 import {
   dataExports,
   environments,
-  identities,
   sessionEvents,
   sessionRepos,
   sessions,
   users,
 } from "../db/schema";
+import { githubConnection } from "../github/tokens";
 import { AI_NOTICE, sessionJson, sessionMarkdown, utcTime } from "./transcript";
 
 /**
  * 导出数据：
  * - 打包账户资料、全部会话（JSON 和 Markdown）、环境配置；
- * - 后台任务打包（runMaintenance 每分钟跑一次），好了发邮件，24 小时内可以下载；
+ * - 后台任务打包（runMaintenance 每分钟跑一次），好了在设置里下载，24 小时内有效；
  * - 每 24 小时只能申请一次，没打成的不算。
  */
 export const EXPORT_TTL_MS = 24 * 60 * 60_000;
@@ -129,12 +129,8 @@ async function claimNext(deps: AppDeps): Promise<ExportRow | undefined> {
 }
 
 async function buildOne(deps: AppDeps, row: ExportRow): Promise<void> {
-  const [user] = await deps.db.select().from(users).where(eq(users.id, row.userId));
-  // 申请以后删了账户：不打包，也不发信。
-  if (!user || user.deletedAt) {
-    await deps.db.update(dataExports).set({ status: "expired" }).where(eq(dataExports.id, row.id));
-    return;
-  }
+  // 导出跟着账户级联删除，账户一定还在。
+  const [user] = (await deps.db.select().from(users).where(eq(users.id, row.userId))) as [UserRow];
   const zip = zipSync(await collectFiles(deps, user, deps.clock.now()), { level: 6 });
   const path = exportFile(deps, row.id);
   await mkdir(join(deps.dataDir, "exports"), { recursive: true });
@@ -148,41 +144,16 @@ async function buildOne(deps: AppDeps, row: ExportRow): Promise<void> {
     .update(dataExports)
     .set({ status: "ready", sizeBytes: zip.byteLength, readyAt, expiresAt })
     .where(eq(dataExports.id, row.id));
-
-  // 发不出去也不要紧：设置页上照样能下载。
-  await deps.mailer
-    .send({
-      to: user.email,
-      subject: "SeekCloud：数据导出已完成",
-      text: [
-        `你申请的数据导出已打包完成，可在 ${utcTime(expiresAt)} 前下载：`,
-        "",
-        `${deps.publicUrl}/settings/privacy`,
-        "",
-        "请登录后在“设置 → 隐私”中点击“下载”。",
-        "",
-        "如非本人申请，请检查账户的登录方式，必要时在设置中选择“在所有设备上退出”。",
-      ].join("\n"),
-    })
-    .catch((error: unknown) => console.error("导出完成的邮件没发出去", row.id, error));
 }
 
 type UserRow = typeof users.$inferSelect;
 
-/** 压缩包里的文件。不放任何令牌、验证码、密钥原文。 */
+/** 压缩包里的文件。不放任何令牌、密码、密钥，哈希也不放。 */
 async function collectFiles(deps: AppDeps, user: UserRow, now: Date): Promise<Zippable> {
   const { db } = deps;
   const json = (value: unknown) => strToU8(`${JSON.stringify(value, null, 2)}\n`);
 
-  const linked = await db
-    .select({
-      provider: identities.provider,
-      login: identities.login,
-      createdAt: identities.createdAt,
-    })
-    .from(identities)
-    .where(eq(identities.userId, user.id))
-    .orderBy(asc(identities.provider));
+  const github = (await githubConnection(deps, user.id))?.login ?? null;
   const envs = await db
     .select({
       name: environments.name,
@@ -200,14 +171,8 @@ async function collectFiles(deps: AppDeps, user: UserRow, now: Date): Promise<Zi
     .orderBy(asc(sessions.createdAt));
 
   const files: Zippable = {
-    "README.txt": strToU8(readme(user.email, now)),
-    "account.json": json({
-      email: user.email,
-      createdAt: user.createdAt,
-      termsVersion: user.termsVersion,
-      termsAcceptedAt: user.termsAcceptedAt,
-      identities: linked,
-    }),
+    "README.txt": strToU8(readme(github ?? "管理员", now)),
+    "account.json": json({ createdAt: user.createdAt, github }),
     // 环境变量和网络密钥做出来以后，在这里打码导出（只留名字，值换成 ***）。
     "environments.json": json(envs),
   };
@@ -255,21 +220,21 @@ async function collectFiles(deps: AppDeps, user: UserRow, now: Date): Promise<Zi
   return files;
 }
 
-function readme(email: string, now: Date): string {
+function readme(account: string, now: Date): string {
   return [
     "SeekCloud · 数据导出",
     "",
-    `账户：${email}`,
+    `账户：${account}`,
     `导出时间：${utcTime(now)}`,
     "",
-    "account.json        账户资料：邮箱、注册时间、已同意的协议版本、已绑定的 GitHub / Google 账号",
+    "account.json        账户资料：创建时间、已关联的 GitHub 账号",
     "environments.json   环境配置",
     "sessions/*.json     各会话的完整记录（机器可读），文件名为会话短 ID",
     "sessions/*.md       各会话的可读版本",
     "",
     AI_NOTICE,
     "",
-    "不包含：GitHub 令牌、登录验证码等凭据；代码保存在 GitHub，不在此导出中。",
+    "不包含：GitHub 令牌、管理员密码等凭据；代码保存在 GitHub，不在此导出中。",
     "",
   ].join("\n");
 }

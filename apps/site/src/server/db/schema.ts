@@ -22,42 +22,13 @@ import {
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull();
 
+/** 管理员。开源版只有一个账户（ADR 0008）：首次设置密码时建这一行，会话、环境都挂在它下面。 */
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  // 小写、去掉首尾空格后的邮箱。一个邮箱只能属于一个账户。
-  email: text("email").notNull().unique(),
-  createdAt: createdAt(),
-  // 注册时同意的用户协议和隐私政策的版本（LEGAL_VERSION）和时间。
-  termsVersion: text("terms_version"),
-  termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }),
-  // 用户删除了账户：立即停用，邮箱换成占位、可以重新注册；过一段时间清理任务删掉整个账户。
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
-
-export const inviteCodes = pgTable("invite_codes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  code: text("code").notNull().unique(),
-  expiresAt: timestamp("expires_at", { withTimezone: true }),
-  usedBy: uuid("used_by").references(() => users.id, { onDelete: "set null" }),
-  usedAt: timestamp("used_at", { withTimezone: true }),
+  // 管理员密码的 scrypt 哈希，写法见 auth/password.ts。
+  passwordHash: text("password_hash").notNull(),
   createdAt: createdAt(),
 });
-
-/** 邮箱登录验证码。只存哈希；同一个邮箱发新码时，旧码作废。 */
-export const loginCodes = pgTable(
-  "login_codes",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    email: text("email").notNull(),
-    codeHash: text("code_hash").notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    // 已经校验过几次（不论对错）。最多 5 次。
-    attempts: integer("attempts").notNull().default(0),
-    consumedAt: timestamp("consumed_at", { withTimezone: true }),
-    createdAt: createdAt(),
-  },
-  (t) => [index("login_codes_email_idx").on(t.email)],
-);
 
 /** 网页的登录状态。Cookie 里放随机令牌，这里只存它的哈希。（"会话"专指和 Agent 的对话，这里不用这个词。） */
 export const loginSessions = pgTable("login_sessions", {
@@ -83,78 +54,18 @@ export const environments = pgTable("environments", {
   createdAt: createdAt(),
 });
 
-export const identityProvider = pgEnum("identity_provider", ["github", "google"]);
-
-/** 第三方登录身份。一个 GitHub 或 Google 账号只能属于一个账户；一个账户只关联一个 GitHub 账号。 */
-export const identities = pgTable(
-  "identities",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    provider: identityProvider("provider").notNull(),
-    // 第三方那边不会变的用户 ID。
-    subject: text("subject").notNull(),
-    // 显示用的名字，比如 GitHub 的 login。
-    login: text("login").notNull(),
-    createdAt: createdAt(),
-  },
-  (t) => [
-    unique("identities_provider_subject").on(t.provider, t.subject),
-    unique("identities_user_provider").on(t.userId, t.provider),
-  ],
-);
-
-/** 用户的 GitHub 授权令牌，加密存放。刷新令牌只在主站。 */
+/** 关联的 GitHub 账号和它的授权令牌（加密存放）。刷新令牌只在主站。令牌失效或解除关联时删掉这一行。 */
 export const githubTokens = pgTable("github_tokens", {
   userId: uuid("user_id")
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
+  // GitHub 的 login，显示用。
+  login: text("login").notNull(),
   accessToken: text("access_token").notNull(),
   accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }).notNull(),
   refreshToken: text("refresh_token").notNull(),
   refreshExpiresAt: timestamp("refresh_expires_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
-});
-
-/**
- * 用陌生的第三方账号（GitHub、Google）登录以后、用户选好"创建新账户"还是"登录已有账户再绑定"之前，
- * 第三方那边的信息先放在这里，10 分钟有效。浏览器里只放这一行的 ID。
- */
-export const pendingIdentities = pgTable("pending_identities", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  provider: identityProvider("provider").notNull(),
-  subject: text("subject").notNull(),
-  login: text("login").notNull(),
-  // 第三方确认过的邮箱；GitHub 没有已验证的主邮箱时为空，这时只能绑定到已有账户。
-  email: text("email"),
-  // GitHub 的授权令牌（JSON，加密存放）；Google 没有。
-  githubTokens: text("github_tokens"),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-});
-
-/** 换邮箱：发到新邮箱的验证码，只存哈希，10 分钟有效。一个账户同时只有一条。 */
-export const emailChanges = pgTable("email_changes", {
-  userId: uuid("user_id")
-    .primaryKey()
-    .references(() => users.id, { onDelete: "cascade" }),
-  newEmail: text("new_email").notNull(),
-  codeHash: text("code_hash").notNull(),
-  attempts: integer("attempts").notNull().default(0),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  createdAt: createdAt(),
-});
-
-/** 删除账户前发到邮箱的验证码。一个账户同时只有一个。 */
-export const accountDeletionCodes = pgTable("account_deletion_codes", {
-  userId: uuid("user_id")
-    .primaryKey()
-    .references(() => users.id, { onDelete: "cascade" }),
-  codeHash: text("code_hash").notNull(),
-  attempts: integer("attempts").notNull().default(0),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  createdAt: createdAt(),
 });
 
 /**
@@ -294,24 +205,17 @@ export const sessionEvents = pgTable(
   (t) => [primaryKey({ columns: [t.sessionId, t.seq] })],
 );
 
-export const accessEvent = pgEnum("access_event", [
-  "register",
-  "login",
-  "session_start",
-  "message",
-]);
+export const accessEvent = pgEnum("access_event", ["login", "session_start", "message"]);
 
 /**
- * 注册、登录、发起会话、发消息时的客户端网络。《网络安全法》要求网络日志留存不少于 6 个月，保存 180 天。
- * 删除账户时这些记录要按期留存：user_id 清空，换成一个随机的 deleted_account，同一个已删除账户的记录还能归到一起，
- * 但查不回是哪个账户。只存储，不用于别的用途。
+ * 登录、发起会话、发消息时的客户端网络。《网络安全法》要求网络日志留存不少于 6 个月，保存 180 天。
+ * 只存储，不用于别的用途。
  */
 export const accessLogs = pgTable(
   "access_logs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
-    deletedAccount: uuid("deleted_account"),
     event: accessEvent("event").notNull(),
     // IPv4 原样；IPv6 只留前 64 位（一台设备的 IPv6 地址经常变），写成 2001:db8:1:2::/64
     network: text("network").notNull(),

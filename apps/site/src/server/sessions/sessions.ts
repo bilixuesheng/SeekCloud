@@ -374,40 +374,6 @@ export class Sessions {
     for (const session of rows) this.#notify(session);
   }
 
-  /**
-   * 用户删除账户时：所有会话立即归档（正在跑的回合算停止，排队的消息丢掉），
-   * 再让宿主机删掉这些会话的沙箱。之后宿主机再发来的事件都会被忽略（回合已经不在运行）。
-   */
-  async closeAllForUser(userId: string): Promise<void> {
-    const closed = await this.#deps.db.transaction(async (tx) => {
-      const rows = await tx
-        .select()
-        .from(sessions)
-        .where(eq(sessions.userId, userId))
-        .orderBy(asc(sessions.createdAt))
-        .for("update");
-      const now = this.#deps.clock.now();
-      for (const session of rows) {
-        await tx.delete(queuedMessages).where(eq(queuedMessages.sessionId, session.id));
-        if (session.status === "archived" || session.status === "failed") continue;
-        const ended = await tx
-          .update(turns)
-          .set({ status: "stopped", endedAt: now })
-          .where(and(eq(turns.sessionId, session.id), eq(turns.status, "running")))
-          .returning({ number: turns.number });
-        await this.#setStatus(tx, session.id, ended[0]?.number ?? null, {
-          status: "archived",
-          detail: null,
-        });
-      }
-      return rows;
-    });
-    for (const session of closed) {
-      this.#notify(session);
-      this.#deps.host?.send({ type: "destroy_sandbox", sessionId: session.id });
-    }
-  }
-
   /** 锁住这个用户自己的会话这一行。 */
   async #lockOwn(tx: Tx, userId: string, shortId: string): Promise<SessionRow | undefined> {
     const [session] = await tx

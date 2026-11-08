@@ -48,7 +48,7 @@ Agent 的每个提交，说明末尾都有一行尾注：
 Generated-by: SeekCloud Agent (AI)
 ```
 
-这是《人工智能生成合成内容标识办法》要求的标识，用户协议里写明了用户不得删除，所以用户在会话里要求去掉也照加。
+这是《人工智能生成合成内容标识办法》要求的标识，所以用户在会话里要求去掉也照加。
 
 - 本目录的 `git-hooks/` 整个装进通用镜像的 `/usr/local/share/seekcloud/git-hooks`，保留里面的符号链接（每个钩子都链接到 `_dispatch`）。
 - `core.hooksPath` 用上面的环境变量设，不写进 `git config --system`：环境变量里的配置盖过仓库自己的，用 husky 这类工具设了 `core.hooksPath` 的仓库也跑我们的钩子。`_dispatch` 先跑仓库原本会跑的同名钩子（`.git/hooks` 或仓库设的 `core.hooksPath`），所以仓库的检查照常生效。

@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "./api";
-import { type AuthResult, takeAuthResult } from "./auth-results";
+import { type ApiError, api } from "./api";
+import { takeAuthResult } from "./auth-results";
 import { LogoutIcon, MenuIcon, PlusIcon, SearchIcon, SettingsIcon } from "./Icons";
 import { LoginPage } from "./LoginPage";
 import { Brand, Logo } from "./Logo";
 import { LegalLink, LegalPage } from "./legal/LegalPage";
-import { PendingLinkCard } from "./PendingLinkCard";
 import { navigate, pathOf, type Route, useRoute } from "./router";
 import { NewSession } from "./session/NewSession";
 import { SessionList } from "./session/SessionList";
@@ -15,21 +14,25 @@ import { SettingsDialog } from "./settings/SettingsDialog";
 
 interface Me {
   id: string;
-  email: string;
+  /** 关联的 GitHub 用户名；没关联时为 null。 */
+  githubLogin: string | null;
 }
 
 export function App() {
-  const [me, setMe] = useState<Me | null>();
-  const [authResult] = useState(takeAuthResult);
+  // undefined：还在问；null：没登录；"setup"：还没设置管理员密码。
+  const [me, setMe] = useState<Me | "setup" | null>();
+  const [notice] = useState(takeAuthResult);
   const route = useRoute();
 
   const refresh = useCallback(() => {
-    api<Me>("/api/me").then(setMe, () => setMe(null));
+    api<Me>("/api/me").then(setMe, (e: ApiError) =>
+      setMe(e.code === "setup_required" ? "setup" : null),
+    );
   }, []);
 
   useEffect(refresh, [refresh]);
 
-  // 用户协议、隐私政策、开源声明：登没登录都能看。
+  // 开源声明：登没登录都能看。
   if (route.page === "legal") return <LegalPage doc={route.doc} />;
 
   // 等登录状态的时候先空着；超过一小会儿还没回来，才淡入一个标志（见 .splash），快的时候什么都不闪。
@@ -40,15 +43,10 @@ export function App() {
       </div>
     );
   }
-  if (me === null) return <LoginPage onSignedIn={refresh} authResult={authResult} />;
-  return (
-    <Shell
-      me={me}
-      authResult={authResult}
-      onSignedOut={refresh}
-      onEmailChanged={(email) => setMe({ ...me, email })}
-    />
-  );
+  if (me === null || me === "setup") {
+    return <LoginPage setup={me === "setup"} onSignedIn={refresh} notice={notice} />;
+  }
+  return <Shell me={me} notice={notice} onSignedOut={refresh} onGitHubChanged={refresh} />;
 }
 
 function HomeLink() {
@@ -69,14 +67,15 @@ function HomeLink() {
 /** 登录后的页面：左边是会话列表（手机上收进抽屉），右边是首页或会话页。 */
 function Shell({
   me,
-  authResult,
+  notice,
   onSignedOut,
-  onEmailChanged,
+  onGitHubChanged,
 }: {
   me: Me;
-  authResult: AuthResult | null;
+  /** 关联 GitHub 跳回来时出的问题。 */
+  notice?: string;
   onSignedOut: () => void;
-  onEmailChanged: (email: string) => void;
+  onGitHubChanged: () => void;
 }) {
   const route = useRoute();
   // 设置是盖在原来页面上的弹窗：记住打开设置之前在哪一页，底下照常显示它，关掉时回去。
@@ -98,7 +97,6 @@ function Shell({
           s.repos.some((r) => r.fullName.toLowerCase().includes(query)),
       )
     : sessions;
-  const notice = authResult?.message;
   const newSession = () => {
     navigate("/");
     setDrawer(false);
@@ -141,7 +139,7 @@ function Shell({
           />
         </div>
         <AccountFoot
-          email={me.email}
+          name={me.githubLogin ?? "管理员"}
           onSettings={() => {
             navigate("/settings/general");
             setDrawer(false);
@@ -188,7 +186,6 @@ function Shell({
                   {notice}
                 </p>
               )}
-              <PendingLinkCard />
               <NewSession onCreated={upsert} />
             </div>
           </main>
@@ -199,8 +196,8 @@ function Shell({
           section={route.section}
           notice={notice}
           onClose={closeSettings}
-          onEmailChanged={onEmailChanged}
           onSignedOut={onSignedOut}
+          onGitHubChanged={onGitHubChanged}
         />
       )}
     </div>
@@ -211,11 +208,12 @@ function Shell({
  * 侧边栏底部的账户：点一下弹出菜单（设置、退出登录）；右边的齿轮直接打开设置。
  */
 function AccountFoot({
-  email,
+  name,
   onSettings,
   onSignedOut,
 }: {
-  email: string;
+  /** 关联了 GitHub 时是 GitHub 用户名，否则是"管理员"。 */
+  name: string;
   onSettings: () => void;
   onSignedOut: () => void;
 }) {
@@ -240,7 +238,7 @@ function AccountFoot({
     <div className="sidebar-foot" ref={root}>
       {open && (
         <div className="popover account-menu" role="menu">
-          <div className="account-menu-email">{email}</div>
+          <div className="account-menu-name">{name}</div>
           <button
             type="button"
             role="menuitem"
@@ -262,8 +260,6 @@ function AccountFoot({
             退出登录
           </button>
           <div className="account-menu-legal">
-            <LegalLink doc="terms" newTab />
-            <LegalLink doc="privacy" newTab />
             <LegalLink doc="licenses" newTab />
           </div>
         </div>
@@ -276,10 +272,10 @@ function AccountFoot({
         onClick={() => setOpen(!open)}
       >
         <span className="avatar" aria-hidden="true">
-          {email[0]?.toUpperCase()}
+          {name[0]?.toUpperCase()}
         </span>
-        <span className="account-email" title={email}>
-          {email}
+        <span className="account-name" title={name}>
+          {name}
         </span>
       </button>
       <button

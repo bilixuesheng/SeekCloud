@@ -1,9 +1,11 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { AppDeps } from "../app";
+import { hasAdmin } from "../auth/admin";
 import { currentUser } from "../auth/login-sessions";
 import { networkAccess } from "../db/schema";
 import { listEnvironments } from "../environments";
-import { errorResponse, notLoggedIn } from "../errors";
+import { apiError, errorResponse, notLoggedIn } from "../errors";
+import { githubConnection } from "../github/tokens";
 import { newRouter } from "./router";
 
 const unauthorized = errorResponse("没有登录");
@@ -11,15 +13,23 @@ const unauthorized = errorResponse("没有登录");
 const meRoute = createRoute({
   method: "get",
   path: "/me",
-  summary: "当前登录的用户",
+  summary: "当前登录的管理员",
   responses: {
     200: {
-      description: "当前用户",
+      description: "管理员",
       content: {
-        "application/json": { schema: z.object({ id: z.string(), email: z.string() }) },
+        "application/json": {
+          schema: z.object({
+            id: z.string(),
+            githubLogin: z
+              .string()
+              .nullable()
+              .openapi({ description: "关联的 GitHub 用户名；没关联时为 null" }),
+          }),
+        },
       },
     },
-    401: unauthorized,
+    401: errorResponse("没有登录；还没设置管理员密码时错误码是 setup_required"),
   },
 });
 
@@ -53,7 +63,12 @@ export function meRoutes(deps: AppDeps) {
   return newRouter()
     .openapi(meRoute, async (c) => {
       const user = await currentUser(deps, c);
-      return user ? c.json(user, 200) : c.json(notLoggedIn, 401);
+      if (!user) {
+        if (await hasAdmin(deps.db)) return c.json(notLoggedIn, 401);
+        return c.json(apiError("setup_required", "请先设置管理员密码"), 401);
+      }
+      const github = await githubConnection(deps, user.id);
+      return c.json({ id: user.id, githubLogin: github?.login ?? null }, 200);
     })
     .openapi(environmentsRoute, async (c) => {
       const user = await currentUser(deps, c);

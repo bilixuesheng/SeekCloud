@@ -115,7 +115,7 @@ export type HostCommand =
    */
   | { type: "inject_message"; sessionId: string; turnId: string; text: string }
   /**
-   * 停掉并删除这个会话的沙箱（包括休眠的），不再回传事件。用户删除账户时发。
+   * 停掉并删除这个会话的沙箱（包括休眠的），不再回传事件。
    * 沙箱已经不在时什么也不做。
    */
   | { type: "destroy_sandbox"; sessionId: string }
@@ -142,12 +142,6 @@ export type HostEvent =
 export type HostLinkFrame =
   | { seq: number; ack: number; command: HostCommand }
   | { seq: number; ack: number; event: HostEvent };
-
-/**
- * 用户协议和隐私政策的版本（就是更新日期）。注册时用户同意的是这一版，记在账户上；
- * 以后改了协议，改这个日期，再决定要不要请老用户重新同意。
- */
-export const LEGAL_VERSION = "2026-11-01";
 
 /** 会话分支上的 PR 状态，侧边栏和会话页按它显示图标。 */
 export const PULL_REQUEST_STATES = ["open", "draft", "merged", "closed"] as const;

@@ -1,24 +1,14 @@
-CREATE TYPE "public"."access_event" AS ENUM('register', 'login', 'session_start', 'message');--> statement-breakpoint
+CREATE TYPE "public"."access_event" AS ENUM('login', 'session_start', 'message');--> statement-breakpoint
 CREATE TYPE "public"."export_status" AS ENUM('pending', 'building', 'ready', 'failed', 'expired');--> statement-breakpoint
-CREATE TYPE "public"."identity_provider" AS ENUM('github', 'google');--> statement-breakpoint
 CREATE TYPE "public"."network_access" AS ENUM('none', 'default', 'custom', 'full');--> statement-breakpoint
 CREATE TYPE "public"."session_status" AS ENUM('queued', 'running', 'waiting', 'dormant', 'archived', 'failed');--> statement-breakpoint
 CREATE TYPE "public"."turn_status" AS ENUM('running', 'completed', 'stopped', 'failed');--> statement-breakpoint
 CREATE TABLE "access_logs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid,
-	"deleted_account" uuid,
 	"event" "access_event" NOT NULL,
 	"network" text NOT NULL,
 	"at" timestamp with time zone NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "account_deletion_codes" (
-	"user_id" uuid PRIMARY KEY NOT NULL,
-	"code_hash" text NOT NULL,
-	"attempts" integer DEFAULT 0 NOT NULL,
-	"expires_at" timestamp with time zone NOT NULL,
-	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "data_exports" (
@@ -29,15 +19,6 @@ CREATE TABLE "data_exports" (
 	"started_at" timestamp with time zone,
 	"ready_at" timestamp with time zone,
 	"expires_at" timestamp with time zone,
-	"created_at" timestamp with time zone NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "email_changes" (
-	"user_id" uuid PRIMARY KEY NOT NULL,
-	"new_email" text NOT NULL,
-	"code_hash" text NOT NULL,
-	"attempts" integer DEFAULT 0 NOT NULL,
-	"expires_at" timestamp with time zone NOT NULL,
 	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
@@ -52,42 +33,12 @@ CREATE TABLE "environments" (
 --> statement-breakpoint
 CREATE TABLE "github_tokens" (
 	"user_id" uuid PRIMARY KEY NOT NULL,
+	"login" text NOT NULL,
 	"access_token" text NOT NULL,
 	"access_expires_at" timestamp with time zone NOT NULL,
 	"refresh_token" text NOT NULL,
 	"refresh_expires_at" timestamp with time zone NOT NULL,
 	"updated_at" timestamp with time zone NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "identities" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"user_id" uuid NOT NULL,
-	"provider" "identity_provider" NOT NULL,
-	"subject" text NOT NULL,
-	"login" text NOT NULL,
-	"created_at" timestamp with time zone NOT NULL,
-	CONSTRAINT "identities_provider_subject" UNIQUE("provider","subject"),
-	CONSTRAINT "identities_user_provider" UNIQUE("user_id","provider")
-);
---> statement-breakpoint
-CREATE TABLE "invite_codes" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"code" text NOT NULL,
-	"expires_at" timestamp with time zone,
-	"used_by" uuid,
-	"used_at" timestamp with time zone,
-	"created_at" timestamp with time zone NOT NULL,
-	CONSTRAINT "invite_codes_code_unique" UNIQUE("code")
-);
---> statement-breakpoint
-CREATE TABLE "login_codes" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"email" text NOT NULL,
-	"code_hash" text NOT NULL,
-	"expires_at" timestamp with time zone NOT NULL,
-	"attempts" integer DEFAULT 0 NOT NULL,
-	"consumed_at" timestamp with time zone,
-	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "login_sessions" (
@@ -97,16 +48,6 @@ CREATE TABLE "login_sessions" (
 	"expires_at" timestamp with time zone NOT NULL,
 	"created_at" timestamp with time zone NOT NULL,
 	CONSTRAINT "login_sessions_token_hash_unique" UNIQUE("token_hash")
-);
---> statement-breakpoint
-CREATE TABLE "pending_identities" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"provider" "identity_provider" NOT NULL,
-	"subject" text NOT NULL,
-	"login" text NOT NULL,
-	"email" text,
-	"github_tokens" text,
-	"expires_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "queued_messages" (
@@ -170,22 +111,14 @@ CREATE TABLE "turns" (
 --> statement-breakpoint
 CREATE TABLE "users" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"email" text NOT NULL,
-	"created_at" timestamp with time zone NOT NULL,
-	"terms_version" text,
-	"terms_accepted_at" timestamp with time zone,
-	"deleted_at" timestamp with time zone,
-	CONSTRAINT "users_email_unique" UNIQUE("email")
+	"password_hash" text NOT NULL,
+	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "access_logs" ADD CONSTRAINT "access_logs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "account_deletion_codes" ADD CONSTRAINT "account_deletion_codes_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "data_exports" ADD CONSTRAINT "data_exports_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "email_changes" ADD CONSTRAINT "email_changes_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "environments" ADD CONSTRAINT "environments_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "github_tokens" ADD CONSTRAINT "github_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "identities" ADD CONSTRAINT "identities_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "invite_codes" ADD CONSTRAINT "invite_codes_used_by_users_id_fk" FOREIGN KEY ("used_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "login_sessions" ADD CONSTRAINT "login_sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "queued_messages" ADD CONSTRAINT "queued_messages_session_id_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."sessions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session_events" ADD CONSTRAINT "session_events_session_id_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."sessions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -196,7 +129,6 @@ ALTER TABLE "turns" ADD CONSTRAINT "turns_session_id_sessions_id_fk" FOREIGN KEY
 CREATE INDEX "access_logs_user" ON "access_logs" USING btree ("user_id","at");--> statement-breakpoint
 CREATE INDEX "access_logs_at" ON "access_logs" USING btree ("at");--> statement-breakpoint
 CREATE INDEX "data_exports_user" ON "data_exports" USING btree ("user_id","created_at");--> statement-breakpoint
-CREATE INDEX "login_codes_email_idx" ON "login_codes" USING btree ("email");--> statement-breakpoint
 CREATE INDEX "queued_messages_session" ON "queued_messages" USING btree ("session_id","seq");--> statement-breakpoint
 CREATE INDEX "session_repos_branch" ON "session_repos" USING btree ("branch");--> statement-breakpoint
 CREATE INDEX "sessions_user_updated_idx" ON "sessions" USING btree ("user_id","updated_at");

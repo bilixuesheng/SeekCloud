@@ -90,15 +90,6 @@ describe("真实 GitHub 接口的调用方式", () => {
     ).toBeUndefined();
   });
 
-  it("主邮箱：只取已验证的主邮箱，转成小写", async () => {
-    const email = await api(() => [
-      { email: "Other@Example.com", primary: false, verified: true },
-      { email: "Me@Example.com", primary: true, verified: true },
-    ]).getPrimaryEmail("gho_1");
-
-    expect(email).toBe("me@example.com");
-  });
-
   it("webhook 签名：用 webhook 密钥算出的签名才算对", () => {
     const github = api(() => ({}));
     const body = '{"action":"created"}';

@@ -3,7 +3,7 @@ import { createTestApp, type TestApp } from "../testing/test-app";
 
 // 同时到达的请求不能绕过限制。
 
-describe("并发：验证码", () => {
+describe("并发：首次设置", () => {
   let t: TestApp;
 
   beforeAll(async () => {
@@ -11,66 +11,42 @@ describe("并发：验证码", () => {
   });
   afterAll(() => t.close());
 
-  it("同时猜很多次验证码，也只算最多 5 次，之后正确的码也不能用", async () => {
-    const browser = t.browser();
-    await browser.post("/api/auth/email/send-code", { email: "victim@example.com" });
-    const code = t.lastLoginCode("victim@example.com");
-    const guesses = Array.from({ length: 40 }, (_, i) => String(i).padStart(6, "0")).filter(
-      (g) => g !== code,
+  it("4 个浏览器同时设置管理员密码：只有 1 个成功，只建了 1 个默认环境", async () => {
+    const browsers = Array.from({ length: 4 }, () => t.browser());
+
+    const results = await Promise.all(
+      browsers.map((browser, i) => browser.post("/api/auth/setup", { password: `password-${i}` })),
     );
 
-    await Promise.all(
-      guesses.map((guess) =>
-        t.browser().post("/api/auth/email/verify", { email: "victim@example.com", code: guess }),
-      ),
-    );
-    const res = await browser.post("/api/auth/email/verify", {
-      email: "victim@example.com",
-      code,
-      inviteCode: await t.createInvite(),
-      acceptTerms: true,
-    });
-
-    expect(res.status).toBe(400);
-  });
-
-  it("同一个邮箱同时请求 5 次验证码，只发出 1 封", async () => {
-    const before = t.mailer.sent.length;
-
-    await Promise.all(
-      Array.from({ length: 5 }, () =>
-        t.browser().post("/api/auth/email/send-code", { email: "rush@example.com" }),
-      ),
-    );
-
-    expect(t.mailer.sent.length - before).toBe(1);
+    expect(results.map((r) => r.status).sort()).toEqual([204, 409, 409, 409]);
+    const winner = browsers[results.findIndex((r) => r.status === 204)];
+    const envs = (await (await winner?.get("/api/environments"))?.json()) as {
+      environments: unknown[];
+    };
+    expect(envs.environments).toHaveLength(1);
   });
 });
 
-describe("并发：内测席位", () => {
+describe("并发：输错密码", () => {
   let t: TestApp;
 
   beforeAll(async () => {
-    t = await createTestApp({ seatLimit: 1 });
+    t = await createTestApp();
+    await t.admin();
   });
   afterAll(() => t.close());
 
-  it("只剩 1 个席位时，4 个人同时注册只有 1 个成功", async () => {
-    const people = await Promise.all(
-      ["a", "b", "c", "d"].map(async (name) => {
-        const browser = t.browser();
-        const email = `${name}@example.com`;
-        await browser.post("/api/auth/email/send-code", { email });
-        return { browser, email, code: t.lastLoginCode(email), inviteCode: await t.createInvite() };
-      }),
-    );
+  it("同一个 IP 同时猜 30 次密码：最多 10 次真的去比对，之后正确的密码也被暂停", async () => {
+    const browser = t.browser();
 
     const results = await Promise.all(
-      people.map(({ browser, email, code, inviteCode }) =>
-        browser.post("/api/auth/email/verify", { email, code, inviteCode, acceptTerms: true }),
+      Array.from({ length: 30 }, (_, i) =>
+        browser.post("/api/auth/login", { password: `guess-${i}` }),
       ),
     );
 
-    expect(results.map((r) => r.status).sort()).toEqual([201, 403, 403, 403]);
+    expect(results.filter((r) => r.status === 400)).toHaveLength(10);
+    expect(results.filter((r) => r.status === 429)).toHaveLength(20);
+    expect((await browser.post("/api/auth/login", { password: t.adminPassword })).status).toBe(429);
   });
 });
