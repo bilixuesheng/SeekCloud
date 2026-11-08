@@ -16,7 +16,7 @@ export interface ExportedSession {
  * Markdown 写在开头和每段 Agent 回复前；JSON 在开头说明，Agent 的消息带 aiGenerated: true。
  */
 export const AI_NOTICE = "本文件中标注“AI 生成”的内容由人工智能（DeepSeek）生成，可能存在错误。";
-const AGENT_HEADING = "## Agent（AI 生成）";
+const AGENT_HEADING = "## DeepSeek（AI 生成）";
 
 /** 导出时间统一写 UTC，免得看的人搞不清是哪个时区。 */
 export function utcTime(at: Date | string): string {

@@ -58,8 +58,8 @@ describe("导出的会话 Markdown", () => {
       at({ type: "message", text: "改好了。" }),
     ]);
     expect(md.startsWith(`# 修登录页\n\n> ${AI_NOTICE}\n`)).toBe(true);
-    expect(md.match(/^## Agent（AI 生成）\n\n/gm)).toHaveLength(2);
-    expect(md).not.toMatch(/^## Agent\n/m);
+    expect(md.match(/^## DeepSeek（AI 生成）\n\n/gm)).toHaveLength(2);
+    expect(md).not.toMatch(/^## DeepSeek\n/m);
   });
 
   it("JSON 开头说明标识，只有 Agent 的消息带 aiGenerated", () => {

@@ -220,7 +220,7 @@ export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
             {status === "queued" && <Working text="排队中，等待空闲资源" since={timeline.since} />}
             {status === "running" && (
               <Working
-                text={state?.detail === "preparing_sandbox" ? "正在准备沙箱" : "Agent 正在工作"}
+                text={state?.detail === "preparing_sandbox" ? "正在准备沙箱" : "深度求索中"}
                 since={timeline.since}
               />
             )}
@@ -512,7 +512,7 @@ function SentMessage({
           type="button"
           className="icon-button small"
           aria-label="重试"
-          data-tip={onRetry ? "重新发送此消息" : sending ? "正在发送" : "Agent 运行期间无法重试"}
+          data-tip={onRetry ? "重新发送此消息" : sending ? "正在发送" : "DeepSeek 运行期间无法重试"}
           disabled={!onRetry}
           onClick={() => onRetry?.(text)}
         >

@@ -1521,7 +1521,7 @@ input:not([type="range"]):focus {
 
 /*
  * 底部多留出输入框上方那条渐隐（.session-footer::before，28 像素）的高度：
- * 渐隐只用来让往上滚走的内容淡出，停在最底下时最后一行（AI 标识、"Agent 正在工作"）不能被盖淡。
+ * 渐隐只用来让往上滚走的内容淡出，停在最底下时最后一行（AI 标识、"深度求索中"）不能被盖淡。
  */
 .timeline-inner {
   max-width: 788px;

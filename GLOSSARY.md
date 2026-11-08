@@ -64,7 +64,7 @@ _Avoid_: 工作分支、临时分支
 _Avoid_: 任务号
 
 **Agent**:
-在沙箱中替管理员读写代码、执行命令的 AI 程序，由 DeepSeek 模型驱动。界面上称"DeepSeek"，GitHub 上的署名称"SeekCloud"（ADR 0004）。
+在沙箱中替管理员读写代码、执行命令的 AI 程序，由 DeepSeek 模型驱动。界面上称"DeepSeek"，GitHub 上的署名称"SeekCloud"（ADR 0004）。Agent 工作时的状态写"深度求索中"（2026-11-08 用户指定）。
 _Avoid_: 机器人、助手、Harness
 
 **唤醒事件 (Wake Event)**:
