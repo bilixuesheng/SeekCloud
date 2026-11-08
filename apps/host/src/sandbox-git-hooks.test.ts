@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { cleanGitEnv } from "./testing/fake-github";
 
 const HOOKS = resolve(__dirname, "../sandbox/git-hooks");
-const TRAILER = "Generated-by: SeekCloud Agent (AI)";
+const TRAILER = "Generated-by: SeekCloud (AI)";
 
 /** 一个按沙箱的方式配好钩子的仓库。 */
 function sandboxRepo() {
@@ -70,7 +70,7 @@ describe("沙箱的 git 钩子", () => {
 
     r.git("revert", "--no-edit", "HEAD~1");
     expect(r.message()).toMatch(
-      /^Revert "p"\n\nThis reverts commit \w+\.\n\nGenerated-by: SeekCloud Agent \(AI\)$/,
+      /^Revert "p"\n\nThis reverts commit \w+\.\n\nGenerated-by: SeekCloud \(AI\)$/,
     );
 
     r.commit("c", "-m", "c");

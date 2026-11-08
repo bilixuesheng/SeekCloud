@@ -5,7 +5,7 @@ import { withFooter } from "./footer";
 /**
  * 给 Agent 的 GitHub 工具。名字和参数照 GitHub 官方 MCP 服务，Agent 换过来不用重新学。
  * 所有操作只能针对本会话挂载的仓库，以用户本人的 GitHub 账号发出；
- * 写到 GitHub 上的正文都带一次"由 SeekCloud Agent 生成"的署名。
+ * 写到 GitHub 上的正文都带一次"由 SeekCloud 生成（AI）"的署名。
  */
 export interface Tool {
   name: string;
@@ -165,7 +165,7 @@ const searchParams = {
 const segments = (value: string) =>
   value.split("/").filter(Boolean).map(encodeURIComponent).join("/");
 
-const COMMIT_TRAILER = "Generated-by: SeekCloud Agent (AI)";
+const COMMIT_TRAILER = "Generated-by: SeekCloud (AI)";
 
 /**
  * 工具建的提交和沙箱里的一样，说明末尾带 AI 生成的尾注（见 sandbox/git-hooks）：

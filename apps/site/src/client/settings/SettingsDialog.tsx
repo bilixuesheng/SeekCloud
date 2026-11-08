@@ -393,7 +393,7 @@ function GitHubRow({
         <span className="settings-row-name">GitHub</span>
         <span className="settings-row-sub">
           {status ? (login ?? "未关联") : ""}
-          {confirming && " · 解除关联后 Agent 将无法访问你的仓库"}
+          {confirming && " · 解除关联后 DeepSeek 将无法访问你的仓库"}
         </span>
       </span>
       {!status ? null : login ? (

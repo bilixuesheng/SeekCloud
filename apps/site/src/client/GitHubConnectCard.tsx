@@ -12,7 +12,7 @@ export function GitHubConnectCard({ status }: { status: GitHubStatus }) {
     <section className="card">
       <h2>关联 GitHub</h2>
       <p className="muted">
-        授权 GitHub，并在需要使用的仓库上安装 GitHub App，Agent 即可读写这些仓库。
+        授权 GitHub，并在需要使用的仓库上安装 GitHub App，DeepSeek 即可读写这些仓库。
       </p>
       <div className="actions">
         <a className="button primary" href="/api/auth/github/start">

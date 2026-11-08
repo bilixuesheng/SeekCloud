@@ -53,7 +53,7 @@ export function LegalPage({ doc }: { doc: LegalDoc }) {
         <h1>{LEGAL_TITLES[doc]}</h1>
         <Licenses />
       </main>
-      <footer className="legal-foot">SeekCloud · 内测版 · 非 DeepSeek 官方产品</footer>
+      <footer className="legal-foot">SeekCloud · 非 DeepSeek 官方产品</footer>
     </div>
   );
 }

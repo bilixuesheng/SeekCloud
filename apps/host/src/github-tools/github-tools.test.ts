@@ -625,7 +625,7 @@ describe("返回给 Agent 的内容精简过", () => {
   });
 });
 
-const TRAILER = "Generated-by: SeekCloud Agent (AI)";
+const TRAILER = "Generated-by: SeekCloud (AI)";
 
 describe("工具建的提交", () => {
   it("说明末尾带 AI 生成的尾注：接在已有的尾注后面，不重复", () => {

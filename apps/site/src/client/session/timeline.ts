@@ -115,7 +115,7 @@ const toolLabels: Record<string, string> = {
   WebFetch: "抓取网页",
   WebSearch: "搜索网页",
   TodoWrite: "更新待办",
-  Task: "子 Agent",
+  Task: "DeepSeek 子任务",
 };
 
 export const toolLabel = (name: string) => toolLabels[name] ?? name;

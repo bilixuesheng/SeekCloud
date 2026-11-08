@@ -215,12 +215,12 @@ export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
             {status !== "running" &&
               status !== "queued" &&
               timeline.items.some((item) => item.kind === "assistant") && (
-                <p className="ai-notice">DeepSeek是AI并且可能会犯错。</p>
+                <p className="ai-notice">DeepSeek 是 AI，可能会犯错。</p>
               )}
             {status === "queued" && <Working text="排队中，等待空闲资源" since={timeline.since} />}
             {status === "running" && (
               <Working
-                text={state?.detail === "preparing_sandbox" ? "正在准备沙箱" : "Agent 正在工作"}
+                text={state?.detail === "preparing_sandbox" ? "正在准备沙箱" : "深度求索中"}
                 since={timeline.since}
               />
             )}
@@ -468,7 +468,7 @@ function useNow(intervalMs: number): Date {
 
 /**
  * 发出去的消息：下面一行是 ✓✓、时间、复制、重试。
- * ✓✓ 在消息交给 Agent 时出现（开始回合或立即发送；排队中的消息不显示），提示"SeekCloud 已读取"。
+ * ✓✓ 在消息交给 Agent 时出现（开始回合或立即发送；排队中的消息不显示），提示"DeepSeek 已读取"。
  * 重试就是把这句话再发一次；Agent 在工作时是灰的（onRetry 为空）。
  * 提示用 data-tip（样式见 styles.css 的 [data-tip]）。✓✓ 和时间是只用来看提示的按钮（meta-info），手机上点一下也能看到。
  * motion：fresh 是时间线统一的轻轻浮上来；bubble-in 是刚发的消息从输入框的方向进来（和下面那一行一起）；
@@ -497,7 +497,7 @@ function SentMessage({
       <div className="user-message">{text}</div>
       <div className="message-meta">
         {!sending && (
-          <MetaInfo className="message-delivered" tip="SeekCloud 已读取">
+          <MetaInfo className="message-delivered" tip="DeepSeek 已读取">
             <DoubleCheckIcon />
           </MetaInfo>
         )}
@@ -512,7 +512,7 @@ function SentMessage({
           type="button"
           className="icon-button small"
           aria-label="重试"
-          data-tip={onRetry ? "重新发送此消息" : sending ? "正在发送" : "Agent 运行期间无法重试"}
+          data-tip={onRetry ? "重新发送此消息" : sending ? "正在发送" : "DeepSeek 运行期间无法重试"}
           disabled={!onRetry}
           onClick={() => onRetry?.(text)}
         >

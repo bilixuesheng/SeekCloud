@@ -16,7 +16,7 @@ fi
 # 提交说明加上 AI 生成的尾注，用户要求去掉也照加（《人工智能生成合成内容标识办法》要求的标识）。
 # --no-verify 会跳过 commit-msg，所以 prepare-commit-msg 先加一次（只打编辑器的提交这时还没有说明，留给 commit-msg）。
 # commit-msg 在仓库的钩子改过说明之后再确认一次；说明是空的不加，否则空说明不再中止提交。
-trailer="Generated-by: SeekCloud Agent (AI)"
+trailer="Generated-by: SeekCloud (AI)"
 add_trailer() {
   # 压缩几个提交时，各自的尾注会留在说明中间：先全部去掉，再在末尾加一次。
   # stripspace 顺带补上末尾的换行（git merge -m 写的没有，interpret-trailers 会把尾注接进正文那一段）。
