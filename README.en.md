@@ -26,6 +26,8 @@ What is done:
 - Windows support: both the main site and the sandbox host can be installed on Windows through WSL2
 - Android app: enter the server address on first launch
 - Update check and one-click update: check for new versions in the admin console, and the server pulls updates from this repository
+- More agent features: enable the plugin market, the modes (such as Creator mode), the trajectory view and other features of the in-sandbox agent (dsh) that are not enabled yet
+- AI labels on GitHub: by default, the signature at the end of issues, pull requests and comments and the commit message trailer mark the content as AI-generated; they can be turned off in settings
 
 ## Development
 
