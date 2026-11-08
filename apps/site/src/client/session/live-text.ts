@@ -17,8 +17,8 @@ export interface LiveChunk {
 const CHAR_MS = 14;
 /** 一段里从第一个字到最后一个字最多错开这么久，长的一段整体像一道波扫过去。 */
 const WAVE_MS = 240;
-/** 一段从出现到合并回普通文字：单个字的动画 0.3 秒，加上最长的错开时间，再留一点余量。 */
-export const SETTLE_MS = 300 + WAVE_MS + 60;
+/** 一段从出现到合并回普通文字：单个字的动画 0.7 秒（styles.css 的 chunk-rise），加上最长的错开时间，再留一点余量。 */
+export const SETTLE_MS = 700 + WAVE_MS + 60;
 
 /** 一段里第 index 个字（共 length 个）的动画延迟。 */
 export function charDelay(index: number, length: number): number {
