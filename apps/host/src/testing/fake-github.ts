@@ -85,6 +85,8 @@ export async function startFakeGitHub(userToken: string) {
     const cgi = spawn("git", ["http-backend"], { env });
     const out: Buffer[] = [];
     cgi.stdout.on("data", (chunk: Buffer) => out.push(chunk));
+    // http-backend 拒绝请求时可能不读完请求体就退出，这时写 stdin 会报 EPIPE；结果以它的输出为准。
+    cgi.stdin.on("error", () => {});
     cgi.stdin.end(body);
     cgi.on("close", () => {
       const raw = Buffer.concat(out);
