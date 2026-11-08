@@ -2900,18 +2900,24 @@ details > summary::-webkit-details-marker {
 }
 
 /*
- * 刚发的消息从输入框的方向进来：往上滑约 14 像素、从右下角稍微放大，同时淡入；
+ * 刚发的消息从输入框的方向进来：以右下角为原点从 0.92 倍放大，同时往上滑 3 像素（气泡下沿一共上移约 5 像素），并淡入；
  * 下面"✓✓ 刚刚"那一行在同一个元素里，一起进来。
+ * 缩放和位移的曲线照欠阻尼弹簧拟合：0.23 秒到位，冲过头约 3%，0.42 秒落回；淡入单独 0.24 秒完成。
  */
 .sent.bubble-in {
   transform-origin: 100% 100%;
-  animation: bubble-in 0.34s var(--ease-out) both;
+  animation:
+    fade-in 0.24s cubic-bezier(0.22, 0.5, 0.61, 0.93) both,
+    bubble-in 0.42s cubic-bezier(0.34, 1.3, 0.74, 1) both;
 }
 
+/* 终点也写明，写成和起点一样的变换函数，逐项插值 */
 @keyframes bubble-in {
   from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.94);
+    transform: translateY(3px) scale(0.92);
+  }
+  to {
+    transform: translateY(0) scale(1);
   }
 }
 
