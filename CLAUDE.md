@@ -44,6 +44,7 @@
 - 忘记管理员密码：在 `apps/site` 里运行 `DATABASE_URL=... pnpm admin:reset-password`，打印一个随机的新密码，所有设备退出登录。
 - 访问记录（登录、发起会话、发消息时的 IP）在 `apps/site/src/server/access-log.ts`，保存 180 天。
 - README 有中英两份（`README.md`、`README.en.md`），改的时候两份一起改。
+- 提交信息按"类型: 说明"写：类型按改动性质选（feat、fix、docs、style、refactor、test、chore 等），说明用中文，例如 `fix: 行内代码的背景跟着文字一起浮现`。PR 的 squash 合并标题也照这个格式（2026-11-08 用户要求）。
 
 ## 合并授权
 
