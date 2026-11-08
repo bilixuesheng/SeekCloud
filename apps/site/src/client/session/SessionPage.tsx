@@ -412,9 +412,14 @@ function useFollowScroll(ref: RefObject<HTMLDivElement | null>, sessionId: strin
     const observer = new ResizeObserver(() => f.contentAdded());
     if (inner) observer.observe(inner);
     const timer = setTimeout(() => observer.disconnect(), SETTLE_OPEN_MS);
+    // 有的浏览器在输入法弹出时让整个页面变矮：滚动区域跟着变矮而 scrollTop 不变，最后几行就被输入框盖住了。
+    // 在回调里直接贴底：回调在画出来之前，不会先露出来再跳，也就用不着平滑滚动。
+    const box = new ResizeObserver(() => f.resized());
+    box.observe(el);
     return () => {
       clearTimeout(timer);
       observer.disconnect();
+      box.disconnect();
     };
   }, [ref, sessionId]);
 

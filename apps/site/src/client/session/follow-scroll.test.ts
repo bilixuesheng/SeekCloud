@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { contentKey, ScrollFollower } from "./follow-scroll";
 import { buildTimeline } from "./timeline";
 
-/** 假的滚动区域：内容高度可以改，scrollTop 照浏览器的规矩夹在 [0, 最大值] 里。 */
+/** 假的滚动区域：内容和区域的高度都可以改，scrollTop 照浏览器的规矩夹在 [0, 最大值] 里。 */
 class FakeBox {
   #top = 0;
   constructor(
     public scrollHeight: number,
-    readonly clientHeight = 500,
+    public clientHeight = 500,
   ) {}
   get scrollTop() {
     return this.#top;
@@ -17,6 +17,11 @@ class FakeBox {
   }
   get atBottom() {
     return this.scrollHeight - this.#top - this.clientHeight < 1;
+  }
+  /** 区域变矮或变高：scrollTop 不变，变高时浏览器把它夹回范围里。 */
+  resize(clientHeight: number) {
+    this.clientHeight = clientHeight;
+    this.scrollTop = this.#top;
   }
 }
 
@@ -95,6 +100,35 @@ describe("会话页的滚动跟随", () => {
     box.scrollHeight -= 300;
     follower.scrolled();
     expect(follower.following).toBe(true);
+  });
+
+  it("停在底部时输入法弹出（区域变矮）：贴回底部；收起时也还在底部，不闪回到底部的按钮", () => {
+    const { box, follower, away } = setup();
+    box.resize(200);
+    follower.resized();
+    expect(box.atBottom).toBe(true);
+
+    box.resize(500);
+    follower.resized();
+    follower.scrolled(); // 变高时 scrollTop 被往回夹，随后来一个 scroll 事件
+    expect(box.atBottom).toBe(true);
+    expect(away).toEqual([]);
+  });
+
+  it("往上翻以后输入法弹出、收起：滚动位置不动", () => {
+    const { box, follower } = setup();
+    follower.wheeled(-40);
+    box.scrollTop -= 600;
+    follower.scrolled();
+    const top = box.scrollTop;
+
+    box.resize(200);
+    follower.resized();
+    expect(box.scrollTop).toBe(top);
+    box.resize(500);
+    follower.resized();
+    expect(box.scrollTop).toBe(top);
+    expect(follower.following).toBe(false);
   });
 });
 
