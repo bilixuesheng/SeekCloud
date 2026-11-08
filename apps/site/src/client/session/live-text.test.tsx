@@ -35,11 +35,36 @@ describe("Agent 回复的文字浮现", () => {
   });
 
   it("代码块和表格里的字只淡入、不上浮", () => {
-    const text = "```ts\nconst a = 1;\n```\n\n| a |\n|---|\n| 1 |";
+    const text = "```ts\nconst a = 1;\n```\n\n| a |\n|---|\n| `1` |";
     const html = render(text, [chunk(0, text.length)]);
     expect(html).toContain('<code class="language-ts"><span class="chunk chunk-fade">');
-    expect(html).toContain('<td><span class="chunk chunk-fade">');
+    expect(html).toContain('<td><code><span class="chunk chunk-fade">');
     expect(html).not.toContain('<span class="chunk">');
+    expect(html).not.toContain("chunk-box");
+  });
+
+  it("新到的行内代码：框带着字整体上浮，延迟和第一个字一样；框里的字只淡入", () => {
+    const text = "运行 `pnpm` 即可";
+    const html = render(text, [chunk(0, text.length)]);
+    expect(html).toContain(
+      '<code class="chunk-box" style="animation-delay:56ms"><span class="chunk chunk-fade">' +
+        '<span style="animation-delay:56ms">p</span>' +
+        '<span style="animation-delay:70ms">n</span>',
+    );
+    expect(html).toContain(
+      '</code><span class="chunk"><span style="animation-delay:126ms"> </span>',
+    );
+  });
+
+  it("行内代码的前半段是早先到的：框不重播，新到的字照常上浮", () => {
+    const text = "运行 `pnpm typecheck` 即可";
+    const settled = render(text, [chunk(8, text.length)]);
+    expect(settled).toContain(
+      '<code>pnpm<span class="chunk"><span style="animation-delay:0ms"> </span>',
+    );
+    const animating = render(text, [chunk(0, 8), chunk(8, text.length)]);
+    expect(animating).toContain('<code><span class="chunk">');
+    expect(animating).not.toContain("chunk-box");
   });
 
   it("长的一段整体在 0.24 秒里扫过去，短的一段每个字错开 14 毫秒", () => {

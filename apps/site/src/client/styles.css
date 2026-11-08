@@ -2946,10 +2946,12 @@ details > summary::-webkit-details-marker {
 /*
  * Agent 回复的文字浮现（live-text.ts）：每段新字从下方约一个字高的地方往上浮，同时淡入，字从左往右错开。
  * 位移的曲线照欠阻尼弹簧拟合：冲过头约 14%，0.65 秒左右落回；淡入 0.24 秒就完成。
+ * 行内代码第一次出现时（.chunk-box），背景小框带着里面的字整体上浮，框里的字只淡入。
  * 代码块、表格里的字只淡入：.chunk-fade 只留第一个动画，所以淡入写在前面。
  * 用 top 而不用 transform，行内的字也能动。
  */
-.chunk > span {
+.chunk > span,
+.chunk-box {
   position: relative;
   animation:
     fade-in 0.24s var(--ease-out) both,
@@ -3254,6 +3256,7 @@ a.button:active,
   .delivered.bubble-in .user-message,
   .queued.bubble-in .user-message,
   .chunk > span,
+  .chunk-box,
   .to-bottom,
   .bounce-dots span,
   .swap-in,
