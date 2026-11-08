@@ -53,6 +53,14 @@ export class ScrollFollower {
     if (this.#following) this.#stick();
   }
 
+  /**
+   * 滚动区域自己变矮或变高：手机上输入法弹出、收起，输入框长高，转屏。
+   * 原来在跟随就贴回底部，最后一条消息仍然紧贴在输入框上方；没在跟随就不动。
+   */
+  resized(): void {
+    if (this.#following) this.#stick();
+  }
+
   /** 回到最底下，并恢复跟随：打开会话、发消息、点回到底部的按钮。 */
   toBottom(): void {
     this.#set(true);

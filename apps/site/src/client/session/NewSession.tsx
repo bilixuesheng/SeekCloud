@@ -7,7 +7,7 @@ import { GitHubMark } from "../GitHubMark";
 import { BoxIcon, BranchIcon, ChevronDownIcon } from "../Icons";
 import { Logo } from "../Logo";
 import { navigate } from "../router";
-import { Composer } from "./Composer";
+import { Composer, handOffFocus } from "./Composer";
 import { pickGreeting } from "./greetings";
 import { ModelPicker } from "./ModelPicker";
 import type { Session } from "./types";
@@ -125,6 +125,7 @@ export function NewSession({ onCreated }: { onCreated: (session: Session) => voi
       });
       remember({ repo, branch, model, effort });
       onCreated(session);
+      handOffFocus();
       navigate(`/s/${session.shortId}`);
     } catch (e) {
       setError((e as ApiError).message);
