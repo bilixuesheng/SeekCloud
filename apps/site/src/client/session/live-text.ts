@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * Agent 回复的文字浮现：每段新来的字上浮加淡入，同一段里从左往右错开；
+ * Agent 回复的文字浮现：每段新来的字上浮加淡入，同一段里从左往右错开；行内代码连同背景小框整体上浮；
  * 代码块、表格里的字只淡入；动画结束后合并回普通文字，免得长回复的页面元素越来越多。
  * 一段就是一次收到的新文字（现在是一整条消息，接上流式增量以后是每次的增量），用它在原文里的位置表示。
  */
@@ -52,19 +52,26 @@ const FADE_ONLY = new Set(["pre", "table"]);
 export function rehypeLiveChunks(options: { source: string; chunks: LiveChunk[] }) {
   const { source, chunks } = options;
   const chunkAt = (offset: number) => chunks.find((c) => offset >= c.from && offset < c.to);
+  const delayAt = (offset: number, chunk: LiveChunk) =>
+    charDelay(offset - chunk.from, chunk.to - chunk.from);
+  /** 文字里第 index 个位置的字在原文里的位置。 */
+  const locate = (value: string, own: Range) => {
+    const found = source.indexOf(value, own[0]);
+    const exact = found !== -1 && found + value.length <= own[1];
+    return (index: number) => (exact ? found + index : own[0]);
+  };
 
   const split = (node: HastNode, range: Range | undefined, fade: boolean): HastNode[] => {
     const value = node.value ?? "";
     const own = rangeOf(node) ?? range;
     if (!own || !value.trim()) return [node];
-    const found = source.indexOf(value, own[0]);
-    const base = found !== -1 && found + value.length <= own[1] ? found : undefined;
+    const offsetAt = locate(value, own);
     const out: HastNode[] = [];
     let plain = "";
     let current: { chunk: LiveChunk; span: HastNode } | undefined;
     let i = 0;
     for (const char of value) {
-      const offset = base === undefined ? own[0] : base + i;
+      const offset = offsetAt(i);
       i += char.length;
       const chunk = chunkAt(offset);
       if (!chunk) {
@@ -86,16 +93,28 @@ export function rehypeLiveChunks(options: { source: string; chunks: LiveChunk[] 
         };
         out.push(current.span);
       }
-      const delay = charDelay(offset - chunk.from, chunk.to - chunk.from);
       current.span.children?.push({
         type: "element",
         tagName: "span",
-        properties: { style: `animation-delay:${delay}ms` },
+        properties: { style: `animation-delay:${delayAt(offset, chunk)}ms` },
         children: [{ type: "text", value: char }],
       });
     }
     if (plain) out.push({ type: "text", value: plain });
     return out;
+  };
+
+  /**
+   * 行内代码从第一个字到收尾都在同一段新文字里，就是第一次出现，返回第一个字的延迟。
+   * 前面的字是早先到的、已经显示过时不算：框一浮，那些字就又浮一次。
+   */
+  const boxDelay = (code: HastNode, range: Range | undefined) => {
+    const own = rangeOf(code) ?? range;
+    const text = code.children?.[0];
+    if (!own || text?.type !== "text") return undefined;
+    const first = locate(text.value ?? "", own)(0);
+    const chunk = chunkAt(first);
+    return chunk && own[1] <= chunk.to ? delayAt(first, chunk) : undefined;
   };
 
   const walk = (node: HastNode, range: Range | undefined, fade: boolean) => {
@@ -104,7 +123,17 @@ export function rehypeLiveChunks(options: { source: string; chunks: LiveChunk[] 
     const innerFade = fade || FADE_ONLY.has(node.tagName ?? "");
     node.children = node.children.flatMap((child) => {
       if (child.type === "text") return split(child, inner, innerFade);
-      walk(child, inner, innerFade);
+      // pre、表格里 innerFade 已经为真：代码块的 code 和表格里的行内代码都照旧只淡入
+      const box = child.tagName === "code" && !innerFade ? boxDelay(child, inner) : undefined;
+      if (box !== undefined) {
+        child.properties = {
+          ...child.properties,
+          className: ["chunk-box"],
+          style: `animation-delay:${box}ms`,
+        };
+      }
+      // 框在上浮时，里面的字只淡入，不然位移叠两次
+      walk(child, inner, innerFade || box !== undefined);
       return [child];
     });
   };
