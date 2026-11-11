@@ -2124,15 +2124,22 @@ details > summary::-webkit-details-marker {
  * 表格按内容定宽，放不下就整张横着滑。.markdown 的 overflow-wrap: anywhere 在单元格里要关掉：
  * 不然窄屏上列会被挤到一个字一行（"POST"竖着排），没法读。
  */
+/* 圆角和外框画在外面这一层上（合并边框的表格自己画不了圆角），表格只画里面的格线 */
 .markdown .table-scroll {
+  width: fit-content;
+  max-width: 100%;
   margin: 0.7em 0;
   overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
 }
 
 .markdown table {
   width: max-content;
   margin: 0;
   border-collapse: collapse;
+  /* hidden：最外面一圈格线不画，免得和外框叠成双线 */
+  border-style: hidden;
   font-size: 14px;
 }
 
@@ -2150,9 +2157,10 @@ details > summary::-webkit-details-marker {
   white-space: nowrap;
 }
 
+/* 格子里的长路径没有空格可以换行：超过格子的最大宽度时按字换，不压到旁边一列上 */
 .markdown td code,
 .markdown th code {
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* 任务列表：勾选框不套输入框的样式（高 46 像素、带边框），和文字排在一行，不要圆点 */
