@@ -128,6 +128,8 @@ body {
   font-family: var(--sans);
   font-size: 15px;
   line-height: 1.6;
+  /* 关掉上下文替换：有的系统字体（比如 Inter）会把数字之间的 x 画成 ×，"0x1F"、参考号"k3x9"就读错了 */
+  font-variant-ligatures: no-contextual;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
@@ -1624,11 +1626,12 @@ details > summary::-webkit-details-marker {
     border-color 0.25s;
 }
 
-.tool.error .tool-dot {
+/* 用子选择器：组的状态不能漏到组里每一行的点上（组失败了，里面成功的那几行还是绿的） */
+.tool.error > summary > .tool-dot {
   background: var(--danger);
 }
 
-.tool.running .tool-dot {
+.tool.running > summary > .tool-dot {
   width: 10px;
   height: 10px;
   background: none;
@@ -1832,6 +1835,20 @@ details > summary::-webkit-details-marker {
   transform: none;
 }
 
+/* 回复下面的那一行靠左：提示框都改成左对齐，免得超出屏幕左边 */
+.reply-meta {
+  margin-top: 2px;
+  margin-left: -6px;
+  gap: 4px;
+}
+
+.reply-meta > [data-tip]::after,
+.reply-meta > [data-tip]:last-child::after {
+  left: 0;
+  right: auto;
+  transform: none;
+}
+
 .queued.busy {
   opacity: 0.5;
 }
@@ -1950,7 +1967,7 @@ details > summary::-webkit-details-marker {
 
 @media (prefers-reduced-motion: reduce) {
   .status-dot.running,
-  .tool.running .tool-dot,
+  .tool.running > summary > .tool-dot,
   .working-dots span,
   .todo-card li.in_progress .todo-mark,
   .working-text,
@@ -2044,6 +2061,51 @@ details > summary::-webkit-details-marker {
   line-height: 1.55;
 }
 
+/* 代码块外面套一层，放右上角的复制按钮；外边距挪到这一层上 */
+.markdown .code-block {
+  position: relative;
+  margin: 0.7em 0;
+}
+
+/* 右边多留出按钮的宽度：横着滑到头时，最后几个字不被按钮盖住 */
+.markdown .code-block pre {
+  margin: 0;
+  padding-right: 44px;
+}
+
+/* 按钮带底色，横着滑过来的代码不会和图标叠在一起 */
+.markdown .code-copy {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  background: var(--code-bg);
+  box-shadow: 0 0 0 4px var(--code-bg);
+  color: var(--muted);
+}
+
+.markdown .code-copy:hover {
+  background: var(--hover);
+}
+
+.markdown .code-copy[data-tip]::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+/* 能悬停的设备上平时收起来，指到代码块或用键盘聚焦时才显示；触屏上一直显示 */
+@media (hover: hover) {
+  .markdown .code-copy {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .markdown .code-block:hover .code-copy,
+  .markdown .code-copy:focus-visible {
+    opacity: 1;
+  }
+}
+
 .markdown pre code {
   padding: 0;
   border: 0;
@@ -2058,9 +2120,18 @@ details > summary::-webkit-details-marker {
   color: var(--muted);
 }
 
-.markdown table {
-  display: block;
+/*
+ * 表格按内容定宽，放不下就整张横着滑。.markdown 的 overflow-wrap: anywhere 在单元格里要关掉：
+ * 不然窄屏上列会被挤到一个字一行（"POST"竖着排），没法读。
+ */
+.markdown .table-scroll {
+  margin: 0.7em 0;
   overflow-x: auto;
+}
+
+.markdown table {
+  width: max-content;
+  margin: 0;
   border-collapse: collapse;
   font-size: 14px;
 }
@@ -2070,6 +2141,43 @@ details > summary::-webkit-details-marker {
   padding: 7px 12px;
   border: 1px solid var(--border);
   text-align: left;
+  overflow-wrap: normal;
+  /* 一格里的长句子到这个宽度换行，不把整张表撑得太宽；手机上两列的表格尽量不用横着滑 */
+  max-width: min(22em, 60vw);
+}
+
+.markdown th {
+  white-space: nowrap;
+}
+
+.markdown td code,
+.markdown th code {
+  white-space: nowrap;
+}
+
+/* 任务列表：勾选框不套输入框的样式（高 46 像素、带边框），和文字排在一行，不要圆点 */
+.markdown ul.contains-task-list {
+  padding-left: 0.3em;
+  list-style: none;
+}
+
+.markdown ul.contains-task-list ul.contains-task-list {
+  padding-left: 1.5em;
+}
+
+.markdown li.task-list-item {
+  list-style: none;
+}
+
+.markdown input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  margin: 0 8px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  vertical-align: -2px;
+  accent-color: var(--accent);
 }
 
 .markdown th {
@@ -2922,8 +3030,8 @@ details > summary::-webkit-details-marker {
   }
 }
 
-/* 服务器确认了刚才先显示的那条：✓✓ 淡入 */
-.sent.delivered .message-delivered {
+/* ✓✓ 在消息交给 Agent 时才出现（可能比气泡晚：排队、准备沙箱），出现时淡入 */
+.message-delivered {
   animation: fade-in 0.2s var(--ease-out) both;
 }
 
@@ -3252,7 +3360,7 @@ a.button:active,
   .popover.closing,
   .fresh,
   .bubble-in,
-  .sent.delivered .message-delivered,
+  .message-delivered,
   .delivered.bubble-in .user-message,
   .queued.bubble-in .user-message,
   .chunk > span,

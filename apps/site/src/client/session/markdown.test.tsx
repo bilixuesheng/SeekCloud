@@ -16,6 +16,15 @@ describe("Agent 输出的 Markdown 按白名单渲染", () => {
     expect(html).toContain("<td>1</td>");
   });
 
+  it("代码块带复制按钮；任务列表的勾选框和文字在同一项里", () => {
+    const html = render("```sh\npnpm test\n```\n\n- [x] 做完的\n- [ ] 没做的");
+    expect(html).toMatch(/<div class="code-block"><pre>.*<\/pre><button[^>]*aria-label="复制"/s);
+    expect(html).toContain('<ul class="contains-task-list">');
+    expect(html).toMatch(
+      /<li class="task-list-item"><input type="checkbox" disabled="" checked=""\/> 做完的<\/li>/,
+    );
+  });
+
   it("原始 HTML 不渲染，当成文字显示", () => {
     const html = render(
       '看这里 <img src=x onerror="alert(1)"> 和 <script>alert(2)</script>\n\n<div onclick="x">块</div>',

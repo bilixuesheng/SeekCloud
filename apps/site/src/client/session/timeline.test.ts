@@ -28,6 +28,62 @@ describe("会话事件整理成界面内容", () => {
     expect(next.queued).toEqual([]);
   });
 
+  it("用户消息在回合开始后才算交给 Agent；排队、准备沙箱时还没有；插话当场就算", () => {
+    const delivered = (...bodies: SessionEventBody[]) =>
+      buildTimeline(events(...bodies)).items.flatMap((i) =>
+        i.kind === "user" ? [i.delivered] : [],
+      );
+    // 刚发起会话，还在排队或准备沙箱
+    expect(
+      delivered(
+        { type: "user.message", text: "改标题" },
+        { type: "status", status: "running", detail: "preparing_sandbox" },
+      ),
+    ).toEqual([false]);
+    expect(delivered({ type: "user.message", text: "改标题" }, { type: "turn.started" })).toEqual([
+      true,
+    ]);
+    // 下一回合的消息要等下一次回合开始
+    expect(
+      delivered(
+        { type: "user.message", text: "改标题" },
+        { type: "turn.started" },
+        { type: "turn.ended", reason: "completed" },
+        { type: "user.message", text: "再改一下" },
+      ),
+    ).toEqual([true, false]);
+    expect(
+      delivered(
+        { type: "user.message", text: "改标题" },
+        { type: "turn.started" },
+        { type: "user.message", text: "先别动数据库", injected: true },
+      ),
+    ).toEqual([true, true]);
+  });
+
+  it("回合结束后，最后一条回复带上这个回合的全部回复，给复制用；没结束的回合没有", () => {
+    const timeline = buildTimeline(
+      events(
+        { type: "user.message", text: "改标题" },
+        { type: "turn.started" },
+        { type: "message", text: "我先看看代码。" },
+        { type: "tool.call", callId: "c1", name: "Read", input: { path: "a.ts" } },
+        { type: "message", text: "改好了。" },
+        { type: "turn.ended", reason: "completed" },
+        { type: "user.message", text: "再改一下" },
+        { type: "turn.started" },
+        { type: "message", text: "第二个回合。" },
+      ),
+    );
+    const replies = timeline.items.flatMap((i) => (i.kind === "assistant" ? [i] : []));
+    expect(replies.map((r) => r.turnEnd?.reply)).toEqual([
+      undefined,
+      "我先看看代码。\n\n改好了。",
+      undefined,
+    ]);
+    expect(replies[1]?.turnEnd?.at).toBe("2026-10-31T00:00:00Z");
+  });
+
   it("连续的工具调用合成一组；结果接到对应的调用上，还没结果的显示为进行中", () => {
     const { items } = buildTimeline(
       events(

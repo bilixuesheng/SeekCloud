@@ -1,7 +1,8 @@
 import type { PullRequestRef } from "@seekcloud/protocol";
-import { createContext, memo, useContext, useState } from "react";
+import { createContext, memo, type ReactNode, useContext, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { CopyButton, useCopy } from "../copy";
 import { IssueIcon, PullRequestIcon } from "../Icons";
 import { type LiveChunk, rehypeLiveChunks, useLiveChunks } from "./live-text";
 import { PullRequestBadge } from "./PullRequestBadge";
@@ -129,7 +130,27 @@ function GitHubChip({ href, target }: { href: string; target: GitHubRef }) {
   );
 }
 
+/** 代码块：右上角一个复制按钮，复制的是代码原文（不带末尾的换行）。 */
+function CodeBlock({ code, children }: { code: string; children: ReactNode }) {
+  const [copied, copy] = useCopy(code.replace(/\n$/, ""));
+  return (
+    <div className="code-block">
+      <pre>{children}</pre>
+      <CopyButton copied={copied} onCopy={copy} className="icon-button small code-copy" />
+    </div>
+  );
+}
+
 const components: Components = {
+  // 表格外面套一层横着滑的容器：表格本身按内容定宽，窄屏上不把列挤成一个字一行。
+  table: ({ children }) => (
+    <div className="table-scroll">
+      <table>{children}</table>
+    </div>
+  ),
+  pre: ({ children, node }) => (
+    <CodeBlock code={textOf(node as MdNode | undefined)}>{children}</CodeBlock>
+  ),
   a: ({ href, children, node }) => {
     if (!href || !/^(https?:|mailto:)/i.test(href)) return <span>{children}</span>;
     const ref = githubRef(href);

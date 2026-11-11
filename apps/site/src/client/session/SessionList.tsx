@@ -20,17 +20,24 @@ export function SessionList({
   sessions,
   loaded,
   currentId,
+  searching = false,
   onPick,
 }: {
   sessions: Session[];
   loaded: boolean;
   currentId?: string;
+  /** 列表是搜索的结果：一个都没有时说"未找到"，不说"暂无会话"。 */
+  searching?: boolean;
   /** 点了某个会话之后（手机上用来收起侧栏）。 */
   onPick?: () => void;
 }) {
   if (!loaded) return <p className="session-list-empty">正在加载…</p>;
   if (sessions.length === 0) {
-    return <p className="session-list-empty">暂无会话，输入任务即可开始。</p>;
+    return (
+      <p className="session-list-empty">
+        {searching ? "未找到匹配的会话。" : "暂无会话，输入任务即可开始。"}
+      </p>
+    );
   }
   return (
     <ul className="session-list">
