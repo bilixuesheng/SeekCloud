@@ -144,7 +144,7 @@ function checkRest(repos: MountedRepo[], method: string, segments: string[]): De
 }
 
 /**
- * 对本会话仓库的写操作，只放行 Agent 干活要用的（白名单）：PR、issue、评论、文件、分支、提交状态、重跑 CI。
+ * 对本会话仓库的写操作，只放行 Agent 干活要用的（白名单）：PR、issue、评论、文件、分支、重跑 CI。
  * 部署密钥、协作者、webhook、分支保护、密钥、仓库设置之类的一律不放行，哪怕用户自己设了有这些权限的令牌。
  */
 function checkRepoWrite(
@@ -164,11 +164,13 @@ function checkRepoWrite(
     case "labels":
     case "milestones":
     case "contents":
-    case "statuses":
-    case "check-runs":
     case "merges":
     case "comments":
       return allow;
+    case "check-runs":
+      // 只能请求重跑。不能自己新建或修改检查结果：不然 Agent 可以给自己的提交伪造一个"通过"的必需检查，
+      // 绕过分支保护去合并。提交状态（statuses）同理，一律不放行。
+      return more.at(-1) === "rerequest" && method === "POST" ? allow : refused;
     case "commits":
       // 给提交加评论：POST /commits/{sha}/comments
       return more[1] === "comments" ? allow : refused;
@@ -218,7 +220,10 @@ export function checkCreateRef(body: string): Decision {
   } catch {
     return deny(400, "请求体不是 JSON");
   }
-  return typeof ref === "string" && ref.startsWith("refs/tags/") ? deny(403, TAG_REFUSED) : allow;
+  if (typeof ref !== "string") return deny(400, "请求体里没有 ref");
+  if (ref.startsWith("refs/tags/")) return deny(403, TAG_REFUSED);
+  // 和推送一样只放行分支：别的引用（refs/notes/、refs/pull/ 之类）建了以后代理也不让删。
+  return ref.startsWith("refs/heads/") ? allow : deny(403, "代理只放行创建分支（refs/heads/）。");
 }
 
 /** 一次推送里哪些引用不放行，以及原因。为空就是都放行。 */

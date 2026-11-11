@@ -54,7 +54,12 @@ describe("Git 代理放行哪些请求", () => {
     ["PATCH", "/repos/octo/app", false],
     ["PUT", "/repos/octo/app/pulls/1/merge", true],
     ["PUT", "/repos/octo/app/contents/README.md", true],
-    ["POST", "/repos/octo/app/statuses/abc", true],
+    // 提交状态和检查结果不能自己写：不然能伪造"通过"的必需检查，绕过分支保护
+    ["POST", "/repos/octo/app/statuses/abc", false],
+    ["POST", "/repos/octo/app/check-runs", false],
+    ["PATCH", "/repos/octo/app/check-runs/1", false],
+    ["POST", "/repos/octo/app/check-runs/1/rerequest", true],
+    ["POST", "/repos/octo/app/check-suites/1/rerequest", true],
     ["POST", "/repos/octo/app/commits/abc/comments", true],
     ["POST", "/repos/octo/app/git/blobs", true],
     ["POST", "/repos/octo/app/git/commits", true],
@@ -121,6 +126,11 @@ describe("Git 代理放行哪些请求", () => {
     expect(checkCreateRef('{"ref":"refs/tags/v1","sha":"abc"}').allow).toBe(false);
     expect(checkCreateRef('{"ref":"refs/heads/x","sha":"abc"}').allow).toBe(true);
     expect(checkCreateRef("not json").allow).toBe(false);
+    // 和推送一样只放行分支
+    expect(checkCreateRef('{"ref":"refs/notes/commits","sha":"abc"}').allow).toBe(false);
+    expect(checkCreateRef('{"ref":"refs/Tags/v1","sha":"abc"}').allow).toBe(false);
+    expect(checkCreateRef('{"ref":["refs/tags/v1"],"sha":"abc"}').allow).toBe(false);
+    expect(checkCreateRef('{"sha":"abc"}').allow).toBe(false);
   });
 
   it("推送：删分支、推标签、推分支以外的引用不放行；推送和强推分支放行", () => {
