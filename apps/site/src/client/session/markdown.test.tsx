@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { Markdown } from "./Markdown";
+import { Markdown, trustedImageHost } from "./Markdown";
 
 const render = (text: string) => renderToStaticMarkup(<Markdown text={text} />);
 
@@ -46,11 +46,26 @@ describe("Agent 输出的 Markdown 按白名单渲染", () => {
     );
   });
 
-  it("图片直接显示，不带 Referer；不是 http(s) 的地址不显示成图片", () => {
-    const html = render("![截图](https://example.com/shot.png) ![坏](javascript:alert(1))");
+  it("GitHub 上的图片直接显示，不带 Referer；别的来源点了才加载；不是 http(s) 的地址不显示成图片", () => {
+    const html = render(
+      "![截图](https://user-images.githubusercontent.com/1/shot.png) ![外面的](https://example.com/shot.png?k=secret) ![坏](javascript:alert(1))",
+    );
     expect(html).toContain(
-      '<img src="https://example.com/shot.png" alt="截图" referrerPolicy="no-referrer" loading="lazy"/>',
+      '<img src="https://user-images.githubusercontent.com/1/shot.png" alt="截图" referrerPolicy="no-referrer" loading="lazy"/>',
+    );
+    // 别的来源：页面上没有这个地址的 img，浏览器不会去请求它
+    expect(html).not.toContain('src="https://example.com');
+    expect(html).toMatch(
+      /<button[^>]*class="image-blocked"[^>]*>.*外面的（来自 example\.com，点击加载）<\/button>/,
     );
     expect(html).not.toContain("javascript:");
+  });
+
+  it("哪些来源的图片直接显示：只认 GitHub 自己的域名，名字像的不算", () => {
+    expect(trustedImageHost("https://raw.githubusercontent.com/o/r/main/a.png")).toBe(true);
+    expect(trustedImageHost("https://github.com/o/r/assets/1/a.png")).toBe(true);
+    expect(trustedImageHost("https://githubusercontent.com.evil.example/a.png")).toBe(false);
+    expect(trustedImageHost("https://evilgithub.com/a.png")).toBe(false);
+    expect(trustedImageHost("https://example.com/a.png")).toBe(false);
   });
 });

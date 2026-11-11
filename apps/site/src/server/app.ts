@@ -1,6 +1,9 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { sql } from "drizzle-orm";
+import type { Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { csrf } from "hono/csrf";
+import { secureHeaders } from "hono/secure-headers";
 import type { Database } from "./db/client";
 import { apiError, handleError } from "./errors";
 import type { GitHub } from "./github/port";
@@ -50,8 +53,50 @@ const healthRoute = createRoute({
   },
 });
 
+/** 接口的请求体最多这么大。消息最长 10 万字，按每个字 4 字节算也够。 */
+const MAX_BODY_BYTES = 1024 * 1024;
+/** GitHub 的 webhook 最大 25 MB，再大的它自己就不发了。 */
+const MAX_WEBHOOK_BYTES = 25 * 1024 * 1024;
+
+const tooLarge = (c: Context) => c.json(apiError("body_too_large", "请求内容过大"), 413);
+const apiBodyLimit = bodyLimit({ maxSize: MAX_BODY_BYTES, onError: tooLarge });
+const webhookBodyLimit = bodyLimit({ maxSize: MAX_WEBHOOK_BYTES, onError: tooLarge });
+
 export function createApp(deps: AppDeps) {
   const app = newRouter();
+
+  // 浏览器这边的几道保险，接口和页面（main.ts 里挂的静态文件）都带上。
+  // - 内容安全策略：脚本只能来自本站，页面里不能有内联脚本。Agent 的输出是按白名单渲染的，
+  //   这是万一漏了一处时的第二道保险。图片可以来自任何地址（Agent 回复里的图片）。
+  // - 不允许别的网站把主站嵌进框架里（点击劫持）。
+  // - 不发 HSTS：要不要强制 HTTPS 由前面的反向代理定，主站自己不知道是不是一直有 HTTPS。
+  app.use(
+    "*",
+    secureHeaders({
+      contentSecurityPolicy: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
+        fontSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+        manifestSrc: ["'self'"],
+        workerSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+      },
+      xFrameOptions: "DENY",
+      referrerPolicy: "same-origin",
+      strictTransportSecurity: false,
+    }),
+  );
+
+  // 请求体有上限：登录、webhook 这些不用登录就能调的接口，不能让人发一个几 GB 的请求把内存占满。
+  app.use("/api/*", (c, next) =>
+    c.req.path === "/api/github/webhook" ? webhookBodyLimit(c, next) : apiBodyLimit(c, next),
+  );
 
   // 登录状态放在 Cookie 里，所以拒绝别的网站发来的表单请求。接口只收 JSON，跨站的 JSON 请求浏览器本来就拦。
   app.use("/api/*", csrf());

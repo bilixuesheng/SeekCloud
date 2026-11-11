@@ -2204,6 +2204,7 @@ details > summary::-webkit-details-marker {
   border-radius: 10px;
 }
 
+.image-blocked,
 .image-failed {
   display: inline-flex;
   align-items: center;
@@ -3583,4 +3584,16 @@ a.button:active,
 
 :root[data-theme="dark"] .logo {
   filter: brightness(1.45) saturate(1.1);
+}
+
+/* 没加载的外部图片是个按钮：外观和"加载失败"的链接一样，只是可以点 */
+.image-blocked {
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.image-blocked:hover {
+  background: var(--hover);
+  color: var(--fg);
 }

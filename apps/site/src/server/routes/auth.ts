@@ -1,5 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
+import { networkOf } from "../access-log";
 import type { AppDeps } from "../app";
 import { checkPassword, setPassword, setUpAdmin } from "../auth/admin";
 import {
@@ -83,7 +84,8 @@ async function checkLimited(
   c: Context,
   password: string,
 ): Promise<{ wait: number; userId?: string }> {
-  const rules = [{ key: `password-ip:${clientIp(c)}`, limit: 10, windowMs: HOUR }];
+  // IPv6 按 /64 算一个来源：一个用户手里通常有一整个 /64，按单个地址限等于没限。
+  const rules = [{ key: `password-ip:${networkOf(clientIp(c))}`, limit: 10, windowMs: HOUR }];
   const wait = limiter.take(rules);
   if (wait > 0) return { wait };
   const userId = await checkPassword(deps.db, password);
