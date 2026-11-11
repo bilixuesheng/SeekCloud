@@ -4,6 +4,20 @@ const KEY = "seekcloud:theme";
 
 let switching = 0;
 
+/** 页面底色，和 styles.css 的 --page、index.html 里的 theme-color 一致。 */
+const PAGE_COLOR = { light: "#fbfcff", dark: "#15171c" } as const;
+
+/**
+ * 浏览器地址栏、手机状态栏的颜色（theme-color）跟着选的外观走。
+ * index.html 里的两个 meta 是按系统的深浅色写的；手动选了浅色或深色时，两个都改成选的那种。
+ */
+function syncThemeColor(theme: Theme): void {
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+    const system = meta.media.includes("dark") ? "dark" : "light";
+    meta.content = PAGE_COLOR[theme === "system" ? system : theme];
+  }
+}
+
 export function currentTheme(): Theme {
   const value = document.documentElement.dataset.theme;
   return value === "light" || value === "dark" ? value : "system";
@@ -18,6 +32,7 @@ export function setTheme(theme: Theme, update?: () => void): void {
   const apply = () => {
     if (theme === "system") delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = theme;
+    syncThemeColor(theme);
     update?.();
   };
   const root = document.documentElement;

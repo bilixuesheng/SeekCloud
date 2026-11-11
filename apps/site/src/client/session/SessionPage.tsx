@@ -12,6 +12,7 @@ import {
 } from "react";
 import { type ApiError, api } from "../api";
 import { CopyButton, useCopy } from "../copy";
+import { useDraft } from "../draft";
 import { GitHubMark } from "../GitHubMark";
 import {
   ArrowDownIcon,
@@ -62,7 +63,8 @@ export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
   const timeline = useMemo(() => buildTimeline(events), [events]);
   const state = timeline.state ?? session;
   const status = state?.status;
-  const [reply, setReply] = useState("");
+  // 没发出去的字记在浏览器里，换个会话再回来、刷新页面都还在。
+  const [reply, setReply] = useDraft(id);
   // 刚发出去、服务器还没回推的消息：先显示出来，不让人等一个来回。
   // after：发的时候已经有几条用户消息和排队消息，服务器回推一条（开始回合或者排队）就换成正式的。
   const [pending, setPending] = useState<{ text: string; after: number; at: string }>();
