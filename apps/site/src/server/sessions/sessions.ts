@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import type {
   AgentEvent,
+  AiLabels,
   HostCommand,
   HostEvent,
   PullRequestState,
@@ -25,6 +26,7 @@ import {
 } from "../db/schema";
 import { githubNotConnected } from "../errors";
 import { withGitHubToken } from "../github/tokens";
+import { getAiLabels } from "../settings";
 import { DEFAULT_EFFORT, DEFAULT_MODEL, findModel } from "./models";
 import { toSafeError } from "./safe-error";
 import { Topic } from "./topic";
@@ -563,7 +565,22 @@ export class Sessions {
       environmentId: session.environmentId as string,
       model: session.model,
       effort: session.effort,
+      aiLabels: await getAiLabels(this.#deps),
     });
+  }
+
+  /**
+   * 管理员改了 AI 标识的开关：告诉宿主机上每个沙箱还开着的会话（运行中、等待回复），不用重开会话。
+   * 排队中的会话在准备沙箱时带上新值；休眠的下次唤醒时带上。
+   */
+  async aiLabelsChanged(aiLabels: AiLabels): Promise<void> {
+    const host = this.#deps.host;
+    if (!host) return;
+    const live = await this.#deps.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(inArray(sessions.status, ["running", "waiting"]));
+    for (const { id } of live) host.send({ type: "set_ai_labels", sessionId: id, aiLabels });
   }
 
   /** 追加一条会话事件。在会话这一行上加锁取号，同一个会话的序号连续、不重复。 */

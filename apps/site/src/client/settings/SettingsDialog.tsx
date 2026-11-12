@@ -11,6 +11,7 @@ import { ExportData } from "./DataSettings";
 
 const sections: Array<{ id: SettingsSection; name: string; icon: ReactNode }> = [
   { id: "general", name: "通用", icon: <SettingsIcon /> },
+  { id: "github", name: "GitHub", icon: <GitHubMark size={15} /> },
   { id: "account", name: "账户", icon: <UserIcon /> },
 ];
 
@@ -87,12 +88,10 @@ export function SettingsDialog({
           <div className="settings-content" key={section}>
             {section === "general" ? (
               <GeneralSettings />
+            ) : section === "github" ? (
+              <GitHubSettings notice={notice} onGitHubChanged={onGitHubChanged} />
             ) : (
-              <AccountSettings
-                notice={notice}
-                onSignedOut={onSignedOut}
-                onGitHubChanged={onGitHubChanged}
-              />
+              <AccountSettings notice={notice} onSignedOut={onSignedOut} />
             )}
           </div>
         </div>
@@ -148,17 +147,123 @@ function GeneralSettings() {
   );
 }
 
-/** 账户：密码、GitHub、导出数据、登录状态、开源声明。 */
-function AccountSettings({
+/** AI 标识的两个开关，和接口的字段一一对应。 */
+interface AiLabels {
+  signature: boolean;
+  commitTrailer: boolean;
+}
+
+/**
+ * GitHub：关联的账号，和 Agent 在 GitHub 上留的 AI 标识。
+ * 两个开关各管各的，点了当场保存；没存上就拨回去，并说明原因。
+ */
+function GitHubSettings({
   notice,
-  onSignedOut,
   onGitHubChanged,
 }: {
   notice?: string;
-  onSignedOut: () => void;
   onGitHubChanged: () => void;
 }) {
   const [error, setError] = useState(notice);
+  const [labels, setLabels] = useState<AiLabels>();
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api<AiLabels>("/api/settings/ai-labels").then(setLabels, (e: ApiError) => setError(e.message));
+  }, []);
+
+  const toggle = async (key: keyof AiLabels) => {
+    if (!labels || saving) return;
+    const next = { ...labels, [key]: !labels[key] };
+    setLabels(next);
+    setSaving(true);
+    setError(undefined);
+    try {
+      setLabels(await api<AiLabels>("/api/settings/ai-labels", next, "PUT"));
+    } catch (e) {
+      setLabels(labels);
+      setError((e as ApiError).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      {error && (
+        <p className="alert" role="alert">
+          {error}
+        </p>
+      )}
+
+      <section className="settings-section">
+        <h2>账号</h2>
+        <ul className="settings-list">
+          <GitHubRow onChanged={onGitHubChanged} onError={setError} />
+        </ul>
+      </section>
+
+      <section className="settings-section">
+        <h2>AI 标识</h2>
+        <ul className="settings-list">
+          <SwitchRow
+            name="署名"
+            sub="在 issue、PR、评论和 review 的末尾注明内容由 SeekCloud 生成（AI）。"
+            checked={labels?.signature}
+            onToggle={() => void toggle("signature")}
+          />
+          <SwitchRow
+            name="提交尾注"
+            sub="在提交说明的末尾添加 Generated-by: SeekCloud (AI)。"
+            checked={labels?.commitTrailer}
+            onToggle={() => void toggle("commitTrailer")}
+          />
+        </ul>
+        <p className="settings-hint">
+          关闭后，DeepSeek 在 GitHub 上留下的内容不再带 AI 标识。是否关闭由你自行负责。
+        </p>
+      </section>
+    </>
+  );
+}
+
+/** 设置里带开关的一行。checked 还没取到时开关不显示，免得先画成关的再跳成开的。 */
+function SwitchRow({
+  name,
+  sub,
+  checked,
+  onToggle,
+}: {
+  name: string;
+  sub: string;
+  checked: boolean | undefined;
+  onToggle: () => void;
+}) {
+  return (
+    <li className="settings-row">
+      <span className="settings-row-text">
+        <span className="settings-row-name">{name}</span>
+        <span className="settings-row-sub">{sub}</span>
+      </span>
+      {checked !== undefined && (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          aria-label={name}
+          className="switch"
+          onClick={onToggle}
+        >
+          <span className="switch-knob" aria-hidden="true" />
+        </button>
+      )}
+    </li>
+  );
+}
+
+/** 账户：密码、导出数据、登录状态、开源声明。 */
+function AccountSettings({ notice, onSignedOut }: { notice?: string; onSignedOut: () => void }) {
+  const error = notice;
   const [confirmLogout, setConfirmLogout] = useState(false);
 
   return (
@@ -172,13 +277,6 @@ function AccountSettings({
       <section className="settings-section">
         <h2>密码</h2>
         <PasswordRow />
-      </section>
-
-      <section className="settings-section">
-        <h2>GitHub</h2>
-        <ul className="settings-list">
-          <GitHubRow onChanged={onGitHubChanged} onError={setError} />
-        </ul>
       </section>
 
       <section className="settings-section">
@@ -417,7 +515,7 @@ function GitHubRow({
           </button>
         )
       ) : (
-        <a className="pill-button accent" href="/api/auth/github/start?next=/settings">
+        <a className="pill-button accent" href="/api/auth/github/start?next=/settings/github">
           关联
         </a>
       )}

@@ -223,3 +223,13 @@ export const accessLogs = pgTable(
   },
   (t) => [index("access_logs_user").on(t.userId, t.at), index("access_logs_at").on(t.at)],
 );
+
+/**
+ * 全站设置：管理员在设置窗口里改的配置，一项一行。value 的形状由 server/settings.ts 里对应的定义决定，
+ * 没有这一行就是默认值。
+ */
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});

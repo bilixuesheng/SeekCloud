@@ -190,6 +190,14 @@ export function withTrailer(message: string): string {
   return `${text}${trailers ? "\n" : "\n\n"}${COMMIT_TRAILER}`;
 }
 
+/** 按"署名"开关决定加不加署名。关着时原样交出去：不加，Agent 自己写了的也不删。 */
+const signed = (client: GitHubClient, body: string | undefined) =>
+  client.aiLabels.signature ? withFooter(body) : body;
+
+/** 按"提交尾注"开关决定加不加尾注。 */
+const trailed = (client: GitHubClient, message: string) =>
+  client.aiLabels.commitTrailer ? withTrailer(message) : message;
+
 /** 组织级的工具只能查挂载了仓库的所有者，返回其中一个仓库。 */
 function ownerRepo(client: GitHubClient, owner: string, repo?: string) {
   if (repo) return client.requireRepo(`${owner}/${repo}`);
@@ -237,7 +245,7 @@ async function commitToBranch(
     body: { base_tree: base.tree.sha, tree: entries },
   });
   const commit = await client.rest<{ sha: string }>("POST", repoPath(a, "git", "commits"), {
-    body: { message: withTrailer(message), tree: tree.sha, parents: [base.sha] },
+    body: { message: trailed(client, message), tree: tree.sha, parents: [base.sha] },
   });
   const ref = await client.rest(
     "PATCH",
@@ -428,7 +436,7 @@ export const TOOLS: Tool[] = [
         assignees: a.assignees,
         state: a.state,
         state_reason: a.state_reason,
-        ...(a.body !== undefined || a.method === "create" ? { body: withFooter(a.body) } : {}),
+        ...(a.body !== undefined || a.method === "create" ? { body: signed(c, a.body) } : {}),
       };
       if (a.method === "create") {
         if (!a.title) throw new ToolError("创建 issue 需要 title。");
@@ -444,7 +452,7 @@ export const TOOLS: Tool[] = [
     { ...repoParams, issue_number: Number_("issue 或 PR 的编号"), body: z.string().min(1) },
     (c, a) =>
       c.rest("POST", repoPath(a, "issues", a.issue_number, "comments"), {
-        body: { body: withFooter(a.body) },
+        body: { body: signed(c, a.body) },
       }),
   ),
   tool(
@@ -533,7 +541,7 @@ export const TOOLS: Tool[] = [
           title: a.title,
           head: a.head,
           base: a.base,
-          body: withFooter(a.body),
+          body: signed(c, a.body),
           draft: a.draft,
           maintainer_can_modify: a.maintainer_can_modify,
         },
@@ -558,7 +566,7 @@ export const TOOLS: Tool[] = [
           base: a.base,
           state: a.state,
           maintainer_can_modify: a.maintainer_can_modify,
-          ...(a.body === undefined ? {} : { body: withFooter(a.body) }),
+          ...(a.body === undefined ? {} : { body: signed(c, a.body) }),
         },
       }),
   ),
@@ -581,10 +589,10 @@ export const TOOLS: Tool[] = [
             commit_id: a.commitID,
             event: a.event,
             // 没有正文的未提交 review 先不加署名，提交时再加。
-            ...(a.body !== undefined || a.event ? { body: withFooter(a.body) } : {}),
+            ...(a.body !== undefined || a.event ? { body: signed(c, a.body) } : {}),
             comments: a.comments?.map((comment) => ({
               ...comment,
-              body: withFooter(comment.body),
+              body: signed(c, comment.body),
             })),
           },
         });
@@ -595,7 +603,7 @@ export const TOOLS: Tool[] = [
       if (!a.event)
         throw new ToolError("提交 review 需要 event：APPROVE、REQUEST_CHANGES 或 COMMENT。");
       return c.rest("POST", `${path}/events`, {
-        body: { event: a.event, body: withFooter(a.body) },
+        body: { event: a.event, body: signed(c, a.body) },
       });
     },
   ),
@@ -624,7 +632,7 @@ export const TOOLS: Tool[] = [
         {
           review: pending.node_id,
           path: a.path,
-          body: withFooter(a.body),
+          body: signed(c, a.body),
           line: a.line ?? null,
           side: a.side ?? null,
           startLine: a.startLine ?? null,
@@ -645,7 +653,7 @@ export const TOOLS: Tool[] = [
     },
     (c, a) =>
       c.rest("POST", repoPath(a, "pulls", a.pullNumber, "comments", a.commentId, "replies"), {
-        body: { body: withFooter(a.body) },
+        body: { body: signed(c, a.body) },
       }),
   ),
   tool(
@@ -858,7 +866,7 @@ export const TOOLS: Tool[] = [
     },
     (c, a) =>
       c.rest("PATCH", repoPath(a, "issues", "comments", a.comment_id), {
-        body: { body: withFooter(a.body) },
+        body: { body: signed(c, a.body) },
       }),
   ),
   tool(
@@ -984,7 +992,7 @@ export const TOOLS: Tool[] = [
       }
       return c.rest("PUT", repoPath(a, "contents", segments(a.path)), {
         body: {
-          message: withTrailer(a.message),
+          message: trailed(c, a.message),
           content: Buffer.from(a.content).toString("base64"),
           branch: a.branch,
           sha: a.sha,

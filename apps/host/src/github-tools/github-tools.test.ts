@@ -411,6 +411,65 @@ describe("署名：写到 GitHub 的正文都带一次", () => {
 });
 
 describe("只有 GraphQL 能做的：用写死的查询，先确认仓库", () => {
+  it.each([
+    { signature: true, commitTrailer: true },
+    { signature: true, commitTrailer: false },
+    { signature: false, commitTrailer: true },
+    { signature: false, commitTrailer: false },
+  ])("AI 标识的两个开关各管各的：署名 $signature，提交尾注 $commitTrailer", async (aiLabels) => {
+    api.route("POST /repos/octo/app/issues/3/comments", () => ({ status: 201, json: { id: 1 } }));
+    api.route("GET /repos/octo/app/contents/docs/new.md", () => ({
+      status: 404,
+      json: { message: "Not Found" },
+    }));
+    api.route("PUT /repos/octo/app/contents/docs/new.md", () => ({
+      status: 201,
+      json: { content: { path: "docs/new.md", sha: "b2" }, commit: { sha: "c2" } },
+    }));
+    // 管理员中途改了开关：不用重新登记会话，下一次调用就按新的来
+    sessions.setAiLabels("s1", aiLabels);
+    try {
+      await call("add_issue_comment", {
+        owner: "octo",
+        repo: "app",
+        issue_number: 3,
+        body: "看过了。",
+      });
+      await call("create_or_update_file", {
+        owner: "octo",
+        repo: "app",
+        path: "docs/new.md",
+        content: "你好",
+        message: "加文档",
+        branch: "seekcloud/x",
+      });
+      expect(api.requests[0]?.body).toEqual({
+        body: aiLabels.signature ? `看过了。${footer}` : "看过了。",
+      });
+      expect(api.requests[2]?.body).toMatchObject({
+        message: aiLabels.commitTrailer ? `加文档\n\n${TRAILER}` : "加文档",
+      });
+    } finally {
+      sessions.setAiLabels("s1", { signature: true, commitTrailer: true });
+    }
+  });
+
+  it("署名关着时，Agent 自己写了署名的正文原样留着，不加也不删", async () => {
+    api.route("POST /repos/octo/app/issues/3/comments", () => ({ status: 201, json: { id: 1 } }));
+    sessions.setAiLabels("s1", { signature: false, commitTrailer: true });
+    try {
+      await call("add_issue_comment", {
+        owner: "octo",
+        repo: "app",
+        issue_number: 3,
+        body: `看过了。${footer}`,
+      });
+      expect(api.requests[0]?.body).toEqual({ body: `看过了。${footer}` });
+    } finally {
+      sessions.setAiLabels("s1", { signature: true, commitTrailer: true });
+    }
+  });
+
   it("解决评审线程：线程属于本会话的仓库才解决；别的仓库的线程只查不改", async () => {
     const mutations: string[] = [];
     api.onGraphql((query, variables) => {

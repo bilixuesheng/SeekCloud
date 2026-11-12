@@ -13,7 +13,7 @@
   我们考虑过默认禁止推送 main，但为了和 Claude 保持一致，没有这么做。
 - **提交签名**：提交的作者是 SeekCloud 专用的 GitHub 账号，每个提交都用它的 SSH 密钥签名，GitHub 上显示 Verified。签名密钥放在宿主机上，沙箱里的 git 通过一个签名助手请宿主机代签。
 
-GitHub 上的身份也照搬 Claude：评论、开 PR、review 用用户本人的 GitHub 账号，每条带"由 SeekCloud 生成（AI）"的署名；提交的作者是 SeekCloud 账号，就像 Claude 的提交作者是 claude 账号。
+GitHub 上的身份也照搬 Claude：评论、开 PR、review 用用户本人的 GitHub 账号，每条带"由 SeekCloud 生成（AI）"的署名（默认加上，管理员可以在设置里关掉）；提交的作者是 SeekCloud 账号，就像 Claude 的提交作者是 claude 账号。
 
 这和 Claude Code 网页版的做法一致：它的 GitHub 凭据和签名密钥都只放在服务端。这样做的另一个好处是，权限的规则只需要在一个地方执行，无论沙箱里跑的是哪个 Agent 都一样。
 
