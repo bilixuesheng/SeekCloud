@@ -526,6 +526,11 @@ describe("搜索只在本会话的仓库里", () => {
       "x -repo:octo/app",
       "x (repo:other/secret)",
       "x REPO: other/secret",
+      // OR 和括号能把我们补的 repo: 条件变成"或者"，搜到别的仓库
+      "password OR",
+      "password OR token",
+      "(password) x",
+      "password) OR (x",
     ]) {
       const refused = await call("search_code", { query });
       expect(refused.isError).toBe(true);

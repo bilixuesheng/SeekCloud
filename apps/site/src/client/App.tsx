@@ -135,6 +135,7 @@ function Shell({
             sessions={shown}
             loaded={loaded}
             currentId={currentId}
+            searching={query !== ""}
             onPick={() => setDrawer(false)}
           />
         </div>

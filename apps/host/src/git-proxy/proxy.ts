@@ -208,6 +208,14 @@ async function forward(
         : `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
   }
 
+  // 要看请求体才能定的请求不接受压缩过的请求体：代理按原样的字节检查，GitHub 解压以后再读，
+  // 两边看到的可能不是同一份内容。git 推送和 gh 都不压缩这两种请求。
+  const encoding = req.headers["content-encoding"];
+  if (decision.inspect && encoding && encoding.toLowerCase() !== "identity") {
+    req.resume();
+    return reply(res, 415, "代理不放行压缩过的推送或建引用请求（Content-Encoding）。");
+  }
+
   let prefix: Buffer | undefined;
   try {
     if (decision.inspect === "push") {

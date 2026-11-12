@@ -83,7 +83,11 @@ function sandboxGit(
 }
 
 /** 用代理发一个 REST 请求（明文代理请求，gh 走 HTTPS 时也是同样的规则）。 */
-function rest(method: string, path: string, init: { auth?: string; body?: string } = {}) {
+function rest(
+  method: string,
+  path: string,
+  init: { auth?: string; body?: string; headers?: Record<string, string> } = {},
+) {
   return new Promise<{ status: number; body: string }>((done, fail) => {
     const req = http.request(
       proxyUrl,
@@ -94,6 +98,7 @@ function rest(method: string, path: string, init: { auth?: string; body?: string
           "proxy-authorization": `Basic ${Buffer.from(`session:${SESSION_TOKEN}`).toString("base64")}`,
           authorization: init.auth ?? `token ${TOKEN_PLACEHOLDER}`,
           "content-type": "application/json",
+          ...init.headers,
         },
       },
       (res) => {
@@ -241,6 +246,24 @@ describe("REST 接口经过代理", () => {
       body: '{"ref":"refs/heads/x","sha":"abc","ref":"refs/tags/v1"}',
     });
     expect(sneaky.status).toBe(403);
+  });
+
+  it("要看请求体的请求不接受压缩过的请求体；建分支以外的引用、写提交状态和检查结果都不放行", async () => {
+    const before = github.requests.length;
+    const cases = [
+      // 代理按原样的字节检查，GitHub 解压以后再读，两边看到的可能不一样
+      await rest("POST", "/repos/octo/app/git/refs", {
+        body: '{"ref":"refs/heads/x","sha":"abc"}',
+        headers: { "content-encoding": "gzip" },
+      }),
+      await rest("POST", "/repos/octo/app/git/refs", {
+        body: '{"ref":"refs/notes/commits","sha":"abc"}',
+      }),
+      await rest("POST", "/repos/octo/app/statuses/abc", { body: '{"state":"success"}' }),
+      await rest("POST", "/repos/octo/app/check-runs", { body: '{"name":"ci"}' }),
+    ];
+    expect(cases.map((c) => c.status)).toEqual([415, 403, 403, 403]);
+    expect(github.requests.length).toBe(before);
   });
 
   it("地址里的编码不对：返回 400，代理照常工作（以前会让整个进程退出）", async () => {

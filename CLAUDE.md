@@ -15,7 +15,16 @@
 - 代码从 SeekCloud 收费版迁移而来，已经去掉计费、改成单管理员（ADR 0008）、改了 Agent 的叫法（ADR 0004）、写好了 README，许可证改成了 AGPL-3.0（ADR 0009）。
 - Agent 执行尚未实现：主站还没接上沙箱宿主机，新会话会停在排队。
 - 路线图 2026-11-08 定了，见交接文档 `docs/roadmap/2026-11-08-handoff.md`。
-- **接下来**按交接文档写规格、拆工单，开在本仓库的 GitHub Issues。先做核心功能（Agent 执行，搬收费版的旧工单），再做新功能，每项先写规格，再拆工单：
+- 核心功能的规格和工单拆完了（2026-11-11）：规格是 issue [#13](https://github.com/bilixuesheng/SeekCloud/issues/13)，工单 #14–#56 都是它的子 issue，正文第一行写着被哪些工单阻塞。读工单时正文和评论一起读。
+  - #14（测试机）、#15（把 `seekcloud-dsh` 改成公开仓库）要用户本人做，宿主机和 dsh 相关的工单都等它们。
+  - 现在就能开工的：#16（会话页动效核对）、#19（顶栏、标题菜单和会话信息）、#20（模型和思考强度的弹层）。
+  - 仓库里还没有 `ready-for-human` 这个标签，#14、#15 没打标签。
+- AI 标识两个开关的规格和工单也拆了：规格 [#57](https://github.com/bilixuesheng/SeekCloud/issues/57)，工单 #58（现在就能开工）、#59。八项新功能里只有这一项没有待定的事，所以先写了。
+- 2026-11-11 做了一次复查，记在 `docs/roadmap/2026-11-11-review.md`：界面上查出来并改掉的问题、路线图没覆盖到的地方（待定的每条都有建议）、安全排查的结论。写新功能的规格之前先读它。
+- **接下来**：
+  1. 请用户定复查文档里标"待定"的几条（花费上限、哪些人的评论能唤醒 Agent、两步验证、中国大陆的网络、没有公网地址的部署、往沙箱里传文件等）。它们会影响下面几份规格。
+  2. 实现现在能开工的工单（#16、#19、#20、#58）。
+  3. 其余七项新功能每项先写规格，再拆工单（AI 标识已经拆了，见上）：
   - 网页图形化部署：Linux 一条命令、Windows 一条 PowerShell 命令，其余在网页向导里完成；
   - 多渠道通知：SMTP 邮件、PWA 推送、飞书/钉钉/企业微信机器人、通用 Webhook；
   - 主站和沙箱宿主机都能装在 Windows 上（通过 WSL2，宿主机也可以用 Hyper-V 虚拟机）；
@@ -38,6 +47,9 @@
 - 宿主机（`apps/host`）：GitHub 工具服务（MCP，`/mcp`）在 `src/github-tools/`，测试接假的 GitHub API；dsh 怎么接见 `apps/host/sandbox/README.md`。Git 代理在 `src/git-proxy/`，提交签名在 `src/signing/`，沙箱里要装的签名助手和 git 配置在 `apps/host/sandbox/`。测试用真的 `git`（`git http-backend` 当假 GitHub）、`openssl` 和 `ssh-keygen`，云端会话里先运行 `apt-get install -y openssh-client`。生成签名密钥：`pnpm --filter @seekcloud/host signing-key <私钥路径>`，打印出来的公钥加到 SeekCloud 账号的 GitHub 签名密钥里。宿主机的环境变量：`SEEKCLOUD_SIGNING_KEY`（签名私钥路径）、`SEEKCLOUD_SIGNER_EMAIL`（SeekCloud 账号的邮箱）、`SEEKCLOUD_GIT_PROXY_HOST`、`SEEKCLOUD_GIT_PROXY_PORT`、`SEEKCLOUD_HOST_DATA`。
 - SSE 接口用 `browser.stream(path)` 测（`src/testing/event-stream.ts`），用完要 `close()`。`t.admin()` 得到一个已登录的管理员浏览器（第一次调用时用 `t.adminPassword` 设置密码，每次调用都是一台新设备）；`t.adminWithGitHub(login, ...仓库)` 再关联 GitHub、装好 App，再调用一次会换成新的 GitHub 账号。
 - 主站的测试用 `apps/site/src/testing/test-app.ts` 的 `createTestApp()`：进程内调用接口，每调用一次建一个独立的库（一般一个测试文件一次），时钟是假的。`t.browser()` 模拟一个有自己 Cookie 和 IP 的浏览器。
+- 主站的每个响应都带内容安全策略（`apps/site/src/server/app.ts`）：脚本只能来自本站，页面里不能写内联脚本，要在页面画出来之前跑的放进 `apps/site/public/` 下单独的文件（比如 `theme-boot.js`）。接口的请求体最多 1 MB（webhook 25 MB）。
+- Agent 回复里的图片只有 GitHub 和主站自己的直接显示，别的来源点了才加载（`session/Markdown.tsx` 的 `trustedImageHost`）：图片地址是 Agent 写的，直接加载等于给了它一条往外送数据的路。
+- 要看界面时，可以用假 GitHub、假宿主机起一个真主站来截图：照 `apps/site/src/testing/test-app.ts` 的写法建 `createApp()`，再挂上 `dist/client` 的静态文件。
 - 接口出错时统一返回 `{ error: { code, message } }`：`code` 给程序判断，`message` 是给人看的中文。用 `apps/site/src/server/errors.ts` 的 `apiError()`。
 - 加表：改 `apps/site/src/server/db/schema.ts`，然后在 `apps/site` 里运行 `pnpm db:generate --name <名字>` 生成迁移。主站启动时自动跑迁移。
 - 后台的定期任务在 `apps/site/src/server/maintenance.ts`：打包数据导出、删过期的导出、删满 180 天的访问记录。main.ts 每分钟跑一次；测试里调用 `t.runMaintenance()`，导出的压缩包写在 `t.dataDir`（临时目录）。

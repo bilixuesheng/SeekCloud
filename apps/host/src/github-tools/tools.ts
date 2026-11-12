@@ -146,6 +146,13 @@ function scopedQuery(client: GitHubClient, query: string, a: { owner?: string; r
       "搜索只限当前会话的仓库，查询里不能带 repo:、org:、user: 条件。要指定仓库，请用 owner 和 repo 参数。",
     );
   }
+  // GitHub 的搜索支持 OR 和括号。"密码 OR" 后面接上我们补的 repo: 条件，就成了"密码，或者本会话仓库里的"，
+  // 能搜到令牌够得着的别的仓库。所以不接受 OR 和括号（空格本来就是"并且"，够用了）。
+  if (/(^|[\s(])OR([\s)]|$)|[()]/.test(query)) {
+    throw new ToolError(
+      "搜索条件里不能用 OR 和括号。多个条件用空格分开（表示同时满足），或者分几次搜。",
+    );
+  }
   const repos =
     a.owner && a.repo
       ? [client.requireRepo(`${a.owner}/${a.repo}`).fullName]

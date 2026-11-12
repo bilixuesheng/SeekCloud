@@ -9,9 +9,22 @@ export interface ToolCall {
 }
 
 export type TimelineItem =
-  /** at：服务器收到的时间，显示在消息下面。 */
-  | { kind: "user"; key: number; text: string; at: string }
-  | { kind: "assistant"; key: number; text: string; thinking?: string }
+  /**
+   * at：服务器收到的时间，显示在消息下面。
+   * delivered：已经交给 Agent（所在的回合开始了，或者是立即发送的插话）。排队、准备沙箱时还没有。
+   */
+  | { kind: "user"; key: number; text: string; at: string; delivered: boolean }
+  /**
+   * turnEnd：这是一个回合里最后一条回复，回合已经结束。reply 是这个回合全部回复的原文（复制用），
+   * at 是回合结束的时间。
+   */
+  | {
+      kind: "assistant";
+      key: number;
+      text: string;
+      thinking?: string;
+      turnEnd?: { reply: string; at: string };
+    }
   /** 连续的工具调用合成一组，界面上先显示一行摘要。 */
   | { kind: "tools"; key: number; calls: ToolCall[] }
   /** 待办清单只显示最新的一份，放在它最后一次更新的位置。 */
@@ -41,13 +54,32 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
   let state: SessionState | undefined;
   let since: string | undefined;
   let queued: Timeline["queued"] = [];
+  // 还没交给 Agent 的用户消息：回合开始时一起标成已交付。
+  let undelivered: Array<Extract<TimelineItem, { kind: "user" }>> = [];
+  // 当前回合里 Agent 的回复，回合结束时在最后一条下面放"复制"。
+  let replies: Array<Extract<TimelineItem, { kind: "assistant" }>> = [];
 
   for (const event of events) {
     switch (event.type) {
-      case "user.message":
+      case "user.message": {
         // 由排队的消息合成的回合开头：排队的那几条换成这一条。
         if (event.queued) queued = queued.filter((q) => !event.queued?.includes(q.id));
-        items.push({ kind: "user", key: event.seq, text: event.text, at: event.at });
+        const item = {
+          kind: "user" as const,
+          key: event.seq,
+          text: event.text,
+          at: event.at,
+          // 插话是在回合进行中直接送给 Agent 的。
+          delivered: event.injected === true,
+        };
+        if (!item.delivered) undelivered.push(item);
+        items.push(item);
+        break;
+      }
+      case "turn.started":
+        for (const item of undelivered) item.delivered = true;
+        undelivered = [];
+        replies = [];
         break;
       case "message.queued":
         queued.push({ id: event.id, text: event.text });
@@ -55,14 +87,17 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
       case "message.withdrawn":
         queued = queued.filter((q) => q.id !== event.id);
         break;
-      case "message":
-        items.push({
-          kind: "assistant",
+      case "message": {
+        const item = {
+          kind: "assistant" as const,
           key: event.seq,
           text: event.text,
           thinking: event.thinking,
-        });
+        };
+        replies.push(item);
+        items.push(item);
         break;
+      }
       case "tool.call": {
         const call: ToolCall = { key: event.seq, name: event.name, input: event.input };
         calls.set(event.callId, call);
@@ -83,13 +118,23 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
       case "model.changed":
         items.push({ kind: "model", key: event.seq, model: event.model, effort: event.effort });
         break;
-      case "turn.ended":
+      case "turn.ended": {
+        const last = replies.at(-1);
+        if (last) {
+          const reply = replies
+            .map((r) => r.text)
+            .filter((text) => text.trim())
+            .join("\n\n");
+          if (reply) last.turnEnd = { reply, at: event.at };
+        }
+        replies = [];
         if (event.reason !== "completed") {
           const notice = endNotices[event.reason];
           const text = event.error ? `${notice.text}：${errorText(event.error)}` : notice.text;
           items.push({ kind: "notice", key: event.seq, tone: notice.tone, text });
         }
         break;
+      }
       case "status":
         if (event.status !== state?.status) since = event.at;
         state = { status: event.status, detail: event.detail };

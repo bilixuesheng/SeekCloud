@@ -11,6 +11,8 @@ import {
   useState,
 } from "react";
 import { type ApiError, api } from "../api";
+import { CopyButton, useCopy } from "../copy";
+import { useDraft } from "../draft";
 import { GitHubMark } from "../GitHubMark";
 import {
   ArrowDownIcon,
@@ -18,7 +20,6 @@ import {
   CheckIcon,
   ChevronRightIcon,
   CloseIcon,
-  CopyIcon,
   DoubleCheckIcon,
   RetryIcon,
   UndoIcon,
@@ -62,7 +63,8 @@ export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
   const timeline = useMemo(() => buildTimeline(events), [events]);
   const state = timeline.state ?? session;
   const status = state?.status;
-  const [reply, setReply] = useState("");
+  // 没发出去的字记在浏览器里，换个会话再回来、刷新页面都还在。
+  const [reply, setReply] = useDraft(id);
   // 刚发出去、服务器还没回推的消息：先显示出来，不让人等一个来回。
   // after：发的时候已经有几条用户消息和排队消息，服务器回推一条（开始回合或者排队）就换成正式的。
   const [pending, setPending] = useState<{ text: string; after: number; at: string }>();
@@ -361,32 +363,6 @@ function useCatchUp(pendingAt: string | undefined) {
   return catchUp;
 }
 
-/** 复制到剪贴板，复制后的一会儿显示成勾。 */
-function useCopy(text: string): [boolean, () => void] {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    void navigator.clipboard?.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    });
-  };
-  return [copied, copy];
-}
-
-function CopyButton({ copied, onCopy }: { copied: boolean; onCopy: () => void }) {
-  return (
-    <button
-      type="button"
-      className="icon-button small"
-      aria-label={copied ? "已复制" : "复制"}
-      data-tip={copied ? "已复制" : "复制"}
-      onClick={onCopy}
-    >
-      {copied ? <CheckIcon size={13} /> : <CopyIcon />}
-    </button>
-  );
-}
-
 /** 打开会话后这么久之内，卡片量出高度、内容长高了也贴着底部。 */
 const SETTLE_OPEN_MS = 800;
 
@@ -491,11 +467,11 @@ function useNow(intervalMs: number): Date {
 
 /**
  * 发出去的消息：下面一行是 ✓✓、时间、复制、重试。
- * ✓✓ 在消息交给 Agent 时出现（开始回合或立即发送；排队中的消息不显示），提示"DeepSeek 已读取"。
+ * ✓✓ 在消息交给 Agent 时出现（回合开始或立即发送；排队中、准备沙箱时不显示），提示"DeepSeek 已读取"。
  * 重试就是把这句话再发一次；Agent 在工作时是灰的（onRetry 为空）。
  * 提示用 data-tip（样式见 styles.css 的 [data-tip]）。✓✓ 和时间是只用来看提示的按钮（meta-info），手机上点一下也能看到。
  * motion：fresh 是时间线统一的轻轻浮上来；bubble-in 是刚发的消息从输入框的方向进来（和下面那一行一起）；
- * delivered 是服务器回推了刚才先显示的那条，✓✓ 淡入；pendingAt 是那条的发送时间，出现的动画没播完就接着播。
+ * delivered 是服务器回推了刚才先显示的那条；pendingAt 是那条的发送时间，出现的动画没播完就接着播。
  * sending：刚发出去、服务器还没确认，没有 ✓✓，不能重试。
  */
 function SentMessage({
@@ -505,6 +481,7 @@ function SentMessage({
   pendingAt,
   now,
   sending = false,
+  delivered = false,
   onRetry,
 }: {
   text: string;
@@ -513,6 +490,8 @@ function SentMessage({
   pendingAt?: string;
   now: Date;
   sending?: boolean;
+  /** 已经交给 Agent：显示 ✓✓。排队、准备沙箱时还没有。 */
+  delivered?: boolean;
   onRetry?: (text: string) => void;
 }) {
   const [copied, copy] = useCopy(text);
@@ -525,7 +504,7 @@ function SentMessage({
     >
       <div className="user-message">{text}</div>
       <div className="message-meta">
-        {!sending && (
+        {!sending && delivered && (
           <MetaInfo className="message-delivered" tip="DeepSeek 已读取">
             <DoubleCheckIcon />
           </MetaInfo>
@@ -548,6 +527,20 @@ function SentMessage({
           <RetryIcon />
         </button>
       </div>
+    </div>
+  );
+}
+
+/** 回合结束后，最后一条回复下面的一行：复制这个回合的全部回复（Markdown 原文），和结束的时间。 */
+function ReplyMeta({ reply, at, now }: { reply: string; at: string; now: Date }) {
+  const [copied, copy] = useCopy(reply);
+  const time = new Date(at);
+  return (
+    <div className="message-meta reply-meta">
+      <CopyButton copied={copied} onCopy={copy} />
+      <MetaInfo className="message-time" tip={fullTime(time)}>
+        <time dateTime={at}>{relativeTime(time, now)}</time>
+      </MetaInfo>
     </div>
   );
 }
@@ -654,6 +647,7 @@ function TimelineEntry({
           motion={pendingAt ? "delivered" : live ? "bubble-in" : "fresh"}
           pendingAt={pendingAt}
           now={now}
+          delivered={item.delivered}
           onRetry={onRetry}
         />
       );
@@ -670,6 +664,7 @@ function TimelineEntry({
             </details>
           )}
           <LiveMarkdown text={item.text} live={live} />
+          {item.turnEnd && <ReplyMeta reply={item.turnEnd.reply} at={item.turnEnd.at} now={now} />}
         </div>
       );
     case "tools":

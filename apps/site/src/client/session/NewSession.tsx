@@ -1,6 +1,7 @@
 import type { ThinkingEffort } from "@seekcloud/protocol";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { type ApiError, api } from "../api";
+import { useDraft } from "../draft";
 import { useSerifReady } from "../fonts";
 import { GitHubConnectCard, type GitHubStatus } from "../GitHubConnectCard";
 import { GitHubMark } from "../GitHubMark";
@@ -56,7 +57,8 @@ export function NewSession({ onCreated }: { onCreated: (session: Session) => voi
   const [greeting] = useState(() => pickGreeting());
   const greetingReady = useSerifReady(greeting);
   const [github, setGitHub] = useState<GitHubStatus>();
-  const [text, setText] = useState("");
+  // 没发出去的字记在浏览器里：去别的会话看一眼再回来、刷新页面都还在。
+  const [text, setText] = useDraft("new");
   const [repo, setRepo] = useState<Repo | undefined>(initial.repo);
   const [branch, setBranch] = useState(initial.branch ?? "");
   const [branches, setBranches] = useState<string[]>([]);
@@ -124,6 +126,7 @@ export function NewSession({ onCreated }: { onCreated: (session: Session) => voi
         text,
       });
       remember({ repo, branch, model, effort });
+      setText("");
       onCreated(session);
       handOffFocus();
       navigate(`/s/${session.shortId}`);

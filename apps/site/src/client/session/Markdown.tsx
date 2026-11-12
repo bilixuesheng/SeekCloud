@@ -1,7 +1,8 @@
 import type { PullRequestRef } from "@seekcloud/protocol";
-import { createContext, memo, useContext, useState } from "react";
+import { createContext, memo, type ReactNode, useContext, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { CopyButton, useCopy } from "../copy";
 import { IssueIcon, PullRequestIcon } from "../Icons";
 import { type LiveChunk, rehypeLiveChunks, useLiveChunks } from "./live-text";
 import { PullRequestBadge } from "./PullRequestBadge";
@@ -56,12 +57,46 @@ function htmlAsText() {
 const isWebUrl = (url: string) => /^https?:\/\//i.test(url);
 
 /**
- * Agent 发的图片直接加载（2026-11-01 用户要求，原来是点了才加载）。不带 Referer。
- * 加载失败时显示成链接，让用户知道这里本来有张图、从哪来。
+ * 这些来源的图片直接显示：GitHub 的（仓库里的图、issue 里贴的图），和主站自己的。
+ * 别的来源要点一下才加载：图片地址是 Agent 写的，Agent 读到的外部内容可以诱导它把仓库里的密钥
+ * 拼进一个图片地址，浏览器一加载就把它送到了别人的服务器上，沙箱的网络策略管不到这一步。
+ */
+export function trustedImageHost(src: string): boolean {
+  let host: string;
+  try {
+    host = new URL(src).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (typeof location !== "undefined" && host === location.hostname) return true;
+  return (
+    host === "github.com" ||
+    host === "github.githubassets.com" ||
+    host.endsWith(".githubusercontent.com")
+  );
+}
+
+/**
+ * Agent 发的图片。不带 Referer。来源不在上面那几个里的，先显示成一个按钮，点了才加载。
+ * 加载失败时显示成链接，让管理员知道这里本来有张图、从哪来。
  */
 function AgentImage({ src, alt }: { src?: unknown; alt?: string }) {
   const [failed, setFailed] = useState(false);
+  const [allowed, setAllowed] = useState(false);
   if (typeof src !== "string" || !isWebUrl(src)) return <span>{alt}</span>;
+  if (!allowed && !trustedImageHost(src)) {
+    let host = "";
+    try {
+      host = new URL(src).hostname;
+    } catch {
+      return <span>{alt}</span>;
+    }
+    return (
+      <button type="button" className="image-blocked" onClick={() => setAllowed(true)}>
+        <span aria-hidden="true">🖼</span> {alt || "图片"}（来自 {host}，点击加载）
+      </button>
+    );
+  }
   if (failed) {
     return (
       <a className="image-failed" href={src} target="_blank" rel="noopener noreferrer nofollow">
@@ -129,7 +164,27 @@ function GitHubChip({ href, target }: { href: string; target: GitHubRef }) {
   );
 }
 
+/** 代码块：右上角一个复制按钮，复制的是代码原文（不带末尾的换行）。 */
+function CodeBlock({ code, children }: { code: string; children: ReactNode }) {
+  const [copied, copy] = useCopy(code.replace(/\n$/, ""));
+  return (
+    <div className="code-block">
+      <pre>{children}</pre>
+      <CopyButton copied={copied} onCopy={copy} className="icon-button small code-copy" />
+    </div>
+  );
+}
+
 const components: Components = {
+  // 表格外面套一层横着滑的容器：表格本身按内容定宽，窄屏上不把列挤成一个字一行。
+  table: ({ children }) => (
+    <div className="table-scroll">
+      <table>{children}</table>
+    </div>
+  ),
+  pre: ({ children, node }) => (
+    <CodeBlock code={textOf(node as MdNode | undefined)}>{children}</CodeBlock>
+  ),
   a: ({ href, children, node }) => {
     if (!href || !/^(https?:|mailto:)/i.test(href)) return <span>{children}</span>;
     const ref = githubRef(href);
