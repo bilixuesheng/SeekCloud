@@ -1,3 +1,4 @@
+import { type AiLabels, DEFAULT_AI_LABELS } from "@seekcloud/protocol";
 import { checkCreateRef, checkRequest, findRepo, type MountedRepo } from "../git-proxy/rules";
 import type { GitSession } from "../git-proxy/sessions";
 
@@ -43,6 +44,11 @@ export class GitHubClient {
 
   get repos(): MountedRepo[] {
     return this.#session.repos;
+  }
+
+  /** AI 标识的两个开关。每次用到时现取：管理员中途改了，下一次调用就生效。 */
+  get aiLabels(): AiLabels {
+    return this.#session.aiLabels ?? DEFAULT_AI_LABELS;
   }
 
   /** 仓库挂载在本会话上；需要写时还要求是可推送的。返回规范的 owner/name。 */

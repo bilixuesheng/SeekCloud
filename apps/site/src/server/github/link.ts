@@ -11,7 +11,7 @@ const COOKIE_PATH = "/api/auth/github";
 const TEN_MINUTES = 600;
 
 /** 授权完成后可以回到的页面。只接受这几个，免得被拿去跳到别的网站。 */
-const NEXT_PAGES = ["/", "/settings"] as const;
+const NEXT_PAGES = ["/", "/settings", "/settings/github"] as const;
 const parseNext = (value: string | undefined) => NEXT_PAGES.find((page) => page === value) ?? "/";
 
 /** 点"关联 GitHub"：记下 state 和回到哪一页，跳到 GitHub 授权。 */

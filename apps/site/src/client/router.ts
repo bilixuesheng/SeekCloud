@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 
-export const SETTINGS_SECTIONS = ["general", "account"] as const;
+export const SETTINGS_SECTIONS = ["general", "github", "account"] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 /** 不用登录也能看的页面：开源声明。 */

@@ -93,6 +93,19 @@ export interface SessionRepo {
   access: (typeof REPO_ACCESS)[number];
 }
 
+/**
+ * AI 标识的两个开关（全站设置，默认都开）。
+ * signature：Agent 写到 GitHub 上的 issue、PR、评论、review 末尾加署名；
+ * commitTrailer：Agent 的提交说明末尾加 AI 生成的尾注。
+ */
+export interface AiLabels {
+  signature: boolean;
+  commitTrailer: boolean;
+}
+
+/** 没有下发过开关时（比如旧版本的主站）按都开处理。 */
+export const DEFAULT_AI_LABELS: AiLabels = { signature: true, commitTrailer: true };
+
 /** 主站发给宿主机的命令。 */
 export type HostCommand =
   | {
@@ -103,7 +116,10 @@ export type HostCommand =
       environmentId: string;
       model: string;
       effort: ThinkingEffort;
+      aiLabels: AiLabels;
     }
+  /** 管理员在设置里改了 AI 标识的开关：运行中的会话跟着变，不用重开。 */
+  | { type: "set_ai_labels"; sessionId: string; aiLabels: AiLabels }
   /**
    * 下发或刷新用户的 GitHub 访问令牌，给宿主机上的 Git 代理用（ADR 0003）。
    * 宿主机只放在内存里；令牌快过期时主站刷新后再发一次。

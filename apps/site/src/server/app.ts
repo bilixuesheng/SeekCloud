@@ -15,6 +15,7 @@ import { githubAuthRoutes, githubRoutes } from "./routes/github";
 import { meRoutes } from "./routes/me";
 import { newRouter } from "./routes/router";
 import { sessionRoutes } from "./routes/sessions";
+import { settingsRoutes } from "./routes/settings";
 import type { SecretBox } from "./secrets";
 import type { HostLink } from "./sessions/host";
 import { Sessions } from "./sessions/sessions";
@@ -121,6 +122,7 @@ export function createApp(deps: AppDeps) {
   app.route("/api/account", accountRoutes(deps));
   app.route("/api/auth", authRoutes(deps, limiter));
   app.route("/api/github", githubRoutes(deps, sessions));
+  app.route("/api/settings", settingsRoutes(deps, sessions));
   app.route("/api", sessionRoutes(deps, sessions));
   app.route("/api", meRoutes(deps));
 

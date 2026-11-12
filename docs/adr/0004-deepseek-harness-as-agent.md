@@ -5,7 +5,7 @@ Claude Code 网页版在云端跑的是 Anthropic 自家的 Claude Code。为了
 Agent 的叫法分两处：
 
 - 管理员自己看的界面和导出的文件写 DeepSeek，比如"DeepSeek 已读取""DeepSeek 是 AI 并且可能会犯错。"；
-- 留在 GitHub 上的署名、提交尾注和提交作者的名字写 SeekCloud：`_由 SeekCloud 生成（AI）_`、`Generated-by: SeekCloud (AI)`。这些是公开的，DeepSeek 开放平台协议 §5.3(2) 不允许把 DeepSeek 的名称、模型名称放在显著位置。
+- 留在 GitHub 上的署名、提交尾注和提交作者的名字写 SeekCloud：`_由 SeekCloud 生成（AI）_`、`Generated-by: SeekCloud (AI)`。署名和提交尾注默认加上，管理员可以在设置里分别关掉。这些是公开的，DeepSeek 开放平台协议 §5.3(2) 不允许把 DeepSeek 的名称、模型名称放在显著位置。
 
 协议 §5.3(3) 还禁止使用"官方合作"一类的说法，所以"内置官方 Agent"不能当卖点。只在开源声明页按 MIT 许可证的要求注明使用了 DeepSeek Harness。
 
