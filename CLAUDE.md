@@ -16,14 +16,15 @@
 - Agent 执行尚未实现：主站还没接上沙箱宿主机，新会话会停在排队。
 - 路线图 2026-11-08 定了，见交接文档 `docs/roadmap/2026-11-08-handoff.md`。
 - 核心功能的规格和工单拆完了（2026-11-11）：规格是 issue [#13](https://github.com/bilixuesheng/SeekCloud/issues/13)，工单 #14–#56 都是它的子 issue，正文第一行写着被哪些工单阻塞。读工单时正文和评论一起读。
-  - #14（测试机）、#15（把 `seekcloud-dsh` 改成公开仓库）要用户本人做，宿主机和 dsh 相关的工单都等它们。
-  - 现在就能开工的：#16（会话页动效核对）、#19（顶栏、标题菜单和会话信息）、#20（模型和思考强度的弹层）。
-  - 仓库里还没有 `ready-for-human` 这个标签，#14、#15 没打标签。
+  - #14（测试机）要用户本人做，宿主机相关的工单都等它。#15 已完成：用户 2026-11-13 重建了公开仓库 `bilixuesheng/seekcloud-dsh`（只有一个 README），云端会话能推送。
+  - 已完成：#16（会话页动效核对）、#19（顶栏、标题菜单和会话信息）、#20（模型和思考强度的弹层）。
+  - 现在就能开工的：#17（通用镜像和 dsh 修改版基线）。
+  - 仓库里还没有 `ready-for-human` 这个标签，#14 没打标签。
 - AI 标识两个开关的规格和工单也拆了：规格 [#57](https://github.com/bilixuesheng/SeekCloud/issues/57)，工单 #58（已完成）、#59。八项新功能里只有这一项没有待定的事，所以先写了。
 - 2026-11-11 做了一次复查，记在 `docs/roadmap/2026-11-11-review.md`：界面上查出来并改掉的问题、路线图没覆盖到的地方（待定的每条都有建议）、安全排查的结论。写新功能的规格之前先读它。
 - **接下来**：
   1. 请用户定复查文档里标"待定"的几条（花费上限、哪些人的评论能唤醒 Agent、两步验证、中国大陆的网络、没有公网地址的部署、往沙箱里传文件等）。它们会影响下面几份规格。
-  2. 实现现在能开工的工单（#16、#19、#20）。#58（AI 标识开关的设置、下发和 GitHub 工具服务）已经做完。
+  2. 实现现在能开工的工单：#17（dsh 基线）。#16、#19、#20、#58 已经做完；宿主机那条线等 #14 的测试机。
   3. 其余七项新功能每项先写规格，再拆工单（AI 标识已经拆了，见上）：
   - 网页图形化部署：Linux 一条命令、Windows 一条 PowerShell 命令，其余在网页向导里完成；
   - 多渠道通知：SMTP 邮件、PWA 推送、飞书/钉钉/企业微信机器人、通用 Webhook；
@@ -51,7 +52,7 @@
 - Agent 回复里的图片只有 GitHub 和主站自己的直接显示，别的来源点了才加载（`session/Markdown.tsx` 的 `trustedImageHost`）：图片地址是 Agent 写的，直接加载等于给了它一条往外送数据的路。
 - 要看界面时，可以用假 GitHub、假宿主机起一个真主站来截图：照 `apps/site/src/testing/test-app.ts` 的写法建 `createApp()`，再挂上 `dist/client` 的静态文件。
 - 接口出错时统一返回 `{ error: { code, message } }`：`code` 给程序判断，`message` 是给人看的中文。用 `apps/site/src/server/errors.ts` 的 `apiError()`。
-- 全站设置（管理员在设置窗口里改的配置）存在 `settings` 表里，一项一行，读写都走 `apps/site/src/server/settings.ts`；接口在 `routes/settings.ts`（`/api/settings/...`）。现在有 AI 标识的两个开关：随准备沙箱的命令下发给宿主机，改了以后给沙箱还开着的会话再发一次 `set_ai_labels`。
+- 全站设置（管理员在设置窗口里改的配置）存在 `settings` 表里，一项一行，读写都走 `apps/site/src/server/settings.ts`；接口在 `routes/settings.ts`（`/api/settings/...`）。现在有 AI 标识的两个开关（随准备沙箱的命令下发给宿主机，改了以后给沙箱还开着的会话再发一次 `set_ai_labels`）和新会话默认的思考强度（`/api/models` 的 `defaultEffort` 也是它，发起会话时没指定思考强度就用它）。
 - 加表：改 `apps/site/src/server/db/schema.ts`，然后在 `apps/site` 里运行 `pnpm db:generate --name <名字>` 生成迁移。主站启动时自动跑迁移。
 - 后台的定期任务在 `apps/site/src/server/maintenance.ts`：打包数据导出、删过期的导出、删满 180 天的访问记录。main.ts 每分钟跑一次；测试里调用 `t.runMaintenance()`，导出的压缩包写在 `t.dataDir`（临时目录）。
 - 主站的环境变量：`SEEKCLOUD_DATA_DIR`（主站的数据目录，导出的压缩包放这里，默认 `./data`，要放在会备份的磁盘上）、`DATABASE_URL`、`PORT`（默认 3000）、`SEEKCLOUD_VERSION`、`NODE_ENV=production`（登录 Cookie 只走 HTTPS）、`SEEKCLOUD_SECRET_KEY`（加密令牌用的 32 字节密钥，base64，用 `openssl rand -base64 32` 生成）、`PUBLIC_URL`（主站对外的地址）、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_APP_SLUG`、`GITHUB_WEBHOOK_SECRET`（没配 GitHub 时，GitHub 相关功能直接报错）。部署时只有一层反向代理，它把客户端地址追加到 `X-Forwarded-For` 末尾；频率限制只认最后一个值。
