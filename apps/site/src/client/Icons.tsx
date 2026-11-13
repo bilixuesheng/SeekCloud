@@ -190,3 +190,45 @@ export const ArrowDownIcon = () => (
     <path d="M8 3v9.5M3.8 8.5 8 12.7l4.2-4.2" {...line} strokeWidth={1.9} />
   </svg>
 );
+
+export const ListIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+    <path d="M6.5 5h8M6.5 9h8M6.5 13h8" {...line} />
+    <circle cx="3.6" cy="5" r="0.9" fill="currentColor" />
+    <circle cx="3.6" cy="9" r="0.9" fill="currentColor" />
+    <circle cx="3.6" cy="13" r="0.9" fill="currentColor" />
+  </svg>
+);
+
+export const PencilIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M10.5 3 13 5.5 6 12.5H3.5V10zM9 4.5 11.5 7" {...line} />
+  </svg>
+);
+
+export const LinkIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M6.8 9.2a2.6 2.6 0 0 0 3.7 0l2.2-2.2a2.6 2.6 0 0 0-3.7-3.7l-.9.9M9.2 6.8a2.6 2.6 0 0 0-3.7 0L3.3 9a2.6 2.6 0 0 0 3.7 3.7l.9-.9"
+      {...line}
+    />
+  </svg>
+);
+
+export const ArchiveIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M2.5 3.5h11v3h-11zM3.5 6.5v6h9v-6M6.5 9h3" {...line} />
+  </svg>
+);
+
+export const TrashIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4" {...line} />
+  </svg>
+);
+
+export const ExternalIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M9 3h4v4M13 3 7.5 8.5M11.5 9.5V13H3V4.5h3.5" {...line} />
+  </svg>
+);
