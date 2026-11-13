@@ -202,6 +202,78 @@ export class Sessions {
     };
   }
 
+  /** 改名。标题不动"最近有动静"的时间，改了名的会话不会跳到列表最上面。 */
+  async rename(userId: string, shortId: string, title: string): Promise<Result<Session>> {
+    const [row] = await this.#deps.db
+      .update(sessions)
+      .set({ title })
+      .where(and(eq(sessions.userId, userId), eq(sessions.shortId, shortId)))
+      .returning();
+    if (!row) return { ok: false, error: "session_not_found" };
+    this.#changes.emit(userId, shortId);
+    return { ok: true, value: (await this.#views([row]))[0] as Session };
+  }
+
+  /**
+   * 归档：正在跑的回合停下，沙箱删掉，会话不再接收消息。已经归档的再归档一次什么都不做。
+   * 排队的消息留着，取消归档以后发消息唤醒时一起处理。
+   */
+  async archive(userId: string, shortId: string): Promise<Result<Session>> {
+    const done = await this.#deps.db.transaction(async (tx) => {
+      const session = await this.#lockOwn(tx, userId, shortId);
+      if (!session) return undefined;
+      if (session.status === "archived") return { session, changed: false };
+      const number = await this.#stopRunningTurn(tx, session.id);
+      await this.#setStatus(tx, session.id, number, { status: "archived", detail: null });
+      return { session, changed: true };
+    });
+    if (!done) return { ok: false, error: "session_not_found" };
+    if (done.changed) {
+      this.#notify(done.session);
+      this.#deps.host?.send({ type: "destroy_sandbox", sessionId: done.session.id });
+    }
+    return { ok: true, value: (await this.#view(done.session.id)) as Session };
+  }
+
+  /** 取消归档：回到休眠，发消息就唤醒。没归档的会话不动。 */
+  async unarchive(userId: string, shortId: string): Promise<Result<Session>> {
+    const done = await this.#deps.db.transaction(async (tx) => {
+      const session = await this.#lockOwn(tx, userId, shortId);
+      if (!session) return undefined;
+      if (session.status !== "archived") return { session, changed: false };
+      await this.#setStatus(tx, session.id, null, { status: "dormant", detail: null });
+      return { session, changed: true };
+    });
+    if (!done) return { ok: false, error: "session_not_found" };
+    if (done.changed) this.#notify(done.session);
+    return { ok: true, value: (await this.#view(done.session.id)) as Session };
+  }
+
+  /** 删除：会话的事件、回合、排队的消息一起删掉，沙箱删掉。GitHub 上的分支和 PR 不动。 */
+  async remove(userId: string, shortId: string): Promise<Result<void>> {
+    const session = await this.#deps.db.transaction(async (tx) => {
+      const row = await this.#lockOwn(tx, userId, shortId);
+      if (row) await tx.delete(sessions).where(eq(sessions.id, row.id));
+      return row;
+    });
+    if (!session) return { ok: false, error: "session_not_found" };
+    this.#notify(session);
+    this.#deps.host?.send({ type: "destroy_sandbox", sessionId: session.id });
+    return { ok: true, value: undefined };
+  }
+
+  /** 把正在跑的回合记成"已停止"，返回它的序号；没有正在跑的回合时返回 null。 */
+  async #stopRunningTurn(tx: Tx, sessionId: string): Promise<number | null> {
+    const [turn] = await tx
+      .update(turns)
+      .set({ status: "stopped", endedAt: this.#deps.clock.now() })
+      .where(and(eq(turns.sessionId, sessionId), eq(turns.status, "running")))
+      .returning({ number: turns.number });
+    if (!turn) return null;
+    await this.#append(tx, sessionId, turn.number, { type: "turn.ended", reason: "stopped" });
+    return turn.number;
+  }
+
   /** 订阅这个用户的会话列表变化：listener 收到变了的会话的短 ID。 */
   subscribeChanges(userId: string, listener: (shortId: string) => void): () => void {
     return this.#changes.on(userId, listener);
@@ -236,24 +308,23 @@ export class Sessions {
         return { kind: "started" as const, session, command };
       }
       if (session.status === "running" || session.status === "queued") {
-        const [row] = await tx
-          .insert(queuedMessages)
-          .values({
-            sessionId: session.id,
-            text: body,
-            model: message.model ?? null,
-            effort: message.effort ?? null,
-            createdAt: this.#deps.clock.now(),
-          })
-          .returning({ id: queuedMessages.id });
-        const queued = { id: (row as { id: string }).id, text: body };
-        await this.#append(tx, session.id, null, { type: "message.queued", ...queued });
+        const queued = await this.#enqueue(tx, session, { ...message, text: body });
         return { kind: "queued" as const, session, queued };
+      }
+      if (session.status === "dormant") {
+        // 休眠的会话没有沙箱：消息先排队，会话回到排队中去准备沙箱，沙箱好了再合成回合。
+        const queued = await this.#enqueue(tx, session, { ...message, text: body });
+        await this.#setStatus(tx, session.id, null, { status: "queued", detail: null });
+        return { kind: "woken" as const, session, queued };
       }
       return "session_closed" as const;
     });
     if (typeof outcome === "string") return { ok: false, error: outcome };
     this.#notify(outcome.session);
+    if (outcome.kind === "woken") {
+      await this.#dispatch(outcome.session.id);
+      return { ok: true, value: { queued: outcome.queued } };
+    }
     if (outcome.kind === "queued") return { ok: true, value: { queued: outcome.queued } };
     this.#deps.host?.send(outcome.command);
     return { ok: true, value: { started: (await this.#view(outcome.session.id)) as Session } };
@@ -483,20 +554,42 @@ export class Sessions {
       .where(and(eq(turns.sessionId, session.id), eq(turns.status, "running")))
       .orderBy(desc(turns.number))
       .limit(1);
-    await this.#setStatus(tx, session.id, turn?.number ?? null, {
-      status: "running",
-      detail: null,
-    });
-    return (
-      turn && {
-        type: "start_turn",
+    if (!turn) {
+      // 唤醒休眠的会话：没有等着的回合，把排队的消息合成一个；没有消息就等管理员说话。
+      const next = await this.#startQueued(tx, session);
+      if (!next) await this.#setStatus(tx, session.id, null, { status: "waiting", detail: null });
+      return next;
+    }
+    await this.#setStatus(tx, session.id, turn.number, { status: "running", detail: null });
+    return {
+      type: "start_turn",
+      sessionId: session.id,
+      turnId: turn.id,
+      text: turn.input,
+      model: session.model,
+      effort: session.effort,
+    };
+  }
+
+  /** 把一条消息排进队里，并记一条"已排队"的事件。 */
+  async #enqueue(
+    tx: Tx,
+    session: SessionRow,
+    message: { text: string; model?: string; effort?: ThinkingEffort },
+  ): Promise<{ id: string; text: string }> {
+    const [row] = await tx
+      .insert(queuedMessages)
+      .values({
         sessionId: session.id,
-        turnId: turn.id,
-        text: turn.input,
-        model: session.model,
-        effort: session.effort,
-      }
-    );
+        text: message.text,
+        model: message.model ?? null,
+        effort: message.effort ?? null,
+        createdAt: this.#deps.clock.now(),
+      })
+      .returning({ id: queuedMessages.id });
+    const queued = { id: (row as { id: string }).id, text: message.text };
+    await this.#append(tx, session.id, null, { type: "message.queued", ...queued });
+    return queued;
   }
 
   async #sandboxFailed(tx: Tx, session: SessionRow, error: SafeError): Promise<void> {

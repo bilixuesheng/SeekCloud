@@ -211,6 +211,57 @@ const sendNowRoute = createRoute({
   },
 });
 
+const Title = z.string().trim().min(1, "标题不能为空").max(100, "标题最长 100 个字");
+
+const renameRoute = createRoute({
+  method: "post",
+  path: "/sessions/{shortId}/rename",
+  summary: "给会话改名",
+  request: { params: ShortIdParam, body: json(z.object({ title: Title })) },
+  responses: {
+    200: { description: "已改名", ...json(Session) },
+    400: errorResponse("标题为空或太长"),
+    401: errorResponse("没有登录"),
+    404: errorResponse("会话不存在"),
+  },
+});
+
+const archiveRoute = createRoute({
+  method: "post",
+  path: "/sessions/{shortId}/archive",
+  summary: "归档：正在跑的回合停下，沙箱删掉，会话不再接收消息",
+  request: { params: ShortIdParam },
+  responses: {
+    200: { description: "已归档（已经归档的再归档一次不变）", ...json(Session) },
+    401: errorResponse("没有登录"),
+    404: errorResponse("会话不存在"),
+  },
+});
+
+const unarchiveRoute = createRoute({
+  method: "post",
+  path: "/sessions/{shortId}/unarchive",
+  summary: "取消归档：会话回到休眠，发消息就唤醒",
+  request: { params: ShortIdParam },
+  responses: {
+    200: { description: "已取消归档（没归档的会话不变）", ...json(Session) },
+    401: errorResponse("没有登录"),
+    404: errorResponse("会话不存在"),
+  },
+});
+
+const deleteRoute = createRoute({
+  method: "post",
+  path: "/sessions/{shortId}/delete",
+  summary: "删除会话：对话记录一起删掉，GitHub 上的分支和 PR 不动",
+  request: { params: ShortIdParam },
+  responses: {
+    204: { description: "已删除" },
+    401: errorResponse("没有登录"),
+    404: errorResponse("会话不存在"),
+  },
+});
+
 const fail = (error: SessionError) => ({
   body: apiError(error, sessionErrors[error].message),
   status: sessionErrors[error].status,
@@ -296,6 +347,8 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
             changed.delete(shortId);
             const session = await sessions.get(user.id, shortId);
             if (session) await stream.writeSSE({ event: "session", data: JSON.stringify(session) });
+            // 找不到就是删掉了：告诉浏览器从列表里拿掉。
+            else await stream.writeSSE({ event: "removed", data: JSON.stringify({ shortId }) });
           }
         });
         const unsubscribe = sessions.subscribeChanges(user.id, (shortId) => {
@@ -377,5 +430,37 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
         return c.json(body, status as 404 | 409);
       }
       return c.json({ sent: true as const }, 200);
+    })
+    .openapi(renameRoute, async (c) => {
+      const user = await currentUser(deps, c);
+      if (!user) return c.json(notLoggedIn, 401);
+      const result = await sessions.rename(
+        user.id,
+        c.req.valid("param").shortId,
+        c.req.valid("json").title,
+      );
+      if (!result.ok) return c.json(fail(result.error).body, 404);
+      return c.json(result.value, 200);
+    })
+    .openapi(archiveRoute, async (c) => {
+      const user = await currentUser(deps, c);
+      if (!user) return c.json(notLoggedIn, 401);
+      const result = await sessions.archive(user.id, c.req.valid("param").shortId);
+      if (!result.ok) return c.json(fail(result.error).body, 404);
+      return c.json(result.value, 200);
+    })
+    .openapi(unarchiveRoute, async (c) => {
+      const user = await currentUser(deps, c);
+      if (!user) return c.json(notLoggedIn, 401);
+      const result = await sessions.unarchive(user.id, c.req.valid("param").shortId);
+      if (!result.ok) return c.json(fail(result.error).body, 404);
+      return c.json(result.value, 200);
+    })
+    .openapi(deleteRoute, async (c) => {
+      const user = await currentUser(deps, c);
+      if (!user) return c.json(notLoggedIn, 401);
+      const result = await sessions.remove(user.id, c.req.valid("param").shortId);
+      if (!result.ok) return c.json(fail(result.error).body, 404);
+      return c.body(null, 204);
     });
 }
