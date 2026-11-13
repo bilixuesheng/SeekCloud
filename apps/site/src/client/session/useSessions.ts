@@ -24,6 +24,11 @@ export function useSessions() {
       setLoaded(true);
     });
     source.addEventListener("session", (e) => upsert(JSON.parse(e.data) as Session));
+    // 删掉的会话（在这台或别的设备上删的）从列表里拿掉
+    source.addEventListener("removed", (e) => {
+      const { shortId } = JSON.parse(e.data) as { shortId: string };
+      setSessions((list) => list.filter((s) => s.shortId !== shortId));
+    });
     return () => source.close();
   }, [upsert]);
 

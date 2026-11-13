@@ -32,6 +32,7 @@ const Session = z
     repos: z.array(Repo).openapi({ description: "第一个是主仓库" }),
     model: z.string(),
     effort: z.enum(THINKING_EFFORTS),
+    environmentName: z.string().nullable().openapi({ description: "会话用的环境的名字" }),
     createdAt: z.string().openapi({ format: "date-time" }),
     updatedAt: z.string().openapi({ format: "date-time" }),
   })

@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ApiError, api } from "./api";
 import { takeAuthResult } from "./auth-results";
-import { LogoutIcon, MenuIcon, PlusIcon, SearchIcon, SettingsIcon } from "./Icons";
+import {
+  ChevronRightIcon,
+  LogoutIcon,
+  MenuIcon,
+  PlusIcon,
+  SearchIcon,
+  SettingsIcon,
+} from "./Icons";
 import { LoginPage } from "./LoginPage";
 import { Brand, Logo } from "./Logo";
 import { LegalLink, LegalPage } from "./legal/LegalPage";
+import { Collapse } from "./Motion";
 import { navigate, pathOf, type Route, useRoute } from "./router";
 import { NewSession } from "./session/NewSession";
 import { SessionList } from "./session/SessionList";
@@ -97,6 +105,10 @@ function Shell({
           s.repos.some((r) => r.fullName.toLowerCase().includes(query)),
       )
     : sessions;
+  // 已归档的会话收在列表最下面的一组里；搜索时一起搜
+  const archived = query ? [] : shown.filter((s) => s.status === "archived");
+  const listed = query ? shown : shown.filter((s) => s.status !== "archived");
+  const [showArchived, setShowArchived] = useState(false);
   const newSession = () => {
     navigate("/");
     setDrawer(false);
@@ -132,12 +144,36 @@ function Shell({
         <div className="sidebar-section">最近</div>
         <div className="sidebar-list">
           <SessionList
-            sessions={shown}
+            sessions={listed}
             loaded={loaded}
             currentId={currentId}
             searching={query !== ""}
             onPick={() => setDrawer(false)}
           />
+          {archived.length > 0 && (
+            <div className="sidebar-archived">
+              <button
+                type="button"
+                className={`sidebar-archived-toggle${showArchived ? " open" : ""}`}
+                aria-expanded={showArchived}
+                onClick={() => setShowArchived((v) => !v)}
+              >
+                <span className="sidebar-archived-chevron">
+                  <ChevronRightIcon />
+                </span>
+                已归档
+                <span className="sidebar-archived-count">{archived.length}</span>
+              </button>
+              <Collapse open={showArchived}>
+                <SessionList
+                  sessions={archived}
+                  loaded
+                  currentId={currentId}
+                  onPick={() => setDrawer(false)}
+                />
+              </Collapse>
+            </div>
+          )}
         </div>
         <AccountFoot
           name={me.githubLogin ?? "管理员"}
@@ -159,7 +195,8 @@ function Shell({
       />
 
       <div className="main" inert={settingsOpen}>
-        <header className="mobile-bar">
+        {/* 会话页有自己的顶栏（会话标题和菜单），这条只在首页用 */}
+        <header className={`mobile-bar${page.page === "session" ? " hidden" : ""}`}>
           <button
             type="button"
             className="icon-button"
@@ -169,16 +206,14 @@ function Shell({
           >
             <MenuIcon />
           </button>
-          <span className="mobile-title">
-            {page.page === "session" ? (current?.title ?? "") : "新会话"}
-          </span>
+          <span className="mobile-title">新会话</span>
           <button type="button" className="icon-button" aria-label="新会话" onClick={newSession}>
             <PlusIcon size={20} />
           </button>
         </header>
 
         {page.page === "session" ? (
-          <SessionPage key={page.id} id={page.id} listed={current} />
+          <SessionPage key={page.id} id={page.id} listed={current} onMenu={() => setDrawer(true)} />
         ) : (
           <main className="home">
             <div className="home-inner">

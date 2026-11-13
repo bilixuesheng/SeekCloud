@@ -754,6 +754,19 @@ export class Sessions {
         ),
       )
       .orderBy(asc(sessionRepos.position));
+    const environmentIds = [
+      ...new Set(rows.flatMap((r) => (r.environmentId ? [r.environmentId] : []))),
+    ];
+    const environmentNames = new Map(
+      environmentIds.length === 0
+        ? []
+        : (
+            await this.#deps.db
+              .select({ id: environments.id, name: environments.name })
+              .from(environments)
+              .where(inArray(environments.id, environmentIds))
+          ).map((e) => [e.id, e.name]),
+    );
     return rows.map((r) => ({
       shortId: r.shortId,
       title: r.title,
@@ -770,6 +783,7 @@ export class Sessions {
         })),
       model: r.model,
       effort: r.effort,
+      environmentName: (r.environmentId && environmentNames.get(r.environmentId)) || null,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));

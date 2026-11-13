@@ -176,6 +176,8 @@ export interface Session extends SessionState {
   repos: Array<SessionRepo & { pullRequest: PullRequestRef | null }>;
   model: string;
   effort: ThinkingEffort;
+  /** 会话用的环境的名字；环境被删掉了时为 null。 */
+  environmentName: string | null;
   createdAt: string;
   updatedAt: string;
 }

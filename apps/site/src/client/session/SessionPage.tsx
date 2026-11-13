@@ -13,10 +13,8 @@ import {
 import { type ApiError, api } from "../api";
 import { CopyButton, useCopy } from "../copy";
 import { useDraft } from "../draft";
-import { GitHubMark } from "../GitHubMark";
 import {
   ArrowDownIcon,
-  BranchIcon,
   CheckIcon,
   ChevronRightIcon,
   CloseIcon,
@@ -30,8 +28,8 @@ import { Composer } from "./Composer";
 import { contentKey, ScrollFollower } from "./follow-scroll";
 import { LiveMarkdown, SessionLinks } from "./Markdown";
 import { effortLabels, ModelPicker } from "./ModelPicker";
-import { PullRequestBadge, pullRequestText } from "./PullRequestBadge";
 import { fullTime, relativeTime } from "./relative-time";
+import { SessionHeader } from "./SessionHeader";
 import {
   buildTimeline,
   summarizeTools,
@@ -55,7 +53,16 @@ const placeholders = {
 } as const;
 
 /** 会话页：消息、思考、工具调用、待办清单，底下是输入框。 */
-export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
+export function SessionPage({
+  id,
+  listed,
+  onMenu,
+}: {
+  id: string;
+  listed?: Session;
+  /** 手机上打开侧栏。 */
+  onMenu: () => void;
+}) {
   const [fetched, setFetched] = useState<Session>();
   const [missing, setMissing] = useState(false);
   const session = listed ?? fetched;
@@ -145,35 +152,7 @@ export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
 
   return (
     <div className="session-page">
-      <header className="session-header">
-        <div className="session-header-text">
-          <h1 className="session-title">{session?.title ?? ""}</h1>
-          {repo && (
-            <p className="session-meta">
-              <span className="meta-item">
-                <GitHubMark size={12} />
-                {repo.fullName}
-              </span>
-              <span className="meta-item mono">
-                <BranchIcon />
-                {repo.baseBranch} → {repo.branch}
-              </span>
-              {repo.access === "read" && <span className="chip-badge">只读</span>}
-              {repo.pullRequest && (
-                <a
-                  className="meta-item meta-link"
-                  href={`https://github.com/${repo.fullName}/pull/${repo.pullRequest.number}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <PullRequestBadge pr={repo.pullRequest} size={12} />
-                  {pullRequestText(repo.pullRequest)}
-                </a>
-              )}
-            </p>
-          )}
-        </div>
-      </header>
+      <SessionHeader id={id} session={session} onMenu={onMenu} />
 
       <div className="timeline" ref={scroller} {...follow.handlers}>
         <SessionLinks.Provider
@@ -236,6 +215,7 @@ export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
       <footer className="session-footer">
         <ToBottom away={follow.away} working={working} onClick={follow.toBottom} />
         <div className="session-footer-inner">
+          {status === "archived" && <ArchivedNote id={id} onError={setError} />}
           {broken && (
             <p className="alert" role="alert">
               与服务器的连接已断开，请刷新页面。
@@ -270,6 +250,34 @@ export function SessionPage({ id, listed }: { id: string; listed?: Session }) {
         </div>
       </footer>
     </div>
+  );
+}
+
+/** 已归档的会话：输入框上面一行说明，可以直接取消归档（之后发消息就唤醒）。 */
+function ArchivedNote({ id, onError }: { id: string; onError: (message: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const unarchive = async () => {
+    setBusy(true);
+    try {
+      await api(`/api/sessions/${id}/unarchive`, {});
+    } catch (e) {
+      onError((e as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <p className="archived-note">
+      会话已归档，无法发送消息。
+      <button
+        type="button"
+        className="pill-button"
+        disabled={busy}
+        onClick={() => void unarchive()}
+      >
+        取消归档
+      </button>
+    </p>
   );
 }
 

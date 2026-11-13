@@ -153,6 +153,11 @@ describe("会话的改名、归档、取消归档、删除", () => {
     expect(again.status).toBe(404);
   });
 
+  it("会话带着它用的环境的名字（会话信息卡片显示）", async () => {
+    const session = await start();
+    expect((await get(session.shortId)).environmentName).toBe("默认环境");
+  });
+
   it("没登录、别人的会话都不行", async () => {
     const session = await start();
     const stranger = t.browser();
