@@ -49,7 +49,7 @@ describe("模型和思考强度的按钮", () => {
       />,
     );
 
-  it("写模型名加档位，\"最高\"单独一个样式（蓝紫渐变）", () => {
+  it('写模型名加档位，"最高"单独一个样式（蓝紫渐变）', () => {
     expect(render("high")).toContain('DeepSeek Flash <span class="trigger-effort high">高</span>');
     expect(render("max")).toContain('<span class="trigger-effort max">最高</span>');
   });
