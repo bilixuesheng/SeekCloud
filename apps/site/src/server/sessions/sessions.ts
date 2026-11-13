@@ -13,6 +13,7 @@ import type {
   SessionState,
   ThinkingEffort,
 } from "@seekcloud/protocol";
+import { fitEffort } from "@seekcloud/protocol";
 import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import type { AppDeps } from "../app";
 import type { Tx } from "../db/client";
@@ -26,8 +27,8 @@ import {
 } from "../db/schema";
 import { githubNotConnected } from "../errors";
 import { withGitHubToken } from "../github/tokens";
-import { getAiLabels } from "../settings";
-import { DEFAULT_EFFORT, DEFAULT_MODEL, findModel } from "./models";
+import { getAiLabels, getDefaultEffort } from "../settings";
+import { DEFAULT_MODEL, findModel } from "./models";
 import { toSafeError } from "./safe-error";
 import { Topic } from "./topic";
 
@@ -121,8 +122,10 @@ export class Sessions {
     const environmentId = await this.#environmentFor(userId, input.environmentId);
     if (!environmentId) return { ok: false, error: "environment_not_found" };
     const model = findModel(input.model ?? DEFAULT_MODEL);
-    const effort = input.effort ?? DEFAULT_EFFORT;
-    if (!model?.efforts.includes(effort)) return { ok: false, error: "model_not_found" };
+    if (!model) return { ok: false, error: "model_not_found" };
+    // 没指定思考强度就用设置里的默认值；模型不支持那一档时换成最近的一档
+    const effort = input.effort ?? fitEffort(model.efforts, await getDefaultEffort(this.#deps));
+    if (!effort || !model.efforts.includes(effort)) return { ok: false, error: "model_not_found" };
 
     // 装了 App 的仓库可以推送；没装的公开仓库只读挂载。
     const checked = await withGitHubToken(this.#deps, userId, async (token) => {

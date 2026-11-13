@@ -24,6 +24,8 @@
   --accent-fg: #3656e6;
   --on-accent: #ffffff;
   --accent-soft: #eaf0ff;
+  /* "最高"那一档的蓝紫渐变（文字用） */
+  --max-gradient: linear-gradient(90deg, var(--accent), #8b5cf6, #c04ff0);
   --glow: #dde7ff;
   --success: #1f9d5c;
   --merged: #8250df;
@@ -983,14 +985,6 @@ input:not([type="range"]):focus {
   text-overflow: ellipsis;
 }
 
-.chip-sub {
-  color: var(--muted);
-}
-
-.chip-spark svg {
-  color: var(--accent);
-}
-
 .chip-badge {
   flex-shrink: 0;
   font-size: 11px;
@@ -1152,34 +1146,179 @@ input:not([type="range"]):focus {
   border-color: color-mix(in srgb, var(--warning) 35%, transparent);
 }
 
-/* 模型选择在输入框下面那一行的右边，往上弹 */
+.popover-divider {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}
+
+/* 模型和思考强度的弹层：在输入框下面那一行的右边，往上弹，手机上不超出屏幕 */
 .model-popover {
   position: absolute;
   bottom: calc(100% + 8px);
   right: -4px;
-  width: min(330px, calc(100vw - 28px));
+  width: min(320px, calc(100vw - 24px));
   padding: 8px;
 }
 
-.popover-label {
-  padding: 4px 8px;
-  font-size: 12px;
-  font-weight: 550;
-  color: var(--faint);
+.effort-page {
+  padding: 4px 6px 8px;
 }
 
-.model-options {
+.effort-head {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.effort-head .icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* 档位名、模型名是一个按钮，点了滑到模型列表 */
+.effort-title {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 46px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  transition: background 0.15s;
+}
+
+.effort-title:hover {
+  background: var(--hover);
+}
+
+/* 档位名和"最高"的提示叠在同一格里，交叉淡入淡出 */
+.effort-title-main,
+.effort-hint-max {
+  grid-area: 1 / 1;
+  transition:
+    opacity 0.3s var(--ease-out),
+    filter 0.3s var(--ease-out),
+    transform 0.3s var(--ease-out);
+}
+
+.effort-title-main {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.effort-title-main.out {
+  opacity: 0;
+  filter: blur(3px);
+  transform: translateY(-4px);
+}
+
+.effort-hint-max {
+  opacity: 0;
+  filter: blur(3px);
+  transform: translateY(4px);
+  font-size: 14.5px;
+  font-weight: 650;
+  text-align: center;
+  background: var(--max-gradient);
+  background-clip: text;
+  color: transparent;
+}
+
+.effort-hint-max.in {
+  opacity: 1;
+  filter: none;
+  transform: none;
+}
+
+.effort-name {
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--accent-fg);
+}
+
+/* "最高"两个字用蓝紫渐变 */
+.effort-name.max,
+.trigger-effort.max {
+  background: var(--max-gradient);
+  background-clip: text;
+  color: transparent;
+}
+
+.effort-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.effort-model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.effort-model svg {
+  flex-shrink: 0;
+  width: 11px;
+}
+
+.effort-note {
+  margin: 10px 2px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 输入框下面的按钮：模型名加档位 */
+.composer-below > .picker {
+  margin-left: auto;
+}
+
+.model-trigger {
+  color: var(--fg-2);
+}
+
+.trigger-effort {
+  color: var(--muted);
+}
+
+.trigger-effort.max {
+  font-weight: 600;
+}
+
+.model-page {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0;
+}
+
+.model-page-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-2);
 }
 
 .model-option {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px;
+  padding: 8px 10px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 10px;
   background: none;
   text-align: left;
   transition: background 0.15s;
@@ -1210,108 +1349,90 @@ input:not([type="range"]):focus {
   color: var(--muted);
 }
 
-.popover-divider {
-  height: 1px;
-  margin: 6px 4px;
-  background: var(--border);
+/*
+ * 滑块的位置是注册过的 CSS 变量 --r（0 到 1），能直接过渡；
+ * --p 是往"最高"去的程度（"高"到"最高"之间从 0 到 1），填充的紫色、圆点的光都跟着它变。
+ */
+@property --r {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
 }
 
-.effort {
-  padding: 2px 8px 6px;
-}
-
-.effort-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 0 -8px;
-  padding-right: 8px;
-}
-
-.effort-value {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent-fg);
-}
-
-.effort-slider {
-  --fill: 66%;
-  width: 100%;
-  height: 22px;
-  margin: 6px 0 2px;
-  background: transparent;
-  appearance: none;
+.effort-track {
+  --p: clamp(0, calc((var(--r) - 0.6667) * 3), 1);
+  position: relative;
+  height: 32px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+  overflow: hidden;
+  touch-action: none;
   cursor: pointer;
+  transition: --r 0.34s var(--ease-out);
 }
 
-.effort-slider::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 999px;
-  background: linear-gradient(to right, var(--accent) var(--fill), var(--active) var(--fill));
+.effort-track.dragging {
+  transition: none;
 }
 
-.effort-slider::-moz-range-track {
-  height: 4px;
-  border-radius: 999px;
-  background: linear-gradient(to right, var(--accent) var(--fill), var(--active) var(--fill));
-}
-
-.effort-slider::-webkit-slider-thumb {
-  appearance: none;
-  width: 18px;
-  height: 18px;
-  margin-top: -7px;
+/* 每一档的小点，填充拖过去就盖住；模型不支持的那一档是空心的 */
+.effort-stop {
+  position: absolute;
+  top: 50%;
+  left: calc(16px + (100% - 32px) * var(--i));
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
   border-radius: 50%;
-  background: var(--surface);
-  border: 2px solid var(--accent);
-  box-shadow: var(--shadow-sm);
+  background: var(--border-strong);
 }
 
-.effort-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--surface);
-  border: 2px solid var(--accent);
-}
-
-.effort-slider:focus-visible {
-  outline: none;
-}
-
-.effort-slider:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 4px var(--focus);
-}
-
-.effort-ticks {
-  display: flex;
-  justify-content: space-between;
-  margin: 0 -6px;
-}
-
-.effort-ticks button {
-  padding: 2px 6px;
-  border: 0;
-  border-radius: 6px;
+.effort-stop.unsupported {
   background: none;
-  font-size: 12px;
-  color: var(--muted);
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
 }
 
-.effort-ticks button:hover {
-  color: var(--fg);
+/* 填充：关闭、低、高是蓝色；往"最高"拉时，上面一层蓝紫渐变渐渐显出来 */
+.effort-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #4a6cf7, #3f63f3);
+  clip-path: inset(0 calc((100% - 32px) * (1 - var(--r))) 0 0 round 16px);
+  opacity: clamp(0, calc(var(--r) * 8), 1);
 }
 
-.effort-ticks button.current {
-  color: var(--accent-fg);
-  font-weight: 600;
+.effort-fill-max {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #3c62f4 0%, #5a5cf2 40%, #8150f0 75%, #b04cf0 100%);
+  opacity: var(--p);
 }
 
-.effort-hint {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--muted);
-  text-wrap: pretty;
+.effort-particles {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.effort-thumb {
+  position: absolute;
+  top: 4px;
+  left: calc(4px + (100% - 32px) * var(--r));
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 1px 3px rgb(20 30 80 / 25%),
+    0 0 calc(var(--p) * 12px) rgb(255 255 255 / calc(var(--p) * 85%));
+}
+
+.effort-thumb:focus-visible {
+  outline: 3px solid var(--focus);
 }
 
 @media (max-width: 899px) {
@@ -1419,18 +1540,6 @@ input:not([type="range"]):focus {
 .composer-below-options .chip {
   flex-shrink: 0;
   max-width: 44vw;
-}
-
-.picker.plain {
-  margin-left: auto;
-}
-
-.picker.plain .chip {
-  color: var(--fg-2);
-}
-
-.picker.plain .chip-spark {
-  display: none;
 }
 
 @media (max-width: 899px) {
@@ -2755,6 +2864,75 @@ details > summary::-webkit-details-marker {
   color: var(--fg);
 }
 
+/* 一排几个选项连在一起的单选（默认思考强度） */
+.segmented {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 2px;
+  margin: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.segment {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 34px;
+  border-radius: 9px;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background 0.2s var(--ease-out),
+    color 0.2s var(--ease-out);
+}
+
+.segment input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segment:hover {
+  color: var(--fg);
+}
+
+.segment.current {
+  background: var(--surface);
+  color: var(--accent-fg);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+.segment.max.current .segment-label {
+  background: var(--max-gradient);
+  background-clip: text;
+  color: transparent;
+}
+
+.segment:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+}
+
+.segmented:disabled .segment {
+  cursor: default;
+}
+
+.settings-group-hint {
+  margin: 10px 2px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.settings-group .alert {
+  margin-top: 10px;
+}
+
 .theme-tiles {
   margin: 0;
   padding: 0;
@@ -3521,6 +3699,9 @@ a.button:active,
 
   .scrim,
   .serif-text,
+  .effort-track,
+  .effort-title-main,
+  .effort-hint-max,
   .pages.ready,
   .pages.ready .page,
   .collapse,

@@ -1,9 +1,16 @@
-import { createRoute } from "@hono/zod-openapi";
+import { createRoute, z } from "@hono/zod-openapi";
 import type { AppDeps } from "../app";
 import { currentUser } from "../auth/login-sessions";
 import { errorResponse, notLoggedIn } from "../errors";
 import type { Sessions } from "../sessions/sessions";
-import { AiLabelsValue, getAiLabels, setAiLabels } from "../settings";
+import {
+  AiLabelsValue,
+  EffortValue,
+  getAiLabels,
+  getDefaultEffort,
+  setAiLabels,
+  setDefaultEffort,
+} from "../settings";
 import { jsonBody as json, newRouter } from "./router";
 
 const AiLabels = AiLabelsValue.openapi("AiLabels", {
@@ -34,6 +41,33 @@ const putAiLabelsRoute = createRoute({
   },
 });
 
+const DefaultEffort = z
+  .object({ effort: EffortValue })
+  .openapi("DefaultEffort", { description: "新会话默认的思考强度" });
+
+const getDefaultEffortRoute = createRoute({
+  method: "get",
+  path: "/default-effort",
+  summary: "新会话默认的思考强度",
+  responses: {
+    200: { description: "没改过时是 high", ...json(DefaultEffort) },
+    401: errorResponse("没有登录"),
+  },
+});
+
+const putDefaultEffortRoute = createRoute({
+  method: "put",
+  path: "/default-effort",
+  summary: "修改新会话默认的思考强度",
+  description: "只影响之后发起的会话，已有的会话不变。",
+  request: { body: { ...json(DefaultEffort), required: true } },
+  responses: {
+    200: { description: "改好以后的值", ...json(DefaultEffort) },
+    400: errorResponse("请求格式不对"),
+    401: errorResponse("没有登录"),
+  },
+});
+
 /** 设置窗口里的全站设置。 */
 export function settingsRoutes(deps: AppDeps, sessions: Sessions) {
   return newRouter()
@@ -47,5 +81,15 @@ export function settingsRoutes(deps: AppDeps, sessions: Sessions) {
       await setAiLabels(deps, value);
       await sessions.aiLabelsChanged(value);
       return c.json(value, 200);
+    })
+    .openapi(getDefaultEffortRoute, async (c) => {
+      if (!(await currentUser(deps, c))) return c.json(notLoggedIn, 401);
+      return c.json({ effort: await getDefaultEffort(deps) }, 200);
+    })
+    .openapi(putDefaultEffortRoute, async (c) => {
+      if (!(await currentUser(deps, c))) return c.json(notLoggedIn, 401);
+      const { effort } = c.req.valid("json");
+      await setDefaultEffort(deps, effort);
+      return c.json({ effort }, 200);
     });
 }

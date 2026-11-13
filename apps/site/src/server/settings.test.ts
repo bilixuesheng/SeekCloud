@@ -78,3 +78,67 @@ describe("设置：AI 标识的两个开关", () => {
     });
   });
 });
+
+describe("设置：新会话默认的思考强度", () => {
+  let t: TestApp;
+  let browser: TestBrowser;
+
+  beforeAll(async () => {
+    t = await createTestApp();
+    ({ browser } = await t.adminWithGitHub("octo", "octo/app"));
+  });
+  afterAll(() => t.close());
+
+  const put = (b: TestBrowser, body: unknown) =>
+    b.request("/api/settings/default-effort", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const start = async (extra: Record<string, unknown> = {}) => {
+    const res = await browser.post("/api/sessions", {
+      repo: "octo/app",
+      baseBranch: "main",
+      text: "改一下首页",
+      ...extra,
+    });
+    expect(res.status).toBe(201);
+    await t.host.idle();
+    return (await res.json()) as { shortId: string; effort: string };
+  };
+  const defaultEffort = async () =>
+    ((await (await browser.get("/api/models")).json()) as { defaultEffort: string }).defaultEffort;
+
+  it("没改过时是高档；没登录不能看也不能改", async () => {
+    expect(await (await browser.get("/api/settings/default-effort")).json()).toEqual({
+      effort: "high",
+    });
+    expect(await defaultEffort()).toBe("high");
+    expect((await start()).effort).toBe("high");
+    expect((await t.browser().get("/api/settings/default-effort")).status).toBe(401);
+    expect((await put(t.browser(), { effort: "low" })).status).toBe(401);
+  });
+
+  it("改了以后：模型列表里的默认值跟着变，没指定思考强度的新会话用它；已有的会话不变", async () => {
+    const before = await start();
+    const res = await put(browser, { effort: "low" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ effort: "low" });
+    expect(await defaultEffort()).toBe("low");
+
+    expect((await start()).effort).toBe("low");
+    // 指定了的照指定的
+    expect((await start({ effort: "max" })).effort).toBe("max");
+    const old = await (await browser.get(`/api/sessions/${before.shortId}`)).json();
+    expect(old.effort).toBe("high");
+  });
+
+  it("格式不对：400，原来的值不变", async () => {
+    for (const body of [{ effort: "medium" }, { effort: null }, {}]) {
+      expect((await put(browser, body)).status).toBe(400);
+    }
+    expect(await (await browser.get("/api/settings/default-effort")).json()).toEqual({
+      effort: "low",
+    });
+  });
+});

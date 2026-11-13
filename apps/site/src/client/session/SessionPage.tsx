@@ -242,7 +242,7 @@ export function SessionPage({
                 models={models.models}
                 model={picked.model}
                 effort={picked.effort}
-                variant="plain"
+                defaultEffort={models.defaultEffort}
                 onChange={(model, effort) => setChoice({ model, effort })}
               />
             </div>

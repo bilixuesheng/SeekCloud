@@ -1,11 +1,14 @@
+import { THINKING_EFFORTS, type ThinkingEffort } from "@seekcloud/protocol";
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { type ApiError, api } from "../api";
 import type { GitHubStatus } from "../GitHubConnectCard";
 import { GitHubMark } from "../GitHubMark";
-import { CloseIcon, MoonIcon, SettingsIcon, UserIcon } from "../Icons";
+import { CloseIcon, MoonIcon, SettingsIcon, SparkIcon, UserIcon } from "../Icons";
 import { LegalLink } from "../legal/LegalPage";
 import { navigate, type SettingsSection } from "../router";
+import { effortLabels } from "../session/ModelPicker";
+import { reloadModels } from "../session/useModels";
 import { currentTheme, setTheme, type Theme } from "../theme";
 import { ExportData } from "./DataSettings";
 
@@ -106,11 +109,18 @@ const themes: Array<{ id: Theme; name: string }> = [
   { id: "system", name: "跟随系统" },
 ];
 
-/**
- * 通用：外观。三个缩略图就是单选项；缩略图里画一个小窗口，
- * 颜色写死，不跟着当前外观变。
- */
+/** 通用：外观和默认思考强度。 */
 function GeneralSettings() {
+  return (
+    <>
+      <ThemeSettings />
+      <DefaultEffortSettings />
+    </>
+  );
+}
+
+/** 外观：三个缩略图就是单选项；缩略图里画一个小窗口，颜色写死，不跟着当前外观变。 */
+function ThemeSettings() {
   const [theme, setThemeState] = useState(currentTheme);
   return (
     <section className="settings-group">
@@ -143,6 +153,66 @@ function GeneralSettings() {
           </label>
         ))}
       </fieldset>
+    </section>
+  );
+}
+
+/**
+ * 新会话默认的思考强度：四档一排，点了当场保存，没存上就拨回去并说明原因。
+ * 存好以后重新取模型列表，首页的弹层和"恢复默认"跟着用新的值。
+ */
+function DefaultEffortSettings() {
+  const [effort, setEffort] = useState<ThinkingEffort>();
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    api<{ effort: ThinkingEffort }>("/api/settings/default-effort").then(
+      (res) => setEffort(res.effort),
+      (e: ApiError) => setError(e.message),
+    );
+  }, []);
+
+  const choose = async (next: ThinkingEffort) => {
+    if (!effort || next === effort) return;
+    const before = effort;
+    setEffort(next);
+    setError(undefined);
+    try {
+      await api("/api/settings/default-effort", { effort: next }, "PUT");
+      reloadModels();
+    } catch (e) {
+      setEffort(before);
+      setError((e as ApiError).message);
+    }
+  };
+
+  return (
+    <section className="settings-group">
+      <div className="settings-group-head">
+        <SparkIcon size={16} />
+        <h2>默认思考强度</h2>
+      </div>
+      <fieldset className="segmented" disabled={!effort}>
+        <legend className="visually-hidden">默认思考强度</legend>
+        {THINKING_EFFORTS.map((e) => (
+          <label key={e} className={`segment ${e}${effort === e ? " current" : ""}`}>
+            <input
+              type="radio"
+              name="default-effort"
+              value={e}
+              checked={effort === e}
+              onChange={() => void choose(e)}
+            />
+            <span className="segment-label">{effortLabels[e]}</span>
+          </label>
+        ))}
+      </fieldset>
+      <p className="settings-group-hint">新会话默认使用这一档，已有的会话不受影响。</p>
+      {error && (
+        <p className="alert" role="alert">
+          {error}
+        </p>
+      )}
     </section>
   );
 }

@@ -11,9 +11,10 @@ import { recordAccess } from "../access-log";
 import type { AppDeps } from "../app";
 import { currentUser } from "../auth/login-sessions";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
-import { DEFAULT_EFFORT, DEFAULT_MODEL, MODELS } from "../sessions/models";
+import { DEFAULT_MODEL, MODELS } from "../sessions/models";
 import { EVENT_PAGE, type SessionError, type Sessions, sessionErrors } from "../sessions/sessions";
 import { serial } from "../sessions/topic";
+import { getDefaultEffort } from "../settings";
 import { jsonBody as json, newRouter } from "./router";
 
 const Repo = z.object({
@@ -62,7 +63,7 @@ const createSessionRoute = createRoute({
         effort: z
           .enum(THINKING_EFFORTS)
           .optional()
-          .openapi({ description: "思考强度，不填就是 high" }),
+          .openapi({ description: "思考强度，不填就用设置里的默认思考强度" }),
         text: Text,
       }),
     ),
@@ -321,7 +322,7 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
         {
           models: MODELS.map((m) => ({ ...m, efforts: [...m.efforts] })),
           defaultModel: DEFAULT_MODEL,
-          defaultEffort: DEFAULT_EFFORT,
+          defaultEffort: await getDefaultEffort(deps),
         },
         200,
       );

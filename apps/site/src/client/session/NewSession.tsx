@@ -1,4 +1,4 @@
-import type { ThinkingEffort } from "@seekcloud/protocol";
+import { fitEffort, type ThinkingEffort } from "@seekcloud/protocol";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { type ApiError, api } from "../api";
 import { useDraft } from "../draft";
@@ -31,12 +31,14 @@ interface Choices {
   repo?: Repo;
   branch?: string;
   model?: string;
-  effort?: ThinkingEffort;
 }
 
 const REMEMBERED = "seekcloud:new-session";
 
-/** 上次用的仓库、分支、模型和思考强度，下次自动选上。存在浏览器里，读写失败（比如无痕模式）就算了。 */
+/**
+ * 上次用的仓库、分支和模型，下次自动选上。存在浏览器里，读写失败（比如无痕模式）就算了。
+ * 思考强度不记：每次都从设置里的默认值开始。
+ */
 function remembered(): Choices {
   try {
     return JSON.parse(localStorage.getItem(REMEMBERED) ?? "{}") ?? {};
@@ -71,7 +73,10 @@ export function NewSession({ onCreated }: { onCreated: (session: Session) => voi
   const model = models.some((m) => m.id === chosenModel)
     ? chosenModel
     : (modelList?.defaultModel ?? "");
-  const [effort, setEffort] = useState<ThinkingEffort>(initial.effort ?? "high");
+  // 没动过滑块就用设置里的默认值（设置里改了，这里跟着变）；模型不支持那一档时换成最近的一档
+  const [chosenEffort, setEffort] = useState<ThinkingEffort>();
+  const efforts = models.find((m) => m.id === model)?.efforts ?? [];
+  const effort = fitEffort(efforts, chosenEffort ?? modelList?.defaultEffort ?? "high") ?? "high";
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -125,7 +130,7 @@ export function NewSession({ onCreated }: { onCreated: (session: Session) => voi
         effort,
         text,
       });
-      remember({ repo, branch, model, effort });
+      remember({ repo, branch, model });
       setText("");
       onCreated(session);
       handOffFocus();
@@ -192,12 +197,12 @@ export function NewSession({ onCreated }: { onCreated: (session: Session) => voi
               )}
             </div>
           )}
-          {models.length > 0 && (
+          {modelList && models.length > 0 && (
             <ModelPicker
               models={models}
               model={model}
               effort={effort}
-              variant="plain"
+              defaultEffort={modelList.defaultEffort}
               onChange={(m, e) => {
                 setModel(m);
                 setEffort(e);

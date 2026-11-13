@@ -26,6 +26,21 @@ export interface SessionState {
 export const THINKING_EFFORTS = ["off", "low", "high", "max"] as const;
 export type ThinkingEffort = (typeof THINKING_EFFORTS)[number];
 
+/**
+ * 模型支持这一档就用这一档；不支持就换成它支持的、离得最近的一档（一样近时取低的）。
+ * 换模型、用设置里的默认值时用它，免得落到模型不支持的档位上。模型一档都不支持时返回 undefined。
+ */
+export function fitEffort(
+  efforts: readonly ThinkingEffort[],
+  effort: ThinkingEffort,
+): ThinkingEffort | undefined {
+  if (efforts.includes(effort)) return effort;
+  const at = THINKING_EFFORTS.indexOf(effort);
+  const rank = (e: ThinkingEffort) =>
+    Math.abs(THINKING_EFFORTS.indexOf(e) - at) * 2 + (THINKING_EFFORTS.indexOf(e) > at ? 1 : 0);
+  return [...efforts].sort((a, b) => rank(a) - rank(b))[0];
+}
+
 export interface TodoItem {
   content: string;
   status: "pending" | "in_progress" | "completed";
