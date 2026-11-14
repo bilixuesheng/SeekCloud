@@ -1,21 +1,41 @@
 import type { SessionState } from "@seekcloud/protocol";
 import { useState } from "react";
-import { MoreIcon } from "../Icons";
+import { MoreIcon, WarningIcon } from "../Icons";
 import { navigate } from "../router";
 import { PullRequestBadge } from "./PullRequestBadge";
 import { SessionMenu } from "./SessionHeader";
 import { relativeTime, type Session, statusText } from "./types";
 
-/** 状态的小标记：运行中是转圈，其余是不同颜色的点。 */
-export function StatusDot({ state }: { state: SessionState }) {
-  return (
-    <span
-      className={`status-dot ${state.status}${state.detail ? " detail" : ""}`}
-      role="img"
-      aria-label={statusText(state)}
-      title={statusText(state)}
-    />
-  );
+/** 呼吸一次的时长，和 styles.css 里 .session-pulse 的一样。 */
+const PULSE_MS = 1300;
+
+/**
+ * 会话右边的状态标记（照 Claude 的 App）：运行中、排队中是一个灰点，一明一暗地呼吸；失败是警告三角；
+ * 别的状态不标。几个会话同时在跑时一起呼吸：按页面打开以来的时间算好起点，不管哪一行什么时候出现。
+ * "等你输入""有新内容"等会话状态细分做了再加。
+ */
+export function StatusMark({ state }: { state: SessionState }) {
+  const label = statusText(state);
+  const [delay] = useState(() => -(performance.now() % PULSE_MS));
+  if (state.status === "running" || state.status === "queued") {
+    return (
+      <span
+        className="session-pulse"
+        style={{ animationDelay: `${delay}ms` }}
+        role="img"
+        aria-label={label}
+        title={label}
+      />
+    );
+  }
+  if (state.status === "failed") {
+    return (
+      <span className="session-warning" role="img" aria-label={label} title={label}>
+        <WarningIcon />
+      </span>
+    );
+  }
+  return null;
 }
 
 /**
@@ -70,9 +90,9 @@ export function SessionList({
                 <span className="session-item-head">
                   <span className="session-item-title">{session.title}</span>
                   {pr && <PullRequestBadge pr={pr} />}
+                  <StatusMark state={session} />
                 </span>
                 <span className="session-item-meta">
-                  <StatusDot state={session} />
                   <span className="session-item-repo">{session.repos[0]?.fullName}</span>
                   <span className="session-item-time">{relativeTime(session.updatedAt)}</span>
                 </span>
