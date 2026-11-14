@@ -28,6 +28,7 @@ export function SettingsDialog({
   onClose,
   onSignedOut,
   onGitHubChanged,
+  onProfileChanged,
 }: {
   section: SettingsSection;
   /** 关联 GitHub 跳回来时出的问题。 */
@@ -35,6 +36,8 @@ export function SettingsDialog({
   onClose: () => void;
   onSignedOut: () => void;
   onGitHubChanged: () => void;
+  /** 改了昵称以后（侧栏底部的名字、首页的问候语跟着变）。 */
+  onProfileChanged: () => void;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
 
@@ -94,7 +97,11 @@ export function SettingsDialog({
             ) : section === "github" ? (
               <GitHubSettings notice={notice} onGitHubChanged={onGitHubChanged} />
             ) : (
-              <AccountSettings notice={notice} onSignedOut={onSignedOut} />
+              <AccountSettings
+                notice={notice}
+                onSignedOut={onSignedOut}
+                onProfileChanged={onProfileChanged}
+              />
             )}
           </div>
         </div>
@@ -332,7 +339,15 @@ function SwitchRow({
 }
 
 /** 账户：密码、导出数据、登录状态、开源声明。 */
-function AccountSettings({ notice, onSignedOut }: { notice?: string; onSignedOut: () => void }) {
+function AccountSettings({
+  notice,
+  onSignedOut,
+  onProfileChanged,
+}: {
+  notice?: string;
+  onSignedOut: () => void;
+  onProfileChanged: () => void;
+}) {
   const error = notice;
   const [confirmLogout, setConfirmLogout] = useState(false);
 
@@ -343,6 +358,11 @@ function AccountSettings({ notice, onSignedOut }: { notice?: string; onSignedOut
           {error}
         </p>
       )}
+
+      <section className="settings-section">
+        <h2>昵称</h2>
+        <NicknameRow onChanged={onProfileChanged} />
+      </section>
 
       <section className="settings-section">
         <h2>密码</h2>
@@ -401,6 +421,94 @@ function AccountSettings({ notice, onSignedOut }: { notice?: string; onSignedOut
 }
 
 /** 修改密码：先输当前密码，新密码填两遍。改完后当前设备保持登录，其他设备退出。 */
+/**
+ * 昵称：SeekCloud 称呼管理员时用的名字（照 Claude 的"希望 Claude 怎么称呼你"）。
+ * 现在显示在侧栏底部和首页的问候语里；以后的系统提示词也带上它，Agent 称呼你时用（#59）。
+ * 点"修改"就地改，去掉首尾空格，1–20 个字。
+ */
+function NicknameRow({ onChanged }: { onChanged: () => void }) {
+  const [nickname, setNickname] = useState<string | null>();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    api<{ nickname: string | null }>("/api/me").then(
+      (me) => setNickname(me.nickname),
+      (e: ApiError) => setError(e.message),
+    );
+  }, []);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(undefined);
+    try {
+      const res = await api<{ nickname: string }>("/api/me/nickname", { nickname: draft }, "PUT");
+      setNickname(res.nickname);
+      setEditing(false);
+      onChanged();
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="settings-card">
+      <div className="settings-row">
+        <span className="settings-row-text">
+          <span className="settings-row-name">{nickname || "未设置"}</span>
+          <span className="settings-row-sub">SeekCloud 称呼你时使用的名字。</span>
+        </span>
+        {!editing && nickname !== undefined && (
+          <button
+            type="button"
+            className="pill-button"
+            onClick={() => {
+              setDraft(nickname ?? "");
+              setEditing(true);
+              setError(undefined);
+            }}
+          >
+            {nickname ? "修改" : "设置"}
+          </button>
+        )}
+      </div>
+      {editing && (
+        <form className="settings-form" onSubmit={submit}>
+          <label className="field">
+            <span>昵称（最多 20 个字）</span>
+            <input
+              type="text"
+              autoComplete="nickname"
+              maxLength={20}
+              required
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+          </label>
+          <div className="settings-form-actions">
+            <button type="button" className="secondary" onClick={() => setEditing(false)}>
+              取消
+            </button>
+            <button type="submit" className="primary" disabled={busy}>
+              {busy ? "请稍候…" : "保存"}
+            </button>
+          </div>
+        </form>
+      )}
+      {error && (
+        <p className="alert" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function PasswordRow() {
   const [editing, setEditing] = useState(false);
   const [current, setCurrent] = useState("");

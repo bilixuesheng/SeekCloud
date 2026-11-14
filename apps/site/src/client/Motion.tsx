@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 export const reducedMotion = () =>
   typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -210,7 +211,8 @@ export function Sheet({
   };
 
   const visible = shown && open;
-  return (
+  // 挂到页面最外层：在侧栏这类有位移、有裁切的容器里打开时，弹层照样贴着屏幕底部、盖在最上面
+  return createPortal(
     <>
       <div
         className={`sheet-scrim${visible ? " shown" : ""}`}
@@ -235,6 +237,7 @@ export function Sheet({
         </div>
         {children}
       </section>
-    </>
+    </>,
+    document.body,
   );
 }

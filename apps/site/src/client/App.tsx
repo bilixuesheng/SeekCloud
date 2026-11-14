@@ -3,6 +3,7 @@ import { type ApiError, api } from "./api";
 import { takeAuthResult } from "./auth-results";
 import {
   ChevronRightIcon,
+  CloseIcon,
   LogoutIcon,
   MenuIcon,
   PlusIcon,
@@ -24,6 +25,8 @@ interface Me {
   id: string;
   /** 关联的 GitHub 用户名；没关联时为 null。 */
   githubLogin: string | null;
+  /** 昵称：SeekCloud 称呼管理员时用的名字（侧栏、问候语）；加上昵称之前就设置好的部署是 null。 */
+  nickname: string | null;
 }
 
 export function App() {
@@ -123,6 +126,15 @@ function Shell({
         inert={settingsOpen}
       >
         <div className="sidebar-head">
+          {/* 手机上侧栏铺满整屏（照 Claude），左上角是收起按钮 */}
+          <button
+            type="button"
+            className="icon-button sidebar-close"
+            aria-label="收起会话列表"
+            onClick={() => setDrawer(false)}
+          >
+            <CloseIcon size={18} />
+          </button>
           <HomeLink />
         </div>
         <button type="button" className="new-session-button" onClick={newSession}>
@@ -176,7 +188,7 @@ function Shell({
           )}
         </div>
         <AccountFoot
-          name={me.githubLogin ?? "管理员"}
+          name={me.nickname ?? me.githubLogin ?? "管理员"}
           onSettings={() => {
             navigate("/settings/general");
             setDrawer(false);
@@ -222,7 +234,7 @@ function Shell({
                   {notice}
                 </p>
               )}
-              <NewSession onCreated={upsert} />
+              <NewSession nickname={me.nickname} onCreated={upsert} />
             </div>
           </main>
         )}
@@ -234,6 +246,7 @@ function Shell({
           onClose={closeSettings}
           onSignedOut={onSignedOut}
           onGitHubChanged={onGitHubChanged}
+          onProfileChanged={onGitHubChanged}
         />
       )}
     </div>

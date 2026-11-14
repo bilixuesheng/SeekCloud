@@ -50,7 +50,7 @@ export async function createTestApp(options: TestAppOptions = {}) {
   const admin = async () => {
     const browser = new TestBrowser(app);
     const path = (await hasAdmin(db)) ? "/api/auth/login" : "/api/auth/setup";
-    const res = await browser.post(path, { password: ADMIN_PASSWORD });
+    const res = await browser.post(path, { password: ADMIN_PASSWORD, nickname: "管理员" });
     if (res.status !== 204) throw new Error(`管理员登录失败：${await res.text()}`);
     return browser;
   };

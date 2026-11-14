@@ -18,10 +18,11 @@ export async function hasAdmin(db: Database): Promise<boolean> {
   return rows.length > 0;
 }
 
-/** 首次设置密码：建管理员和默认环境，返回管理员的 ID。已经设置过时返回 undefined，什么都不改。 */
+/** 首次设置昵称和密码：建管理员和默认环境，返回管理员的 ID。已经设置过时返回 undefined，什么都不改。 */
 export async function setUpAdmin(
   deps: Pick<AppDeps, "db" | "clock">,
   password: string,
+  nickname: string,
 ): Promise<string | undefined> {
   // 先便宜地看一眼：设置过以后再有人来设，不用花时间算哈希。
   if (await hasAdmin(deps.db)) return undefined;
@@ -33,7 +34,7 @@ export async function setUpAdmin(
     if ((await tx.select({ id: users.id }).from(users).limit(1)).length > 0) return undefined;
     const [admin] = await tx
       .insert(users)
-      .values({ passwordHash, createdAt: now })
+      .values({ passwordHash, nickname, createdAt: now })
       .returning({ id: users.id });
     const id = (admin as { id: string }).id;
     await createDefaultEnvironment(tx, id, now);
@@ -75,4 +76,18 @@ export async function resetAdminPassword(db: Database): Promise<string | undefin
   const password = randomPassword();
   await setPassword(db, admin.id, password);
   return password;
+}
+
+/** 改昵称。 */
+export async function setNickname(db: Database, userId: string, nickname: string): Promise<void> {
+  await db.update(users).set({ nickname }).where(eq(users.id, userId));
+}
+
+/** 管理员的昵称；还没设置过时是 null。 */
+export async function getNickname(db: Database, userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ nickname: users.nickname })
+    .from(users)
+    .where(eq(users.id, userId));
+  return row?.nickname ?? null;
 }

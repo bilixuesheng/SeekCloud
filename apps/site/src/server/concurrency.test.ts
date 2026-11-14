@@ -15,7 +15,9 @@ describe("并发：首次设置", () => {
     const browsers = Array.from({ length: 4 }, () => t.browser());
 
     const results = await Promise.all(
-      browsers.map((browser, i) => browser.post("/api/auth/setup", { password: `password-${i}` })),
+      browsers.map((browser, i) =>
+        browser.post("/api/auth/setup", { password: `password-${i}`, nickname: "管理员" }),
+      ),
     );
 
     expect(results.map((r) => r.status).sort()).toEqual([204, 409, 409, 409]);

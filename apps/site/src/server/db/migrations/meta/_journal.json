@@ -15,6 +15,13 @@
       "when": 1794523627569,
       "tag": "0001_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794632045411,
+      "tag": "0002_nickname",
+      "breakpoints": true
     }
   ]
 }

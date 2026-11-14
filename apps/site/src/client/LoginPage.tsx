@@ -5,7 +5,7 @@ import { Logo } from "./Logo";
 import { LegalLink } from "./legal/LegalPage";
 
 /**
- * 登录页。setup 为 true 时还没设置过管理员密码，改成设置密码：填两遍新密码，设完直接登录。
+ * 登录页。setup 为 true 时还没设置过管理员密码，改成首次设置：填昵称（SeekCloud 称呼管理员时用）和两遍新密码，设完直接登录。
  */
 export function LoginPage({
   setup,
@@ -17,10 +17,13 @@ export function LoginPage({
   /** 关联 GitHub 跳回来时出的问题，比如登录状态已过期。 */
   notice?: string;
 }) {
+  const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState(notice);
   const [busy, setBusy] = useState(false);
+  // 输错过一次密码以后才提示怎么重置，平时不显示
+  const [failed, setFailed] = useState(false);
   const nameReady = useSerifReady("SeekCloud");
 
   const submit = async (event: FormEvent) => {
@@ -32,10 +35,15 @@ export function LoginPage({
     setBusy(true);
     setError(undefined);
     try {
-      await api(setup ? "/api/auth/setup" : "/api/auth/login", { password });
+      await api(
+        setup ? "/api/auth/setup" : "/api/auth/login",
+        setup ? { nickname, password } : { password },
+      );
       onSignedIn();
     } catch (e) {
-      setError((e as ApiError).message);
+      const err = e as ApiError;
+      setError(err.message);
+      if (!setup && err.code !== "network") setFailed(true);
     } finally {
       setBusy(false);
     }
@@ -49,18 +57,13 @@ export function LoginPage({
         <p className="auth-tagline">代码无界，智能随行</p>
       </div>
       <main className="auth-card">
-        <h1>{setup ? "设置管理员密码" : "登录"}</h1>
+        <h1>{setup ? "首次设置" : "登录"}</h1>
         <form className="stack" onSubmit={submit}>
-          <p className="hint">
-            {setup ? (
-              "首次使用，请设置管理员密码，至少 8 位。"
-            ) : (
-              <>
-                忘记密码时，可在服务器的 apps/site 目录中运行 <code>pnpm admin:reset-password</code>{" "}
-                重置。
-              </>
-            )}
-          </p>
+          {setup && (
+            <p className="hint">
+              请设置昵称和管理员密码。昵称是 SeekCloud 称呼你时使用的名字，之后可在设置中修改。
+            </p>
+          )}
           {/* 只有一个账户，用户名是固定的；放一个看不见的用户名，密码管理器才能把密码存对 */}
           <input
             type="text"
@@ -70,8 +73,21 @@ export function LoginPage({
             hidden
             readOnly
           />
+          {setup && (
+            <label className="field">
+              <span>昵称</span>
+              <input
+                type="text"
+                autoComplete="nickname"
+                maxLength={20}
+                required
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+              />
+            </label>
+          )}
           <label className="field">
-            <span>{setup ? "新密码" : "密码"}</span>
+            <span>{setup ? "新密码（至少 8 位）" : "密码"}</span>
             <input
               type="password"
               autoComplete={setup ? "new-password" : "current-password"}
@@ -99,6 +115,12 @@ export function LoginPage({
           {error && (
             <p className="alert" role="alert">
               {error}
+            </p>
+          )}
+          {failed && (
+            <p className="hint">
+              忘记密码时，可在服务器的 apps/site 目录中运行 <code>pnpm admin:reset-password</code>{" "}
+              重置。
             </p>
           )}
           <button type="submit" className="primary" disabled={busy}>

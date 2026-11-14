@@ -82,7 +82,7 @@ export function SessionHeader({
         <SessionInfo session={session} open={infoOpen} onClose={() => setInfoOpen(false)} />
       )}
       {session && (
-        <TitleMenu id={id} session={session} open={menuOpen} onClose={() => setMenuOpen(false)} />
+        <SessionMenu id={id} session={session} open={menuOpen} onClose={() => setMenuOpen(false)} />
       )}
     </header>
   );
@@ -187,7 +187,12 @@ function InfoRow({
  * 标题菜单（照 Claude Code 手机版）：打开方式、重命名、复制链接、归档（已归档时是取消归档）、删除。
  * 显示方式（轨迹视图）、编辑环境要等对应的功能做好再加。
  */
-function TitleMenu({
+/**
+ * 会话的菜单（底部弹层），照 Claude：顶上是标题，下面是打开 PR、打开方式、重命名、复制链接、归档，最后是删除。
+ * 会话页的标题和侧栏里会话右边的"⋯"打开的是同一个。
+ * Claude 还有置顶、标为未读、移到分组、分享：分享不做（2026-11-11 定的），其余几项还没做。
+ */
+export function SessionMenu({
   id,
   session,
   open,
@@ -237,11 +242,13 @@ function TitleMenu({
 
   const remove = async () => {
     const ok = await run(() => api(`/api/sessions/${id}/delete`, {}));
-    if (ok) {
-      close();
-      navigate("/");
-    }
+    if (!ok) return;
+    close();
+    // 删的是正在看的会话就回首页；在侧栏里删别的会话，留在原地
+    if (location.pathname === `/s/${id}`) navigate("/");
   };
+  const repo = session.repos[0];
+  const pr = repo?.pullRequest;
 
   const copyLink = async () => {
     if (await copyText(`${location.origin}/s/${id}`)) {
@@ -255,6 +262,14 @@ function TitleMenu({
       <Pages active={MENU_PAGES.indexOf(page)}>
         <div className="sheet-menu" role="menu">
           <p className="sheet-menu-title">{session.title}</p>
+          {repo && pr && (
+            <MenuLink
+              href={`https://github.com/${repo.fullName}/pull/${pr.number}`}
+              icon={<PullRequestBadge pr={pr} size={14} />}
+            >
+              打开 PR
+            </MenuLink>
+          )}
           <MenuItem icon={<ExternalIcon />} onClick={() => setPage("open")} more>
             打开方式
           </MenuItem>
