@@ -6,12 +6,13 @@ import { useSerifReady } from "../fonts";
 import { GitHubConnectCard, type GitHubStatus } from "../GitHubConnectCard";
 import { GitHubMark } from "../GitHubMark";
 import { BoxIcon, BranchIcon, ChevronDownIcon } from "../Icons";
-import { Logo } from "../Logo";
 import { navigate } from "../router";
+import { Whale } from "../Whale";
 import { Composer, handOffFocus } from "./Composer";
 import { takeGreeting } from "./greetings";
 import { ModelPicker } from "./ModelPicker";
 import { OptionPicker } from "./OptionPicker";
+import { localRegionName } from "./region";
 import type { Session } from "./types";
 import { useModels } from "./useModels";
 
@@ -64,7 +65,7 @@ export function NewSession({
   onCreated: (session: Session) => void;
 }) {
   const [initial] = useState(remembered);
-  const [greeting] = useState(() => takeGreeting(nickname));
+  const [greeting] = useState(() => takeGreeting(nickname, localRegionName()));
   const greetingReady = useSerifReady(greeting);
   const [github, setGitHub] = useState<GitHubStatus>();
   // 没发出去的字记在浏览器里：去别的会话看一眼再回来、刷新页面都还在。
@@ -155,7 +156,8 @@ export function NewSession({
   return (
     <section className="new-session">
       <div className="greeting">
-        <Logo size={64} />
+        {/* 发起会话时这只鲸鱼挪到会话页底部（同名的 view transition） */}
+        <Whale size={64} transitionName="seekcloud-whale" />
         <h1 className={`serif-text${greetingReady ? "" : " pending"}`}>{greeting}</h1>
       </div>
       {github && !connected && <GitHubConnectCard status={github} />}

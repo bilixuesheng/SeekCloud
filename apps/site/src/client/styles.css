@@ -372,8 +372,7 @@ input:not([type="range"]):focus {
   text-align: center;
 }
 
-.auth-hero .logo,
-.greeting .logo {
+.auth-hero .logo {
   animation: float 6s ease-in-out infinite;
 }
 
@@ -2267,9 +2266,103 @@ details > summary::-webkit-details-marker {
 }
 
 .ai-notice {
-  margin: 2px 0 0;
   font-size: 12px;
   color: var(--faint);
+}
+
+/* 对话最后一行：鲸鱼加一句话（在做什么，或者"可能会犯错"） */
+.timeline-tail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  margin: 2px 0 0 -2px;
+  font-size: 14px;
+}
+
+/*
+ * 会动的鲸鱼（Whale.tsx）：三层图叠在一起。游动时整只轻轻上下浮动，尾巴绕着尾柄摆，闪光一闪一闪。
+ * 转动的中心是原图里尾柄和闪光的位置（按图的比例算）。
+ */
+.whale {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.whale-bob,
+.whale-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.whale-layer {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.whale-tail {
+  transform-origin: 80.3% 43.5%;
+}
+
+.whale-sparkle {
+  transform-origin: 33.5% 19.1%;
+}
+
+.whale.swimming .whale-bob {
+  animation: whale-bob 1.8s ease-in-out infinite;
+}
+
+.whale.swimming .whale-tail {
+  animation: whale-tail 0.9s ease-in-out infinite alternate;
+}
+
+.whale.swimming .whale-sparkle {
+  animation: whale-sparkle 1.4s ease-in-out infinite;
+}
+
+@keyframes whale-bob {
+  0%,
+  100% {
+    transform: translateY(1.5%);
+  }
+  50% {
+    transform: translateY(-4%);
+  }
+}
+
+@keyframes whale-tail {
+  from {
+    transform: rotate(-10deg);
+  }
+  to {
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes whale-sparkle {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.7) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1) rotate(45deg);
+  }
+}
+
+/* 首页中间的鲸鱼轻轻浮动 */
+.greeting .whale {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* 首页中间的鲸鱼挪到会话页底部：位置和大小一起平滑过去 */
+::view-transition-group(seekcloud-whale) {
+  animation-duration: 0.5s;
+  animation-timing-function: var(--ease-out);
 }
 
 .working {
@@ -2278,44 +2371,6 @@ details > summary::-webkit-details-marker {
   gap: 10px;
   margin: 2px 0;
   font-size: 14px;
-}
-
-/* 四个蓝点轮流亮起 */
-.working-dots {
-  display: grid;
-  grid-template-columns: repeat(2, 5px);
-  gap: 3px;
-}
-
-.working-dots span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  opacity: 0.25;
-  animation: blink 1.2s ease-in-out infinite;
-}
-
-.working-dots span:nth-child(2) {
-  animation-delay: 0.3s;
-}
-
-.working-dots span:nth-child(4) {
-  animation-delay: 0.6s;
-}
-
-.working-dots span:nth-child(3) {
-  animation-delay: 0.9s;
-}
-
-@keyframes blink {
-  0%,
-  100% {
-    opacity: 0.25;
-  }
-  30% {
-    opacity: 1;
-  }
 }
 
 .working-text {
@@ -2336,12 +2391,14 @@ details > summary::-webkit-details-marker {
 @media (prefers-reduced-motion: reduce) {
   .session-pulse,
   .tool.running > summary > .tool-dot,
-  .working-dots span,
+  .whale.swimming .whale-bob,
+  .whale.swimming .whale-tail,
+  .whale.swimming .whale-sparkle,
   .todo-card li.in_progress .todo-mark,
   .working-text,
   .spinner,
   .auth-hero .logo,
-  .greeting .logo {
+  .greeting .whale {
     animation: none;
   }
 }
