@@ -25,7 +25,7 @@ interface Me {
   id: string;
   /** 关联的 GitHub 用户名；没关联时为 null。 */
   githubLogin: string | null;
-  /** 昵称，首页的问候语里用；加上昵称之前就设置好的部署是 null。 */
+  /** 昵称：SeekCloud 称呼管理员时用的名字（侧栏、问候语）；加上昵称之前就设置好的部署是 null。 */
   nickname: string | null;
 }
 

@@ -421,7 +421,11 @@ function AccountSettings({
 }
 
 /** 修改密码：先输当前密码，新密码填两遍。改完后当前设备保持登录，其他设备退出。 */
-/** 昵称：首页的问候语里用（"晚上好，某某"）。点"修改"就地改，去掉首尾空格，1–20 个字。 */
+/**
+ * 昵称：SeekCloud 称呼管理员时用的名字（照 Claude 的"希望 Claude 怎么称呼你"）。
+ * 现在显示在侧栏底部和首页的问候语里；以后的系统提示词也带上它，Agent 称呼你时用（#59）。
+ * 点"修改"就地改，去掉首尾空格，1–20 个字。
+ */
 function NicknameRow({ onChanged }: { onChanged: () => void }) {
   const [nickname, setNickname] = useState<string | null>();
   const [editing, setEditing] = useState(false);
@@ -457,7 +461,7 @@ function NicknameRow({ onChanged }: { onChanged: () => void }) {
       <div className="settings-row">
         <span className="settings-row-text">
           <span className="settings-row-name">{nickname || "未设置"}</span>
-          <span className="settings-row-sub">首页的问候语会用到它。</span>
+          <span className="settings-row-sub">SeekCloud 称呼你时使用的名字。</span>
         </span>
         {!editing && nickname !== undefined && (
           <button

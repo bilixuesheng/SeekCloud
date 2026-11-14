@@ -5,7 +5,7 @@ import { Logo } from "./Logo";
 import { LegalLink } from "./legal/LegalPage";
 
 /**
- * 登录页。setup 为 true 时还没设置过管理员密码，改成首次设置：填昵称（首页的问候语里用）和两遍新密码，设完直接登录。
+ * 登录页。setup 为 true 时还没设置过管理员密码，改成首次设置：填昵称（SeekCloud 称呼管理员时用）和两遍新密码，设完直接登录。
  */
 export function LoginPage({
   setup,
@@ -61,7 +61,7 @@ export function LoginPage({
         <form className="stack" onSubmit={submit}>
           {setup && (
             <p className="hint">
-              请设置昵称和管理员密码。昵称用于首页的问候语，之后可在设置中修改。
+              请设置昵称和管理员密码。昵称是 SeekCloud 称呼你时使用的名字，之后可在设置中修改。
             </p>
           )}
           {/* 只有一个账户，用户名是固定的；放一个看不见的用户名，密码管理器才能把密码存对 */}

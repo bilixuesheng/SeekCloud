@@ -10,7 +10,7 @@ import { jsonBody as json, newRouter } from "./router";
 
 const unauthorized = errorResponse("没有登录");
 
-/** 昵称：首页的问候语里用。去掉首尾空格，1–20 个字。 */
+/** 昵称：SeekCloud 称呼管理员时用的名字。去掉首尾空格，1–20 个字，不能换行。 */
 export const Nickname = z
   .string()
   .trim()
