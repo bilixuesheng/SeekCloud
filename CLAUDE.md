@@ -1,6 +1,6 @@
 # SeekCloud
 
-基于 DeepSeek 的云端编程 Agent 服务，独立第三方，体验对标 Claude Code 网页版。只用英文名 SeekCloud，标志和配色见 `docs/brand/README.md`。
+基于 DeepSeek 的云端编程 Agent 服务，独立第三方，体验对标 Claude Code 网页版。英文名 SeekCloud；本仓库也可以用中文名"云上求索"（2026-11-14 用户定的），标志和配色见 `docs/brand/README.md`。
 
 这是 SeekCloud 付费版的开源、自部署主干版本：只有一个管理员账户，自己部署自己用，不加多用户（2026-11-12 用户定的）。公开的文档、工单和提交里，关于付费版只说"本仓库是付费版的开源、自部署主干版本"这一句，不写别的（2026-11-14 用户定的）。
 

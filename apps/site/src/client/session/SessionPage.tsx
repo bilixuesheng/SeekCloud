@@ -23,6 +23,7 @@ import {
   UndoIcon,
 } from "../Icons";
 import { usePresence } from "../Motion";
+import { Whale } from "../Whale";
 import { catchUpBubble } from "./bubble-in";
 import { Composer } from "./Composer";
 import { contentKey, ScrollFollower } from "./follow-scroll";
@@ -195,18 +196,22 @@ export function SessionPage({
                 sending
               />
             )}
-            {/* Agent 停下来以后，在最后一条回复下面提示一句 */}
-            {status !== "running" &&
-              status !== "queued" &&
-              timeline.items.some((item) => item.kind === "assistant") && (
-                <p className="ai-notice">DeepSeek 是 AI 并且可能会犯错。</p>
-              )}
-            {status === "queued" && <Working text="排队中，等待空闲资源" since={timeline.since} />}
-            {status === "running" && (
+            {/* 对话最后一行：鲸鱼（照 Claude 的星形标志）。Agent 在工作时它游动、旁边写在做什么；
+                停下来以后不动，最后一条回复下面提示一句 */}
+            {status === "queued" ? (
+              <Working text="排队中，等待空闲资源" since={timeline.since} />
+            ) : status === "running" ? (
               <Working
                 text={state?.detail === "preparing_sandbox" ? "正在准备沙箱" : "深度求索中"}
                 since={timeline.since}
               />
+            ) : (
+              <p className="timeline-tail">
+                <Whale size={WHALE_SIZE} transitionName="seekcloud-whale" />
+                {timeline.items.some((item) => item.kind === "assistant") && (
+                  <span className="ai-notice">DeepSeek 是 AI 并且可能会犯错。</span>
+                )}
+              </p>
             )}
           </div>
         </SessionLinks.Provider>
@@ -608,16 +613,14 @@ function useElapsed(since: string | undefined): string | undefined {
 }
 
 /** Agent 在干活时的提示：跳动的四个点、一行流光文字和已经过了多久。 */
+/** 对话最后一行鲸鱼的大小。 */
+const WHALE_SIZE = 30;
+
 function Working({ text, since }: { text: string; since?: string }) {
   const elapsed = useElapsed(since);
   return (
-    <p className="working" role="status">
-      <span className="working-dots" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-        <span />
-      </span>
+    <p className="timeline-tail working" role="status">
+      <Whale size={WHALE_SIZE} swimming transitionName="seekcloud-whale" />
       <span className="working-text">{text}…</span>
       {elapsed && <span className="working-time">{elapsed}</span>}
     </p>

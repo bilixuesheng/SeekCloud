@@ -59,12 +59,25 @@ const ALWAYS_NAMED = [
 
 /** 一天里的几个时段：[开始的小时, 结束的小时（不含）, 不带昵称的, 带昵称的]。 */
 const BY_HOUR: Array<[number, number, string[], string[]]> = [
-  [5, 11, ["早上好", "新的一天，从何开始？", "一日之计在于晨"], ["早上好，{name}"]],
+  // 陶渊明《归园田居》
+  [5, 11, ["早上好", "新的一天，从何开始？", "一日之计在于晨", "晨兴理荒秽"], ["早上好，{name}"]],
   [11, 14, ["中午好"], ["中午好，{name}"]],
   [14, 18, ["下午好"], ["下午好，{name}"]],
-  [18, 23, ["晚上好"], ["晚上好，{name}", "{name}，今天过得如何？"]],
+  // 王勃《滕王阁序》、张九龄《望月怀远》、李白《月下独酌》
+  [
+    18,
+    23,
+    ["晚上好", "落霞与孤鹜齐飞", "海上生明月，天涯共此时", "举杯邀明月"],
+    ["晚上好，{name}", "{name}，今天过得如何？", "{name}，月下论道？"],
+  ],
   // 杜甫《旅夜书怀》
-  [23, 29, ["夜深了，注意休息", "夜深，仍在求索", "星垂平野阔，月涌大江流"], ["夜深了，{name}"]],
+  // 王维《山居秋暝》
+  [
+    23,
+    29,
+    ["夜深了，注意休息", "夜深，仍在求索", "星垂平野阔，月涌大江流", "明月松间照，清泉石上流"],
+    ["夜深了，{name}", "{name}，月下论道？"],
+  ],
 ];
 
 /** 星期几（0 是周日）：[不带昵称的, 带昵称的]，只在当天出现。 */
@@ -89,7 +102,12 @@ const BY_DAY: Array<[string[], string[]]> = [
  * 此刻能用的问候语。带昵称的排在后面，权重是两倍（Claude 的问候常常带名字）。
  * name 为空时只有不带昵称的。
  */
-export function greetingPool(name: string | null | undefined, now: Date): string[] {
+export function greetingPool(
+  name: string | null | undefined,
+  now: Date,
+  /** 按浏览器的语言猜出的地区名（region.ts），猜不出来时没有"你是某地人吗"这句。 */
+  region?: string,
+): string[] {
   const hour = now.getHours();
   const plain = [...ALWAYS];
   const named = [...ALWAYS_NAMED];
@@ -105,6 +123,7 @@ export function greetingPool(name: string | null | undefined, now: Date): string
   named.push(...dayNamed);
   const who = name?.trim();
   if (!who) return plain;
+  if (region) named.push(`你是${region}人吗，{name}`);
   const filled = named.map((g) => g.replace("{name}", who));
   return [...plain, ...filled, ...filled];
 }
@@ -113,12 +132,14 @@ export function pickGreeting({
   name,
   now = new Date(),
   random = Math.random,
+  region,
 }: {
   name?: string | null;
   now?: Date;
   random?: () => number;
+  region?: string;
 } = {}): string {
-  const pool = greetingPool(name, now);
+  const pool = greetingPool(name, now, region);
   return pool[Math.floor(random() * pool.length)] ?? "今日有何计划？";
 }
 
@@ -129,15 +150,19 @@ let early: { name: string | null; text: string } | undefined;
  * 页面刚打开时先挑一句，并开始拉它要用的字体：等登录状态回来、首页画出来时字体多半已经到了，问候语不用干等。
  * name 是上次记下的昵称（这时候还没问过服务器）。
  */
-export function prepareGreeting(name: string | null, preload: (text: string) => void): void {
-  early = { name, text: pickGreeting({ name }) };
+export function prepareGreeting(
+  name: string | null,
+  preload: (text: string) => void,
+  region?: string,
+): void {
+  early = { name, text: pickGreeting({ name, region }) };
   preload(early.text);
 }
 
 /** 首页要显示的问候语：昵称和先挑的那句对得上就用它（只用一次），不然现挑一句。 */
-export function takeGreeting(name: string | null): string {
+export function takeGreeting(name: string | null, region?: string): string {
   const picked = early;
   early = undefined;
   if (picked && picked.name === (name?.trim() || null)) return picked.text;
-  return pickGreeting({ name });
+  return pickGreeting({ name, region });
 }

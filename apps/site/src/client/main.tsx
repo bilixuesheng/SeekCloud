@@ -4,11 +4,12 @@ import { App } from "./App";
 import { preloadSerif } from "./fonts";
 import { rememberedNickname } from "./nickname";
 import { prepareGreeting } from "./session/greetings";
+import { localRegionName } from "./session/region";
 import "@fontsource/noto-serif-sc/600.css";
 import "./styles.css";
 
 // 首页的问候语先挑好、先拉字体，不等登录状态回来
-prepareGreeting(rememberedNickname(), preloadSerif);
+prepareGreeting(rememberedNickname(), preloadSerif, localRegionName());
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>
