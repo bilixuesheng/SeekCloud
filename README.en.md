@@ -6,7 +6,7 @@
 
 SeekCloud is a self-hostable cloud coding agent that works with DeepSeek models. Start a session from any device, such as a phone or a computer, and the agent reads and edits your repository and runs commands in a sandbox in the cloud, then pushes the changes to GitHub. Each deployment has a single admin account, for the person who deploys it.
 
-SeekCloud is an independent open-source project and is not an official DeepSeek product.
+This repository is the open-source, self-hosted trunk of the paid edition of SeekCloud. SeekCloud is an independent project and is not an official DeepSeek product.
 
 ## Status
 
@@ -28,6 +28,7 @@ What is done:
 - Update check and one-click update: check for new versions in the admin console, and the server pulls updates from this repository
 - More agent features: enable the plugin market, the modes (such as Creator mode), the trajectory view and other features of the in-sandbox agent (dsh) that are not enabled yet
 - AI labels on GitHub: by default, the signature at the end of issues, pull requests and comments and the commit message trailer mark the content as AI-generated; they can be turned off in settings
+- English interface
 
 ## Development
 
