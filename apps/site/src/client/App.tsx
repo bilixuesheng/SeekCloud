@@ -13,8 +13,16 @@ import {
 import { LoginPage } from "./LoginPage";
 import { Brand, Logo } from "./Logo";
 import { LegalLink, LegalPage } from "./legal/LegalPage";
-import { Collapse } from "./Motion";
-import { navigate, pathOf, type Route, useRoute } from "./router";
+import { Collapse, usePresence } from "./Motion";
+import { rememberNickname } from "./nickname";
+import {
+  navigate,
+  pathOf,
+  type Route,
+  type SettingsSection,
+  sidebarOverlays,
+  useRoute,
+} from "./router";
 import { NewSession } from "./session/NewSession";
 import { SessionList } from "./session/SessionList";
 import { SessionPage } from "./session/SessionPage";
@@ -36,8 +44,12 @@ export function App() {
   const route = useRoute();
 
   const refresh = useCallback(() => {
-    api<Me>("/api/me").then(setMe, (e: ApiError) =>
-      setMe(e.code === "setup_required" ? "setup" : null),
+    api<Me>("/api/me").then(
+      (res) => {
+        rememberNickname(res.nickname);
+        setMe(res);
+      },
+      (e: ApiError) => setMe(e.code === "setup_required" ? "setup" : null),
     );
   }, []);
 
@@ -95,6 +107,10 @@ function Shell({
   const page = route.page === "settings" ? lastPage.current : route;
   const closeSettings = useCallback(() => navigate(pathOf(lastPage.current)), []);
   const settingsOpen = route.page === "settings";
+  // 关设置时弹窗先播完收起的动画再拿掉；这段时间里还画着关之前的那个分类
+  const settings = usePresence(settingsOpen, 200);
+  const lastSection = useRef<SettingsSection>("general");
+  if (route.page === "settings") lastSection.current = route.section;
   const { sessions, loaded, upsert } = useSessions();
   const [drawer, setDrawer] = useState(false);
   const [search, setSearch] = useState("");
@@ -113,7 +129,8 @@ function Shell({
   const listed = query ? shown : shown.filter((s) => s.status !== "archived");
   const [showArchived, setShowArchived] = useState(false);
   const newSession = () => {
-    navigate("/");
+    // 手机上从侧栏点的：侧栏滑走就是过渡，主区域不再淡入上浮
+    navigate("/", { transition: !(drawer && sidebarOverlays()) });
     setDrawer(false);
   };
 
@@ -239,9 +256,10 @@ function Shell({
           </main>
         )}
       </div>
-      {route.page === "settings" && (
+      {settings.mounted && (
         <SettingsDialog
-          section={route.section}
+          section={lastSection.current}
+          closing={settings.closing}
           notice={notice}
           onClose={closeSettings}
           onSignedOut={onSignedOut}
@@ -267,6 +285,8 @@ function AccountFoot({
   onSignedOut: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  // 收起时也有动画，和弹出一样快（.popover.closing）
+  const menu = usePresence(open, 180);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -285,8 +305,8 @@ function AccountFoot({
 
   return (
     <div className="sidebar-foot" ref={root}>
-      {open && (
-        <div className="popover account-menu" role="menu">
+      {menu.mounted && (
+        <div className={`popover account-menu${menu.closing ? " closing" : ""}`} role="menu">
           <div className="account-menu-name">{name}</div>
           <button
             type="button"

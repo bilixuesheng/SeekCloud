@@ -1,7 +1,7 @@
 import type { SessionState } from "@seekcloud/protocol";
 import { useState } from "react";
 import { MoreIcon, WarningIcon } from "../Icons";
-import { navigate } from "../router";
+import { navigate, sidebarOverlays } from "../router";
 import { PullRequestBadge } from "./PullRequestBadge";
 import { SessionMenu } from "./SessionHeader";
 import { relativeTime, type Session, statusText } from "./types";
@@ -83,7 +83,8 @@ export function SessionList({
                 aria-current={current ? "page" : undefined}
                 onClick={(e) => {
                   e.preventDefault();
-                  navigate(`/s/${session.shortId}`);
+                  // 手机上侧栏铺满整屏：侧栏滑走就是过渡，主区域不再淡入上浮，免得像抖了一下
+                  navigate(`/s/${session.shortId}`, { transition: !sidebarOverlays() });
                   onPick?.();
                 }}
               >

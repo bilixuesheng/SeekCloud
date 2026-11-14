@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { greetingPool, pickGreeting } from "./greetings";
+import { greetingPool, pickGreeting, prepareGreeting, takeGreeting } from "./greetings";
 
 // 2026-11-02 是周一，11-07 是周六
 const at = (day: number, hour: number) => new Date(2026, 10, day, hour, 0);
@@ -44,5 +44,20 @@ describe("新会话页的问候语", () => {
     const pool = greetingPool("雪生", now);
     expect(pickGreeting({ name: "雪生", now, random: () => 0 })).toBe(pool[0]);
     expect(pickGreeting({ name: "雪生", now, random: () => 0.999 })).toBe(pool.at(-1));
+  });
+
+  it("页面一打开先挑一句并开始拉字体；首页第一次显示用它，只用一次；昵称变了就现挑", () => {
+    const preloaded: string[] = [];
+    prepareGreeting("雪生", (text) => preloaded.push(text));
+    expect(preloaded).toHaveLength(1);
+    expect(takeGreeting("雪生")).toBe(preloaded[0]);
+    // 第二次是现挑的，照样在能用的里面
+    expect(greetingPool("雪生", new Date())).toContain(takeGreeting("雪生"));
+
+    prepareGreeting("雪生", (text) => preloaded.push(text));
+    const other = takeGreeting("求索者");
+    expect(greetingPool("求索者", new Date())).toContain(other);
+    // 先挑的那句已经作废
+    expect(greetingPool(null, new Date())).toContain(takeGreeting(null));
   });
 });
