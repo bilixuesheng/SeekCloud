@@ -27,6 +27,8 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   // 管理员密码的 scrypt 哈希，写法见 auth/password.ts。
   passwordHash: text("password_hash").notNull(),
+  // 昵称：首页的问候语里用（"晚上好，某某"）。首次设置时填；这一列加上之前就设置好的部署是 null。
+  nickname: text("nickname"),
   createdAt: createdAt(),
 });
 

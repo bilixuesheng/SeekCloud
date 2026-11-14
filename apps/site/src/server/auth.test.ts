@@ -28,7 +28,9 @@ describe("首次设置管理员密码", () => {
   });
 
   it("密码少于 8 位：400，不建账户", async () => {
-    const res = await t.browser().post("/api/auth/setup", { password: "1234567" });
+    const res = await t
+      .browser()
+      .post("/api/auth/setup", { nickname: "雪生", password: "1234567" });
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
@@ -38,7 +40,7 @@ describe("首次设置管理员密码", () => {
   });
 
   it("密码超过 256 位：400，不建账户", async () => {
-    const res = await t.browser().post("/api/auth/setup", { password: TOO_LONG });
+    const res = await t.browser().post("/api/auth/setup", { nickname: "雪生", password: TOO_LONG });
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
@@ -47,15 +49,29 @@ describe("首次设置管理员密码", () => {
     expect(await errorCode(await t.browser().get("/api/me"))).toBe("setup_required");
   });
 
-  it("设置后直接登录；自动有一个默认环境", async () => {
+  it("昵称为空、只有空格、超过 20 个字、带换行、没填：400，不建账户", async () => {
+    for (const nickname of ["", "   ", "字".repeat(21), "两\n行", undefined]) {
+      const res = await t
+        .browser()
+        .post("/api/auth/setup", { nickname, password: "first-password" });
+      expect(res.status).toBe(400);
+    }
+    expect(await errorCode(await t.browser().get("/api/me"))).toBe("setup_required");
+  });
+
+  it("设置后直接登录；昵称去掉首尾空格存下来；自动有一个默认环境", async () => {
     const browser = t.browser();
 
-    const res = await browser.post("/api/auth/setup", { password: "first-password" });
+    const res = await browser.post("/api/auth/setup", {
+      nickname: "  雪生  ",
+      password: "first-password",
+    });
 
     expect(res.status).toBe(204);
     expect(await (await browser.get("/api/me")).json()).toEqual({
       id: expect.any(String),
       githubLogin: null,
+      nickname: "雪生",
     });
     expect(await (await browser.get("/api/environments")).json()).toEqual({
       environments: [
@@ -65,7 +81,9 @@ describe("首次设置管理员密码", () => {
   });
 
   it("设置过以后不能再设置：409，密码不变", async () => {
-    const res = await t.browser().post("/api/auth/setup", { password: "second-password" });
+    const res = await t
+      .browser()
+      .post("/api/auth/setup", { nickname: "雪生", password: "second-password" });
 
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
@@ -75,6 +93,30 @@ describe("首次设置管理员密码", () => {
       204,
     );
     expect(await errorCode(await t.browser().get("/api/me"))).toBe("unauthorized");
+  });
+
+  it("改昵称：去掉首尾空格；空的、太长的不收；没登录不能改", async () => {
+    const browser = t.browser();
+    expect((await browser.post("/api/auth/login", { password: "first-password" })).status).toBe(
+      204,
+    );
+    const put = (b: typeof browser, nickname: unknown) =>
+      b.request("/api/me/nickname", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ nickname }),
+      });
+
+    const res = await put(browser, " Xuesheng ");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ nickname: "Xuesheng" });
+    expect((await (await browser.get("/api/me")).json()).nickname).toBe("Xuesheng");
+
+    for (const bad of ["", "  ", "字".repeat(21), 42]) {
+      expect((await put(browser, bad)).status).toBe(400);
+    }
+    expect((await put(t.browser(), "别人")).status).toBe(401);
+    expect((await (await browser.get("/api/me")).json()).nickname).toBe("Xuesheng");
   });
 });
 

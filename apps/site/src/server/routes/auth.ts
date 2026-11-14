@@ -13,6 +13,7 @@ import {
 import { MAX_PASSWORD_LENGTH } from "../auth/password";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
 import { clientIp, HOUR, type RateLimiter, tooFrequent } from "../rate-limit";
+import { Nickname } from "./me";
 import { jsonBody as json, newRouter } from "./router";
 
 const NewPassword = z
@@ -23,11 +24,11 @@ const NewPassword = z
 const setupRoute = createRoute({
   method: "post",
   path: "/setup",
-  summary: "首次设置管理员密码，设置后直接登录",
-  request: { body: json(z.object({ password: NewPassword })) },
+  summary: "首次设置管理员的昵称和密码，设置后直接登录",
+  request: { body: json(z.object({ nickname: Nickname, password: NewPassword })) },
   responses: {
     204: { description: "已设置并登录" },
-    400: errorResponse("密码不足 8 位或超过 256 位"),
+    400: errorResponse("昵称为空或过长，密码不足 8 位或超过 256 位"),
     409: errorResponse("已经设置过管理员密码"),
   },
 });
@@ -96,7 +97,8 @@ async function checkLimited(
 export function authRoutes(deps: AppDeps, limiter: RateLimiter) {
   return newRouter()
     .openapi(setupRoute, async (c) => {
-      const userId = await setUpAdmin(deps, c.req.valid("json").password);
+      const { nickname, password } = c.req.valid("json");
+      const userId = await setUpAdmin(deps, password, nickname);
       if (!userId) {
         return c.json(apiError("already_set_up", "已设置管理员密码，请直接登录"), 409);
       }

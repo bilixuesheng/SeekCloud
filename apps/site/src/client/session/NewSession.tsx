@@ -55,9 +55,16 @@ function remember(choices: Choices) {
 }
 
 /** 首页：写一句话，选仓库、分支、环境和模型，发起会话。 */
-export function NewSession({ onCreated }: { onCreated: (session: Session) => void }) {
+export function NewSession({
+  nickname,
+  onCreated,
+}: {
+  /** 管理员的昵称，问候语里用；没设置时为 null。 */
+  nickname: string | null;
+  onCreated: (session: Session) => void;
+}) {
   const [initial] = useState(remembered);
-  const [greeting] = useState(() => pickGreeting());
+  const [greeting] = useState(() => pickGreeting({ name: nickname }));
   const greetingReady = useSerifReady(greeting);
   const [github, setGitHub] = useState<GitHubStatus>();
   // 没发出去的字记在浏览器里：去别的会话看一眼再回来、刷新页面都还在。

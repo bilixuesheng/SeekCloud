@@ -25,6 +25,8 @@ interface Me {
   id: string;
   /** 关联的 GitHub 用户名；没关联时为 null。 */
   githubLogin: string | null;
+  /** 昵称，首页的问候语里用；加上昵称之前就设置好的部署是 null。 */
+  nickname: string | null;
 }
 
 export function App() {
@@ -186,7 +188,7 @@ function Shell({
           )}
         </div>
         <AccountFoot
-          name={me.githubLogin ?? "管理员"}
+          name={me.nickname ?? me.githubLogin ?? "管理员"}
           onSettings={() => {
             navigate("/settings/general");
             setDrawer(false);
@@ -232,7 +234,7 @@ function Shell({
                   {notice}
                 </p>
               )}
-              <NewSession onCreated={upsert} />
+              <NewSession nickname={me.nickname} onCreated={upsert} />
             </div>
           </main>
         )}
@@ -244,6 +246,7 @@ function Shell({
           onClose={closeSettings}
           onSignedOut={onSignedOut}
           onGitHubChanged={onGitHubChanged}
+          onProfileChanged={onGitHubChanged}
         />
       )}
     </div>
