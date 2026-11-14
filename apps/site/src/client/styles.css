@@ -878,42 +878,31 @@ input:not([type="range"]):focus {
   color: var(--faint);
 }
 
-.status-dot {
+/* 会话右边的状态：运行中是呼吸的灰点（照 Claude 的 App，约 1.3 秒一次），失败是警告三角 */
+.session-pulse {
   width: 7px;
   height: 7px;
   flex-shrink: 0;
+  margin: 0 3px;
   border-radius: 50%;
-  background: var(--faint);
-  transition:
-    background-color 0.25s,
-    border-color 0.25s;
+  background: var(--muted);
+  animation: pulse-dot 1.3s ease-in-out infinite;
 }
 
-.status-dot.running {
-  width: 10px;
-  height: 10px;
-  background: none;
-  border: 1.6px solid var(--accent);
-  border-right-color: transparent;
-  animation: spin 0.9s linear infinite;
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
-.status-dot.queued {
-  background: var(--warning);
-}
-
-.status-dot.waiting {
-  background: var(--success);
-}
-
-.status-dot.failed {
-  background: var(--danger);
-}
-
-.status-dot.dormant,
-.status-dot.archived {
-  background: none;
-  border: 1.5px solid var(--faint);
+.session-warning {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--muted);
 }
 
 @keyframes spin {
@@ -2343,7 +2332,7 @@ details > summary::-webkit-details-marker {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .status-dot.running,
+  .session-pulse,
   .tool.running > summary > .tool-dot,
   .working-dots span,
   .todo-card li.in_progress .todo-mark,

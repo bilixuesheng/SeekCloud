@@ -240,3 +240,11 @@ export const MoreIcon = () => (
     <circle cx="12.5" cy="8" r="1.25" fill="currentColor" />
   </svg>
 );
+
+export const WarningIcon = ({ size = 15 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M8 2.2 14.3 13.2H1.7Z" {...line} />
+    <path d="M8 6.4v3.2" {...line} />
+    <circle cx="8" cy="11.4" r="0.8" fill="currentColor" />
+  </svg>
+);
