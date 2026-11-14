@@ -232,3 +232,11 @@ export const ExternalIcon = () => (
     <path d="M9 3h4v4M13 3 7.5 8.5M11.5 9.5V13H3V4.5h3.5" {...line} />
   </svg>
 );
+
+export const MoreIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="3.5" cy="8" r="1.25" fill="currentColor" />
+    <circle cx="8" cy="8" r="1.25" fill="currentColor" />
+    <circle cx="12.5" cy="8" r="1.25" fill="currentColor" />
+  </svg>
+);

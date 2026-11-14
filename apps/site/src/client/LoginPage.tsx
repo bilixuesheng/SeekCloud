@@ -21,6 +21,8 @@ export function LoginPage({
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState(notice);
   const [busy, setBusy] = useState(false);
+  // 输错过一次密码以后才提示怎么重置，平时不显示
+  const [failed, setFailed] = useState(false);
   const nameReady = useSerifReady("SeekCloud");
 
   const submit = async (event: FormEvent) => {
@@ -35,7 +37,9 @@ export function LoginPage({
       await api(setup ? "/api/auth/setup" : "/api/auth/login", { password });
       onSignedIn();
     } catch (e) {
-      setError((e as ApiError).message);
+      const err = e as ApiError;
+      setError(err.message);
+      if (!setup && err.code !== "network") setFailed(true);
     } finally {
       setBusy(false);
     }
@@ -51,16 +55,7 @@ export function LoginPage({
       <main className="auth-card">
         <h1>{setup ? "设置管理员密码" : "登录"}</h1>
         <form className="stack" onSubmit={submit}>
-          <p className="hint">
-            {setup ? (
-              "首次使用，请设置管理员密码，至少 8 位。"
-            ) : (
-              <>
-                忘记密码时，可在服务器的 apps/site 目录中运行 <code>pnpm admin:reset-password</code>{" "}
-                重置。
-              </>
-            )}
-          </p>
+          {setup && <p className="hint">首次使用，请设置管理员密码，至少 8 位。</p>}
           {/* 只有一个账户，用户名是固定的；放一个看不见的用户名，密码管理器才能把密码存对 */}
           <input
             type="text"
@@ -99,6 +94,12 @@ export function LoginPage({
           {error && (
             <p className="alert" role="alert">
               {error}
+            </p>
+          )}
+          {failed && (
+            <p className="hint">
+              忘记密码时，可在服务器的 apps/site 目录中运行 <code>pnpm admin:reset-password</code>{" "}
+              重置。
             </p>
           )}
           <button type="submit" className="primary" disabled={busy}>

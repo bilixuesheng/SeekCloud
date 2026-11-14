@@ -3,6 +3,7 @@ import { type ApiError, api } from "./api";
 import { takeAuthResult } from "./auth-results";
 import {
   ChevronRightIcon,
+  CloseIcon,
   LogoutIcon,
   MenuIcon,
   PlusIcon,
@@ -123,6 +124,15 @@ function Shell({
         inert={settingsOpen}
       >
         <div className="sidebar-head">
+          {/* 手机上侧栏铺满整屏（照 Claude），左上角是收起按钮 */}
+          <button
+            type="button"
+            className="icon-button sidebar-close"
+            aria-label="收起会话列表"
+            onClick={() => setDrawer(false)}
+          >
+            <CloseIcon size={18} />
+          </button>
           <HomeLink />
         </div>
         <button type="button" className="new-session-button" onClick={newSession}>

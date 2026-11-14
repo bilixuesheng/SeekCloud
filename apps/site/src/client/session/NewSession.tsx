@@ -1,5 +1,5 @@
 import { fitEffort, type ThinkingEffort } from "@seekcloud/protocol";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type ApiError, api } from "../api";
 import { useDraft } from "../draft";
 import { useSerifReady } from "../fonts";
@@ -11,6 +11,7 @@ import { navigate } from "../router";
 import { Composer, handOffFocus } from "./Composer";
 import { pickGreeting } from "./greetings";
 import { ModelPicker } from "./ModelPicker";
+import { OptionPicker } from "./OptionPicker";
 import type { Session } from "./types";
 import { useModels } from "./useModels";
 
@@ -167,12 +168,13 @@ export function NewSession({ onCreated }: { onCreated: (session: Session) => voi
           {connected && (
             <div className="composer-below-options">
               {environments.length > 0 && (
-                <SelectChip
+                <OptionPicker
                   icon={<BoxIcon />}
                   label="环境"
                   value={environmentId}
                   options={environments.map((env) => ({ value: env.id, text: env.name }))}
                   onChange={setEnvironmentId}
+                  onOpen={() => setPicking(false)}
                 />
               )}
               <button
@@ -187,12 +189,14 @@ export function NewSession({ onCreated }: { onCreated: (session: Session) => voi
                 <ChevronDownIcon />
               </button>
               {repo && (
-                <SelectChip
+                <OptionPicker
                   icon={<BranchIcon />}
                   label="基础分支"
                   value={branch}
                   options={branches.map((b) => ({ value: b, text: b }))}
                   onChange={setBranch}
+                  onOpen={() => setPicking(false)}
+                  emptyText="未找到匹配的分支。"
                 />
               )}
             </div>
@@ -225,40 +229,6 @@ export function NewSession({ onCreated }: { onCreated: (session: Session) => voi
         )}
       </div>
     </section>
-  );
-}
-
-/**
- * 输入框里的下拉选择：按钮上只显示选中的那一项，宽度正好贴合文字；
- * 透明的原生下拉框盖在上面，点开就是系统自带的选择器（手机上好用）。
- */
-function SelectChip({
-  icon,
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  options: Array<{ value: string; text: string }>;
-  onChange: (value: string) => void;
-}) {
-  const current = options.find((o) => o.value === value)?.text ?? value;
-  return (
-    <label className="chip select-chip">
-      {icon}
-      <span className="chip-text">{current}</span>
-      <ChevronDownIcon />
-      <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.text}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 
