@@ -29,6 +29,7 @@ export function SettingsDialog({
   onSignedOut,
   onGitHubChanged,
   onProfileChanged,
+  closing = false,
 }: {
   section: SettingsSection;
   /** 关联 GitHub 跳回来时出的问题。 */
@@ -38,6 +39,8 @@ export function SettingsDialog({
   onGitHubChanged: () => void;
   /** 改了昵称以后（侧栏底部的名字、首页的问候语跟着变）。 */
   onProfileChanged: () => void;
+  /** 正在关：播完收起的动画就拿掉（App 里的 usePresence）。 */
+  closing?: boolean;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
 
@@ -54,14 +57,14 @@ export function SettingsDialog({
 
   return (
     <div
-      className="dialog-scrim"
+      className={`dialog-scrim${closing ? " closing" : ""}`}
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         ref={dialog}
-        className="settings-dialog"
+        className={`settings-dialog${closing ? " closing" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label="设置"

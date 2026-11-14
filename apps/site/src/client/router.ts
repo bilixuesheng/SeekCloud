@@ -37,23 +37,33 @@ function parse(path: string): Route {
 // 应用里点链接换页时淡入淡出；浏览器的前进后退不加，手机上的返回手势本身就有动画，叠在一起反而乱。
 let animateNext = false;
 
-/** 换页面，不刷新。 */
-export function navigate(path: string): void {
+/**
+ * 换页面，不刷新。transition 为 false 时直接换，不做淡入上浮：
+ * 手机上从铺满整屏的侧栏里点进去时，侧栏自己滑走就是过渡，主区域再动一下反而像抖了一下。
+ */
+export function navigate(path: string, { transition = true }: { transition?: boolean } = {}): void {
   if (path === window.location.pathname) return;
   window.history.pushState(null, "", path);
-  animateNext = true;
+  animateNext = transition;
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
+
+/** 侧栏是不是盖在页面上的那种（手机上铺满整屏）。和 styles.css 里侧栏的断点一致。 */
+export const sidebarOverlays = () => window.matchMedia("(max-width: 899px)").matches;
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export function useRoute(): Route {
   const [route, setRoute] = useState(() => parse(window.location.pathname));
   useEffect(() => {
+    let shown = parse(window.location.pathname);
     const update = () => {
       const next = parse(window.location.pathname);
-      const animate = animateNext;
+      // 设置是盖在页面上的弹窗，开、关、切换分类都由弹窗自己的动画管。
+      // 这时要是做换页的过渡，主区域会单独画在最上面，底下的页面就透过弹窗露出来。
+      const animate = animateNext && next.page !== "settings" && shown.page !== "settings";
       animateNext = false;
+      shown = next;
       if (!animate || !document.startViewTransition || reducedMotion()) {
         setRoute(next);
         return;

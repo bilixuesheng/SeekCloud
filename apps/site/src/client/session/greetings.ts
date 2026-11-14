@@ -30,6 +30,21 @@ const ALWAYS = [
   "吾日三省吾身", // 《论语·学而》
   "业精于勤", // 韩愈《进学解》
   "天行健，君子以自强不息", // 《周易》
+  // 求索、探究的
+  "路漫漫其修远兮，吾将上下而求索", // 屈原《离骚》
+  "探赜索隐，钩深致远", // 《周易·系辞上》
+  "众里寻他千百度", // 辛弃疾《青玉案·元夕》
+  "千淘万漉虽辛苦，吹尽狂沙始到金", // 刘禹锡《浪淘沙》
+  "不识庐山真面目，只缘身在此山中", // 苏轼《题西林壁》
+  "穷则变，变则通，通则久", // 《周易·系辞下》
+  "博学之，审问之，慎思之，明辨之，笃行之", // 《礼记·中庸》
+  "致知在格物", // 《礼记·大学》
+  "温故而知新", // 《论语·为政》
+  "锲而不舍，金石可镂", // 《荀子·劝学》
+  "九层之台，起于累土", // 《老子》
+  "大鹏一日同风起，扶摇直上九万里", // 李白《上李邕》
+  "惟精惟一", // 《尚书·大禹谟》
+  "逝者如斯夫，不舍昼夜", // 《论语·子罕》
 ];
 
 /** 带昵称的，什么时候都可以出现。 */
@@ -105,4 +120,24 @@ export function pickGreeting({
 } = {}): string {
   const pool = greetingPool(name, now);
   return pool[Math.floor(random() * pool.length)] ?? "今日有何计划？";
+}
+
+/** 页面一打开就先挑好的那一句，首页第一次显示时用它（它的字体已经在拉了）。 */
+let early: { name: string | null; text: string } | undefined;
+
+/**
+ * 页面刚打开时先挑一句，并开始拉它要用的字体：等登录状态回来、首页画出来时字体多半已经到了，问候语不用干等。
+ * name 是上次记下的昵称（这时候还没问过服务器）。
+ */
+export function prepareGreeting(name: string | null, preload: (text: string) => void): void {
+  early = { name, text: pickGreeting({ name }) };
+  preload(early.text);
+}
+
+/** 首页要显示的问候语：昵称和先挑的那句对得上就用它（只用一次），不然现挑一句。 */
+export function takeGreeting(name: string | null): string {
+  const picked = early;
+  early = undefined;
+  if (picked && picked.name === (name?.trim() || null)) return picked.text;
+  return pickGreeting({ name });
 }

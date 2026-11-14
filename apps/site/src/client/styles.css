@@ -1567,6 +1567,8 @@ input:not([type="range"]):focus {
 .home {
   flex: 1;
   min-height: 0;
+  /* 问候语后面的光晕比屏幕宽：横向不能滚，不然手机上整页能左右滑 */
+  overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -2883,6 +2885,21 @@ details > summary::-webkit-details-marker {
   padding: 24px;
   background: rgb(10 14 30 / 38%);
   animation: fade-in 0.2s var(--ease-out);
+}
+
+/* 关设置：遮罩连同弹窗一起淡出，弹窗再轻轻缩一点（透明度只在遮罩上变，免得两层相乘、一下就没了） */
+.dialog-scrim.closing {
+  animation: view-fade-out 0.2s ease-in forwards;
+}
+
+.settings-dialog.closing {
+  animation: dialog-shrink 0.2s ease-in forwards;
+}
+
+@keyframes dialog-shrink {
+  to {
+    transform: translateY(4px) scale(0.98);
+  }
 }
 
 .settings-dialog {

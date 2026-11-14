@@ -9,7 +9,7 @@ import { BoxIcon, BranchIcon, ChevronDownIcon } from "../Icons";
 import { Logo } from "../Logo";
 import { navigate } from "../router";
 import { Composer, handOffFocus } from "./Composer";
-import { pickGreeting } from "./greetings";
+import { takeGreeting } from "./greetings";
 import { ModelPicker } from "./ModelPicker";
 import { OptionPicker } from "./OptionPicker";
 import type { Session } from "./types";
@@ -64,7 +64,7 @@ export function NewSession({
   onCreated: (session: Session) => void;
 }) {
   const [initial] = useState(remembered);
-  const [greeting] = useState(() => pickGreeting({ name: nickname }));
+  const [greeting] = useState(() => takeGreeting(nickname));
   const greetingReady = useSerifReady(greeting);
   const [github, setGitHub] = useState<GitHubStatus>();
   // 没发出去的字记在浏览器里：去别的会话看一眼再回来、刷新页面都还在。
