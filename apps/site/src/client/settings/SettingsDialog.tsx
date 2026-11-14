@@ -1,7 +1,8 @@
 import { THINKING_EFFORTS, type ThinkingEffort } from "@seekcloud/protocol";
-import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { type ApiError, api } from "../api";
+import { prefetch, setCached, useCached } from "../cached";
 import type { GitHubStatus } from "../GitHubConnectCard";
 import { GitHubMark } from "../GitHubMark";
 import { CloseIcon, MoonIcon, SettingsIcon, SparkIcon, UserIcon } from "../Icons";
@@ -11,6 +12,13 @@ import { effortLabels } from "../session/ModelPicker";
 import { reloadModels } from "../session/useModels";
 import { currentTheme, setTheme, type Theme } from "../theme";
 import { ExportData } from "./DataSettings";
+
+/** 设置窗口里各分类用到的接口。 */
+const AI_LABELS = "/api/settings/ai-labels";
+const GITHUB_STATUS = "/api/github/status";
+const DEFAULT_EFFORT = "/api/settings/default-effort";
+const ME = "/api/me";
+const EXPORTS = "/api/account/export";
 
 const sections: Array<{ id: SettingsSection; name: string; icon: ReactNode }> = [
   { id: "general", name: "通用", icon: <SettingsIcon /> },
@@ -43,6 +51,11 @@ export function SettingsDialog({
   closing?: boolean;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
+
+  // 各分类要的数据一打开就一起拉好，切过去直接有，不会等数据回来再冒出来
+  useEffect(() => {
+    prefetch([AI_LABELS, GITHUB_STATUS, DEFAULT_EFFORT, ME, EXPORTS]);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -172,26 +185,21 @@ function ThemeSettings() {
  * 存好以后重新取模型列表，首页的弹层和"恢复默认"跟着用新的值。
  */
 function DefaultEffortSettings() {
-  const [effort, setEffort] = useState<ThinkingEffort>();
-  const [error, setError] = useState<string>();
-
-  useEffect(() => {
-    api<{ effort: ThinkingEffort }>("/api/settings/default-effort").then(
-      (res) => setEffort(res.effort),
-      (e: ApiError) => setError(e.message),
-    );
-  }, []);
+  const loaded = useCached<{ effort: ThinkingEffort }>(DEFAULT_EFFORT);
+  const effort = loaded.data?.effort;
+  const [failed, setError] = useState<string>();
+  const error = failed ?? loaded.error;
 
   const choose = async (next: ThinkingEffort) => {
     if (!effort || next === effort) return;
     const before = effort;
-    setEffort(next);
+    setCached(DEFAULT_EFFORT, { effort: next });
     setError(undefined);
     try {
-      await api("/api/settings/default-effort", { effort: next }, "PUT");
+      await api(DEFAULT_EFFORT, { effort: next }, "PUT");
       reloadModels();
     } catch (e) {
-      setEffort(before);
+      setCached(DEFAULT_EFFORT, { effort: before });
       setError((e as ApiError).message);
     }
   };
@@ -244,24 +252,22 @@ function GitHubSettings({
   notice?: string;
   onGitHubChanged: () => void;
 }) {
-  const [error, setError] = useState(notice);
-  const [labels, setLabels] = useState<AiLabels>();
+  const [failed, setError] = useState(notice);
+  const loaded = useCached<AiLabels>(AI_LABELS);
+  const labels = loaded.data;
+  const error = failed ?? loaded.error;
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    api<AiLabels>("/api/settings/ai-labels").then(setLabels, (e: ApiError) => setError(e.message));
-  }, []);
 
   const toggle = async (key: keyof AiLabels) => {
     if (!labels || saving) return;
     const next = { ...labels, [key]: !labels[key] };
-    setLabels(next);
+    setCached(AI_LABELS, next);
     setSaving(true);
     setError(undefined);
     try {
-      setLabels(await api<AiLabels>("/api/settings/ai-labels", next, "PUT"));
+      setCached(AI_LABELS, await api<AiLabels>(AI_LABELS, next, "PUT"));
     } catch (e) {
-      setLabels(labels);
+      setCached(AI_LABELS, labels);
       setError((e as ApiError).message);
     } finally {
       setSaving(false);
@@ -430,18 +436,13 @@ function AccountSettings({
  * 点"修改"就地改，去掉首尾空格，1–20 个字。
  */
 function NicknameRow({ onChanged }: { onChanged: () => void }) {
-  const [nickname, setNickname] = useState<string | null>();
+  const me = useCached<{ nickname: string | null }>(ME);
+  const nickname = me.data?.nickname;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-
-  useEffect(() => {
-    api<{ nickname: string | null }>("/api/me").then(
-      (me) => setNickname(me.nickname),
-      (e: ApiError) => setError(e.message),
-    );
-  }, []);
+  const [failed, setError] = useState<string>();
+  const error = failed ?? me.error;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -449,7 +450,7 @@ function NicknameRow({ onChanged }: { onChanged: () => void }) {
     setError(undefined);
     try {
       const res = await api<{ nickname: string }>("/api/me/nickname", { nickname: draft }, "PUT");
-      setNickname(res.nickname);
+      setCached(ME, { ...me.data, nickname: res.nickname });
       setEditing(false);
       onChanged();
     } catch (e) {
@@ -638,15 +639,14 @@ function GitHubRow({
   onChanged: () => void;
   onError: (message: string) => void;
 }) {
-  const [status, setStatus] = useState<GitHubStatus>();
+  const { data: status, error, reload: load } = useCached<GitHubStatus>(GITHUB_STATUS);
   // 解除关联要点两下：第一下变成"确认解除"，免得误点。
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(() => {
-    api<GitHubStatus>("/api/github/status").then(setStatus, (e: ApiError) => onError(e.message));
-  }, [onError]);
-  useEffect(load, [load]);
+  useEffect(() => {
+    if (error) onError(error);
+  }, [error, onError]);
 
   const unlink = async () => {
     setBusy(true);
@@ -671,7 +671,8 @@ function GitHubRow({
       <span className="settings-row-text">
         <span className="settings-row-name">GitHub</span>
         <span className="settings-row-sub">
-          {status ? (login ?? "未关联") : ""}
+          {/* 数据还没回来时先用一个空格占住这一行，回来以后不会把下面的内容往下顶 */}
+          {status ? (login ?? "未关联") : "\u00a0"}
           {confirming && " · 解除关联后 DeepSeek 将无法访问你的仓库"}
         </span>
       </span>
