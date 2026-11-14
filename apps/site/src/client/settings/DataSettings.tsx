@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { type ApiError, api } from "../api";
+import { setCached, useCached } from "../cached";
+
+const EXPORTS = "/api/account/export";
+
 import { shortDateTime } from "../session/relative-time";
 
 interface ExportView {
@@ -22,14 +26,12 @@ const fileSize = (bytes: number) =>
 
 /** 导出数据：后台打包，打包好后出现下载按钮。 */
 export function ExportData() {
-  const [overview, setOverview] = useState<Overview>();
+  const loaded = useCached<Overview>(EXPORTS);
+  const overview = loaded.data;
+  const load = loaded.reload;
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-
-  const load = useCallback(() => {
-    api<Overview>("/api/account/export").then(setOverview, (e: ApiError) => setError(e.message));
-  }, []);
-  useEffect(load, [load]);
+  const [failed, setError] = useState<string>();
+  const error = failed ?? loaded.error;
 
   // 正在打包时每 5 秒看一次，好了就换成下载按钮。
   const working = overview?.latest?.status === "pending" || overview?.latest?.status === "building";
@@ -43,7 +45,7 @@ export function ExportData() {
     setBusy(true);
     setError(undefined);
     try {
-      setOverview(await api<Overview>("/api/account/export", {}));
+      setCached(EXPORTS, await api<Overview>(EXPORTS, {}));
     } catch (e) {
       setError((e as ApiError).message);
       load();
