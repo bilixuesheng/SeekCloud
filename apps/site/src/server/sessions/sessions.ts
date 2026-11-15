@@ -569,18 +569,31 @@ export class Sessions {
    * 排队的消息"立即发送"：Agent 在当前回合的下一步读到它（插话）。
    * 沙箱还在准备、回合还没真正开始：直接并进这个回合的输入。回合已经停了：用它开始下一个回合。
    * 会话休眠或失败（失败前留下的排队消息）：和发消息一样重新准备沙箱，好了再合成回合。
+   * 已经在重新准备沙箱、已归档：消息留在队里不动（归档的报"会话已归档"）。
    */
   async sendQueuedNow(userId: string, shortId: string, queueId: string): Promise<Result<void>> {
     if (!UUID.test(queueId)) return { ok: false, error: "queued_not_found" };
     const outcome = await this.#deps.db.transaction(async (tx) => {
       const session = await this.#lockOwn(tx, userId, shortId);
       if (!session) return "session_not_found" as const;
-      if (session.status === "dormant" || session.status === "failed") {
+      const [turn] = await tx
+        .select()
+        .from(turns)
+        .where(and(eq(turns.sessionId, session.id), eq(turns.status, "running")))
+        .orderBy(desc(turns.number))
+        .limit(1);
+      // 没有回合可以插话，也不能马上开始回合：消息留在队里，不能删。
+      // 休眠或失败的去重新准备沙箱；已经在重新准备的（没有等着的回合）沙箱好了自然会合成回合；已归档的不能发。
+      if (session.status !== "waiting" && !turn) {
         const [kept] = await tx
           .select({ id: queuedMessages.id })
           .from(queuedMessages)
           .where(and(eq(queuedMessages.id, queueId), eq(queuedMessages.sessionId, session.id)));
         if (!kept) return "queued_not_found" as const;
+        if (session.status === "archived") return "session_closed" as const;
+        if (session.status !== "dormant" && session.status !== "failed") {
+          return { session, command: undefined };
+        }
         await this.#setStatus(tx, session.id, null, { status: "queued", detail: null });
         return { session, command: undefined, wake: true };
       }
@@ -594,7 +607,7 @@ export class Sessions {
         model: row.model ?? undefined,
         effort: row.effort ?? undefined,
       };
-      if (session.status === "waiting") {
+      if (session.status === "waiting" || !turn) {
         return {
           session,
           command: await this.#startTurn(tx, session, { ...queued, queued: [row.id] }),
