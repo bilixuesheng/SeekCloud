@@ -391,16 +391,16 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
           }
         });
         const unsubscribe = handle.subscribe(() => void push());
-        // 模型进度只推送、不落库，没有序号，断线重连也不补
-        const stopProgress = handle.subscribeProgress((progress) => {
+        // 模型进度和文字增量只推送、不落库，没有序号，断线重连也不补
+        const stopLive = handle.subscribeLive((live) => {
           stream
-            .writeSSE({ event: "progress", data: JSON.stringify(progress) })
+            .writeSSE({ event: live.event, data: JSON.stringify(live.data) })
             .catch(() => undefined);
         });
         void push();
         return () => {
           unsubscribe();
-          stopProgress();
+          stopLive();
         };
       });
     })

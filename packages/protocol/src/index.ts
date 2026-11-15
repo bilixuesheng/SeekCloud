@@ -173,11 +173,26 @@ export interface ModelProgress {
   tokens: number;
 }
 
+/**
+ * 模型正在输出的一段文字（增量）：思考或正文。和进度一样只推送、不落库，这一步结束时照旧落一条完整的 message。
+ * 浏览器一边收一边让字浮现；完整的 message 到了以后接过已经显示的部分，不重播动画（#31 的逐字输出）。
+ */
+export interface TextDelta {
+  kind: "thinking" | "text";
+  text: string;
+}
+
+/** 只推送、不落库的事件：SSE 的事件名和内容。断线重连也不补。 */
+export type LiveEvent =
+  | { event: "progress"; data: ModelProgress }
+  | { event: "delta"; data: TextDelta };
+
 export type HostEvent =
   | { type: "sandbox.ready"; sessionId: string }
   | { type: "sandbox.failed"; sessionId: string; error: SafeError }
   | { type: "agent"; sessionId: string; turnId: string; event: AgentEvent }
-  | ({ type: "progress"; sessionId: string; turnId: string } & ModelProgress);
+  | ({ type: "progress"; sessionId: string; turnId: string } & ModelProgress)
+  | ({ type: "delta"; sessionId: string; turnId: string } & TextDelta);
 
 /**
  * 主站和宿主机之间的一帧（WebSocket，以后接上）。

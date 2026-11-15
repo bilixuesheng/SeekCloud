@@ -103,19 +103,32 @@ describe("会话事件整理成界面内容", () => {
     expect(summarizeTools(group.calls)).toBe("读取了 1 个文件，运行了 1 条命令");
   });
 
-  it("待办清单只保留最新的整表；状态取最后一条", () => {
-    const timeline = buildTimeline(
-      events(
-        { type: "todo", items: [{ content: "一", status: "in_progress" }] },
-        { type: "status", status: "running", detail: "preparing_sandbox" },
-        { type: "todo", items: [{ content: "一", status: "completed" }] },
-        { type: "status", status: "waiting", detail: null },
-      ),
+  it("计划：回合进行中只留最新的一份；之后管理员发了消息就标成旧的；回合结束就没有了", () => {
+    const one: SessionEventBody = {
+      type: "todo",
+      items: [{ content: "一", status: "in_progress" }],
+    };
+    const done: SessionEventBody = {
+      type: "todo",
+      items: [{ content: "一", status: "completed" }],
+    };
+    const plan = (...bodies: SessionEventBody[]) => buildTimeline(events(...bodies)).plan;
+    expect(plan({ type: "turn.started" }, one, done)).toEqual({
+      items: [{ content: "一", status: "completed" }],
+      stale: false,
+    });
+    expect(
+      plan({ type: "turn.started" }, one, {
+        type: "user.message",
+        text: "换个做法",
+        injected: true,
+      }),
+    ).toEqual({ items: [{ content: "一", status: "in_progress" }], stale: true });
+    expect(plan({ type: "turn.started" }, one, { type: "turn.ended", reason: "completed" })).toBe(
+      undefined,
     );
-    expect(timeline.items.filter((i) => i.kind === "todo")).toEqual([
-      { kind: "todo", key: 3, items: [{ content: "一", status: "completed" }] },
-    ]);
-    expect(timeline.state).toEqual({ status: "waiting", detail: null });
+    // 计划不在时间线里占位置
+    expect(buildTimeline(events(one)).items).toEqual([]);
   });
 
   it("回合没有正常结束、会话失败时，插一条说明：只有错误类别、状态码和参考号", () => {

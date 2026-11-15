@@ -4,7 +4,7 @@ import type {
   AiLabels,
   HostCommand,
   HostEvent,
-  ModelProgress,
+  LiveEvent,
   PullRequestState,
   SafeError,
   Session,
@@ -68,8 +68,8 @@ export interface SessionHandle {
   eventsAfter(seq: number): Promise<SessionEvent[]>;
   /** 有新事件时调用 listener。返回取消订阅的函数。 */
   subscribe(listener: () => void): () => void;
-  /** 模型的进度（只推送、不落库）。返回取消订阅的函数。 */
-  subscribeProgress(listener: (progress: ModelProgress) => void): () => void;
+  /** 模型的进度和正在输出的文字（只推送、不落库）。返回取消订阅的函数。 */
+  subscribeLive(listener: (event: LiveEvent) => void): () => void;
 }
 
 type SessionRow = typeof sessions.$inferSelect;
@@ -112,8 +112,8 @@ export class Sessions {
   readonly #deps: AppDeps;
   /** 某个会话有了新事件。键是会话的内部 id。 */
   readonly #events = new Topic<void>();
-  /** 某个会话的模型进度，键是会话 id。 */
-  readonly #progress = new Topic<ModelProgress>();
+  /** 某个会话只推送、不落库的事件（模型进度、文字增量），键是会话 id。 */
+  readonly #live = new Topic<LiveEvent>();
   /** 某个用户的某个会话有变化。键是用户 id，值是会话短 ID。 */
   readonly #changes = new Topic<string>();
 
@@ -207,7 +207,7 @@ export class Sessions {
       session: (await this.#views([row]))[0] as Session,
       eventsAfter: (seq) => this.#eventsAfter(row.id, seq),
       subscribe: (listener) => this.#events.on(row.id, listener),
-      subscribeProgress: (listener) => this.#progress.on(row.id, listener),
+      subscribeLive: (listener) => this.#live.on(row.id, listener),
     };
   }
 
@@ -534,8 +534,8 @@ export class Sessions {
    * 只接受当前状态下说得通的事件，其余忽略（比如已经结束的回合又来的事件、已经不在了的会话）。
    */
   async handleHostEvent(event: HostEvent): Promise<void> {
-    if (event.type === "progress") {
-      await this.#forwardProgress(event);
+    if (event.type === "progress" || event.type === "delta") {
+      await this.#forwardLive(event);
       return;
     }
     const handled = await this.#deps.db.transaction(async (tx) => {
@@ -558,8 +558,8 @@ export class Sessions {
     if (handled.next) this.#deps.host?.send(handled.next);
   }
 
-  /** 模型进度原样转给打开着这个会话的浏览器；不是正在跑的回合的（晚到的）丢掉。不落库。 */
-  async #forwardProgress(event: { sessionId: string; turnId: string } & ModelProgress) {
+  /** 模型进度、文字增量原样转给打开着这个会话的浏览器；不是正在跑的回合的（晚到的）丢掉。不落库。 */
+  async #forwardLive(event: Extract<HostEvent, { type: "progress" | "delta" }>) {
     const [turn] = await this.#deps.db
       .select({ id: turns.id })
       .from(turns)
@@ -572,7 +572,12 @@ export class Sessions {
       )
       .limit(1);
     if (!turn) return;
-    this.#progress.emit(event.sessionId, { phase: event.phase, tokens: event.tokens });
+    this.#live.emit(
+      event.sessionId,
+      event.type === "progress"
+        ? { event: "progress", data: { phase: event.phase, tokens: event.tokens } }
+        : { event: "delta", data: { kind: event.kind, text: event.text } },
+    );
   }
 
   /** 沙箱好了：开始正在等着的回合。返回要发给宿主机的命令。 */

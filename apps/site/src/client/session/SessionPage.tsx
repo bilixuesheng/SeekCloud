@@ -1,9 +1,12 @@
 import type { ModelProgress, ThinkingEffort, TodoItem } from "@seekcloud/protocol";
 import {
+  createContext,
   type ReactNode,
   type TouchEvent as ReactTouchEvent,
   type WheelEvent as ReactWheelEvent,
   type RefObject,
+  useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -30,6 +33,7 @@ import { firstMessageOf } from "./first-message";
 import { contentKey, ScrollFollower } from "./follow-scroll";
 import { LiveMarkdown, SessionLinks } from "./Markdown";
 import { effortLabels, ModelPicker } from "./ModelPicker";
+import { usePacedText } from "./paced-text";
 import { fullTime, relativeTime } from "./relative-time";
 import { SessionHeader } from "./SessionHeader";
 import {
@@ -68,7 +72,7 @@ export function SessionPage({
   const [fetched, setFetched] = useState<Session>();
   const [missing, setMissing] = useState(false);
   const session = listed ?? fetched;
-  const { events, broken, liveAfter, progress } = useSessionEvents(id);
+  const { events, broken, liveAfter, progress, draft, adopted } = useSessionEvents(id);
   const timeline = useMemo(() => buildTimeline(events), [events]);
   const state = timeline.state ?? session;
   const status = state?.status;
@@ -166,68 +170,90 @@ export function SessionPage({
         <SessionLinks.Provider
           value={{ repo: repo?.fullName, pullRequest: repo?.pullRequest ?? undefined }}
         >
-          <div className="timeline-inner">
-            {timeline.items.map((item) => (
-              <TimelineEntry
-                key={item.key}
-                item={item}
-                nameOf={nameOf}
-                live={item.key > liveAfter}
-                // 服务器回推的正是刚才先显示的那条：不从头再播出现的动画，免得闪一下；刚才没播完的接着播，✓✓ 淡入。
-                pendingAt={
-                  item.kind === "user" && item.text === pending?.text ? pending.at : undefined
-                }
-                now={now}
-                onRetry={canRetry ? (text) => void send(text, false) : undefined}
-              />
-            ))}
-            {timeline.queued.map((item) => (
-              <QueuedMessage
-                key={item.id}
-                sessionId={id}
-                id={item.id}
-                text={item.text}
-                pendingAt={item.text === pending?.text ? pending.at : undefined}
-                onRestore={(text) =>
-                  setReply((current) => (current ? `${text}\n${current}` : text))
-                }
-                onError={setError}
-              />
-            ))}
-            {showPending && (
-              <SentMessage
-                text={pending.text}
-                at={pending.at}
-                motion="bubble-in"
-                now={now}
-                sending
-              />
-            )}
-            {/* 对话最后一行：鲸鱼（照 Claude 的星形标志）。Agent 在工作时它游动、旁边写在做什么；
+          <GrowContext.Provider value={follow.grew}>
+            <div className="timeline-inner">
+              {/* 宿主机推来的增量先画成一条临时回复，放在同一个列表里：完整的消息到了用同一个 key 接过去 */}
+              {[
+                ...timeline.items,
+                ...(draft?.text
+                  ? [
+                      {
+                        kind: "assistant" as const,
+                        key: draft.key,
+                        text: draft.text,
+                        thinking: draft.thinking || undefined,
+                      },
+                    ]
+                  : []),
+              ].map((item) => (
+                <TimelineEntry
+                  key={adopted.get(item.key) ?? item.key}
+                  item={item}
+                  nameOf={nameOf}
+                  live={item.key < 0 || item.key > liveAfter}
+                  // 服务器回推的正是刚才先显示的那条：不从头再播出现的动画，免得闪一下；刚才没播完的接着播，✓✓ 淡入。
+                  pendingAt={
+                    item.kind === "user" && item.text === pending?.text ? pending.at : undefined
+                  }
+                  now={now}
+                  onRetry={canRetry ? (text) => void send(text, false) : undefined}
+                />
+              ))}
+              {timeline.queued.map((item, index) => (
+                <QueuedMessage
+                  key={item.id}
+                  first={index === 0}
+                  sessionId={id}
+                  id={item.id}
+                  text={item.text}
+                  pendingAt={item.text === pending?.text ? pending.at : undefined}
+                  onRestore={(text) =>
+                    setReply((current) => (current ? `${text}\n${current}` : text))
+                  }
+                  onError={setError}
+                />
+              ))}
+              {showPending && (
+                <SentMessage
+                  text={pending.text}
+                  at={pending.at}
+                  motion="bubble-in"
+                  now={now}
+                  sending
+                />
+              )}
+              {/* 计划：回合进行中始终在对话最下面，回合结束或停止以后就不显示（照 Claude） */}
+              {working && timeline.plan && (
+                <TodoCard items={timeline.plan.items} stale={timeline.plan.stale} />
+              )}
+              {/* 对话最后一行：鲸鱼（照 Claude 的星形标志）。Agent 在工作时它游动、旁边写在做什么；
                 停下来以后不动，最后一条回复下面提示一句 */}
-            {status === "queued" ? (
-              <Working text="排队中，等待空闲资源" since={timeline.since} />
-            ) : status === "running" ? (
-              <Working
-                text={
-                  state?.detail === "preparing_sandbox"
-                    ? "正在准备沙箱"
-                    : (timeline.activity ?? "深度求索中")
-                }
-                since={timeline.since}
-                // 有工具在跑时写它在做什么（不加省略号），不显示 token 数（timeline.ts 的 activity）
-                ellipsis={timeline.activity === undefined || state?.detail === "preparing_sandbox"}
-                progress={timeline.activity === undefined ? progress : undefined}
-              />
-            ) : (
-              <p className="timeline-tail">
-                <Whale size={WHALE_SIZE} transitionName="seekcloud-whale" />
-                {timeline.items.some((item) => item.kind === "assistant") && (
-                  <span className="ai-notice">DeepSeek 是 AI 并且可能会犯错。</span>
-                )}
-              </p>
-            )}
-          </div>
+              {status === "queued" ? (
+                <Working text="排队中，等待空闲资源" since={timeline.since} />
+              ) : status === "running" ? (
+                <Working
+                  text={
+                    state?.detail === "preparing_sandbox"
+                      ? "正在准备沙箱"
+                      : (timeline.activity ?? "深度求索中")
+                  }
+                  since={timeline.since}
+                  // 有工具在跑时写它在做什么（不加省略号），不显示 token 数（timeline.ts 的 activity）
+                  ellipsis={
+                    timeline.activity === undefined || state?.detail === "preparing_sandbox"
+                  }
+                  progress={timeline.activity === undefined ? progress : undefined}
+                />
+              ) : (
+                <p className="timeline-tail">
+                  <Whale size={WHALE_SIZE} transitionName="seekcloud-whale" />
+                  {timeline.items.some((item) => item.kind === "assistant") && (
+                    <span className="ai-notice">DeepSeek 是 AI 并且可能会犯错。</span>
+                  )}
+                </p>
+              )}
+            </div>
+          </GrowContext.Provider>
         </SessionLinks.Provider>
       </div>
 
@@ -307,6 +333,7 @@ function ArchivedNote({ id, onError }: { id: string; onError: (message: string) 
 function QueuedMessage({
   sessionId,
   id,
+  first,
   text,
   pendingAt,
   onRestore,
@@ -314,17 +341,21 @@ function QueuedMessage({
 }: {
   sessionId: string;
   id: string;
+  /** 排在最前面的一条：只有它有"立即发送"，后面的只写"排队中"（照 Claude，多条排队时不每条都放一个按钮）。 */
+  first: boolean;
   text: string;
   pendingAt?: string;
   onRestore: (text: string) => void;
   onError: (message: string) => void;
 }) {
-  const [busy, setBusy] = useState(false);
+  // 正在提交的操作：网络慢、还没回来时，点的那个按钮换成转圈（照 Claude）
+  const [doing, setDoing] = useState<"restore" | "delete" | "send-now">();
+  const busy = doing !== undefined;
   const [copied, copy] = useCopy(text);
   const catchUp = useCatchUp(pendingAt);
 
   const act = async (action: "withdraw" | "send-now", restore = false) => {
-    setBusy(true);
+    setDoing(action === "send-now" ? "send-now" : restore ? "restore" : "delete");
     try {
       const result = await api<{ text?: string }>(
         `/api/sessions/${sessionId}/queue/${id}/${action}`,
@@ -333,9 +364,10 @@ function QueuedMessage({
       if (restore && result.text) onRestore(result.text);
     } catch (e) {
       onError((e as ApiError).message);
-      setBusy(false);
+      setDoing(undefined);
     }
   };
+  const spinner = <span className="spinner small" aria-hidden="true" />;
 
   return (
     <div
@@ -344,7 +376,7 @@ function QueuedMessage({
     >
       <div className="user-message">{text}</div>
       <div className="queued-actions">
-        <span className="queued-label">排队中</span>
+        {!first && <span className="queued-label">排队中</span>}
         <CopyButton copied={copied} onCopy={copy} />
         <button
           type="button"
@@ -354,7 +386,7 @@ function QueuedMessage({
           disabled={busy}
           onClick={() => void act("withdraw", true)}
         >
-          <UndoIcon />
+          {doing === "restore" ? spinner : <UndoIcon />}
         </button>
         <button
           type="button"
@@ -364,16 +396,19 @@ function QueuedMessage({
           disabled={busy}
           onClick={() => void act("withdraw")}
         >
-          <CloseIcon />
+          {doing === "delete" ? spinner : <CloseIcon />}
         </button>
-        <button
-          type="button"
-          className="send-now"
-          disabled={busy}
-          onClick={() => void act("send-now")}
-        >
-          立即发送
-        </button>
+        {first && (
+          <button
+            type="button"
+            className="send-now"
+            aria-busy={doing === "send-now"}
+            disabled={busy}
+            onClick={() => void act("send-now")}
+          >
+            {doing === "send-now" ? spinner : "立即发送"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -431,8 +466,12 @@ function useFollowScroll(ref: RefObject<HTMLDivElement | null>, sessionId: strin
     follower.current?.contentAdded();
   }, [key]);
 
+  // 回复一个个字显示出来时页面在长高，贴着底部的话跟着往下（paced-text.ts）
+  const grew = useCallback(() => follower.current?.contentAdded(), []);
+
   return {
     away,
+    grew,
     toBottom: () => follower.current?.toBottom(),
     handlers: {
       onScroll: () => follower.current?.scrolled(),
@@ -531,6 +570,10 @@ function SentMessage({
     >
       <div className="user-message">{text}</div>
       <div className="message-meta">
+        {/* 还没发到服务器（网络慢）时转圈；很快就到的话不出现（.sending-spinner 晚一点才显示） */}
+        {sending && (
+          <span className="spinner small sending-spinner" role="status" aria-label="正在发送" />
+        )}
         {!sending && delivered && (
           <MetaInfo className="message-delivered" tip="DeepSeek 已读取">
             <DoubleCheckIcon />
@@ -754,14 +797,15 @@ function TimelineEntry({
               <div className="thinking-body">{item.thinking}</div>
             </details>
           )}
-          <LiveMarkdown text={item.text} live={live} />
-          {item.turnEnd && <ReplyMeta reply={item.turnEnd.reply} at={item.turnEnd.at} now={now} />}
+          <PacedReply text={item.text} live={live}>
+            {item.turnEnd && (
+              <ReplyMeta reply={item.turnEnd.reply} at={item.turnEnd.at} now={now} />
+            )}
+          </PacedReply>
         </div>
       );
     case "tools":
       return <Tools calls={item.calls} motion={motion} />;
-    case "todo":
-      return <TodoCard items={item.items} motion={motion} />;
     case "model":
       return (
         <p className={`timeline-notice${motion}`}>
@@ -771,6 +815,28 @@ function TimelineEntry({
     case "notice":
       return <p className={`timeline-notice ${item.tone}${motion}`}>{item.text}</p>;
   }
+}
+
+/** 页面长高了（回复多显示了几个字），贴着底部时跟着往下。 */
+const GrowContext = createContext<(() => void) | undefined>(undefined);
+
+/** 回复按舒服的速度一个个字显示出来（paced-text.ts）；显示完了才出现下面的复制和时间。 */
+function PacedReply({
+  text,
+  live,
+  children,
+}: {
+  text: string;
+  live: boolean;
+  children?: ReactNode;
+}) {
+  const { shown, done } = usePacedText(text, live, useContext(GrowContext));
+  return (
+    <>
+      <LiveMarkdown text={shown} live={live} />
+      {done && children}
+    </>
+  );
 }
 
 const callState = (call: ToolCall) =>
@@ -859,12 +925,12 @@ function ToolBody({ call }: { call: ToolCall }) {
 }
 
 /** 待办清单：只显示最新的一份，放在它最后一次更新的位置。 */
-function TodoCard({ items, motion }: { items: TodoItem[]; motion: string }) {
+function TodoCard({ items, stale }: { items: TodoItem[]; stale: boolean }) {
   const done = items.filter((i) => i.status === "completed").length;
   return (
-    <section className={`todo-card${motion}`} aria-label="待办清单">
+    <section className="todo-card fresh" aria-label="计划">
       <div className="todo-head">
-        <span>待办</span>
+        <span>{stale ? "你上一条消息之前的计划" : "计划"}</span>
         <span className="todo-progress">
           {done}/{items.length}
         </span>
