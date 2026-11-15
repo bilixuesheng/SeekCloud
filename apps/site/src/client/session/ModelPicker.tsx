@@ -8,6 +8,8 @@ export interface ModelInfo {
   id: string;
   name: string;
   description: string;
+  /** 能不能识图：不能时输入框"+"里的"图片"不可用。 */
+  vision: boolean;
   efforts: ThinkingEffort[];
 }
 

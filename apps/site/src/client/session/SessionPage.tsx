@@ -316,6 +316,9 @@ export function SessionPage({
             disabled={closed}
             busy={busy}
             submitLabel="发送"
+            attach={{
+              vision: models?.models.find((m) => m.id === picked?.model)?.vision ?? false,
+            }}
             working={
               working
                 ? {

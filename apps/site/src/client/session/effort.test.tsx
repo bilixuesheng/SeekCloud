@@ -36,7 +36,7 @@ describe("思考强度的滑块", () => {
 
 describe("模型和思考强度的按钮", () => {
   const models: ModelInfo[] = [
-    { id: "flash", name: "DeepSeek Flash", description: "", efforts: [...all] },
+    { id: "flash", name: "DeepSeek Flash", description: "", vision: false, efforts: [...all] },
   ];
   const render = (effort: "high" | "max") =>
     renderToStaticMarkup(
