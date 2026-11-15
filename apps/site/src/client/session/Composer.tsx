@@ -1,5 +1,21 @@
-import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUpIcon, ChevronDownIcon, QueueIcon, ReturnIcon, StopIcon } from "../Icons";
+import {
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  ArrowUpIcon,
+  ChevronDownIcon,
+  ImageIcon,
+  PaperclipIcon,
+  PlusIcon,
+  QueueIcon,
+  ReturnIcon,
+  StopIcon,
+} from "../Icons";
 import { keyboardOpen } from "../keyboard";
 import { Sheet, usePresence } from "../Motion";
 import { MenuItem } from "./SessionHeader";
@@ -32,6 +48,7 @@ export function Composer({
   submitLabel,
   autoFocus = false,
   working,
+  attach,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -48,6 +65,11 @@ export function Composer({
    * Agent 下一步读到），旁边一个"⌄"，点开是"稍后排队"（等这个回合结束再发）和"停止"（只停下回合，字留在输入框里）。
    */
   working?: { onStop: () => void; onLater: () => void; stopping: boolean };
+  /**
+   * 输入框左边的"+"（照 Claude）：附图片、附文件。vision：当前模型能不能识图。
+   * 现在两项都还不能用（列表里的模型都不能识图；传文件进沙箱要等宿主机），点开写明原因。
+   */
+  attach?: { vision: boolean };
 }) {
   const textarea = useRef<HTMLTextAreaElement>(null);
   // 按下发送按钮时输入法开着没有（输入框有焦点、可见区域被顶矮了）：开着的发完不关，关着的发完不弹出来。
@@ -85,7 +107,33 @@ export function Composer({
   };
 
   return (
-    <form className={`composer${disabled ? " disabled" : ""}`} onSubmit={submit}>
+    <form
+      className={`composer${disabled ? " disabled" : ""}${attach ? " with-attach" : ""}`}
+      onSubmit={submit}
+    >
+      {attach && (
+        <PopMenu
+          label="添加附件"
+          className="composer-attach"
+          menuClassName="attach-menu"
+          trigger={<PlusIcon size={18} />}
+        >
+          {() => (
+            <>
+              <MenuItem icon={<ImageIcon />} disabled onClick={() => undefined}>
+                图片
+                <span className="sheet-item-hint">
+                  {attach.vision ? "暂未开放" : "当前模型无法识别图片，请换用支持识图的模型"}
+                </span>
+              </MenuItem>
+              <MenuItem icon={<PaperclipIcon />} disabled onClick={() => undefined}>
+                文件
+                <span className="sheet-item-hint">接入沙箱后可用</span>
+              </MenuItem>
+            </>
+          )}
+        </PopMenu>
+      )}
       <textarea
         ref={textarea}
         rows={1}
@@ -146,7 +194,7 @@ export function Composer({
 }
 
 /**
- * 发送键旁边的"⌄"：稍后排队、停止。手机上照 Claude 从底部弹出，电脑上是发送键上方的小弹层。
+ * 发送键旁边的"⌄"：稍后排队、停止。
  */
 function SendMenu({
   disabled,
@@ -156,6 +204,47 @@ function SendMenu({
   disabled: boolean;
   onLater: () => void;
   onStop: () => void;
+}) {
+  return (
+    <PopMenu
+      label="更多发送方式"
+      className="send-more"
+      menuClassName="send-menu"
+      disabled={disabled}
+      trigger={<ChevronDownIcon />}
+    >
+      {(pick) => (
+        <>
+          <MenuItem icon={<QueueIcon />} onClick={() => pick(onLater)}>
+            稍后排队
+          </MenuItem>
+          <MenuItem icon={<StopIcon />} onClick={() => pick(onStop)}>
+            停止
+          </MenuItem>
+        </>
+      )}
+    </PopMenu>
+  );
+}
+
+/**
+ * 输入框上的小菜单（"+"、"⌄"）：手机上照 Claude 从底部弹出，电脑上是按钮上方的小弹层。
+ * children 拿到 pick：先收起菜单，再做选中的事。
+ */
+function PopMenu({
+  label,
+  className,
+  menuClassName,
+  trigger,
+  disabled = false,
+  children,
+}: {
+  label: string;
+  className: string;
+  menuClassName: string;
+  trigger: ReactNode;
+  disabled?: boolean;
+  children: (pick: (action: () => void) => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const popover = usePresence(open && !coarsePointer(), 180);
@@ -177,38 +266,29 @@ function SendMenu({
     setOpen(false);
     action();
   };
-  const items = (
-    <>
-      <MenuItem icon={<QueueIcon />} onClick={() => pick(onLater)}>
-        稍后排队
-      </MenuItem>
-      <MenuItem icon={<StopIcon />} onClick={() => pick(onStop)}>
-        停止
-      </MenuItem>
-    </>
-  );
   return (
-    <div className="send-more-wrap" ref={root}>
+    <div className="pop-menu-wrap" ref={root}>
       <button
         type="button"
-        className={`send-more${open ? " active" : ""}`}
-        aria-label="更多发送方式"
+        className={`${className}${open ? " active" : ""}`}
+        aria-label={label}
+        title={label}
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen(!open)}
       >
-        <ChevronDownIcon />
+        {trigger}
       </button>
       {popover.mounted && (
-        <div className={`popover send-menu${popover.closing ? " closing" : ""}`} role="menu">
-          {items}
+        <div className={`popover ${menuClassName}${popover.closing ? " closing" : ""}`} role="menu">
+          {children(pick)}
         </div>
       )}
       {coarsePointer() && (
-        <Sheet open={open} label="发送方式" onClose={() => setOpen(false)}>
+        <Sheet open={open} label={label} onClose={() => setOpen(false)}>
           <div className="sheet-menu" role="menu">
-            {items}
+            {children(pick)}
           </div>
         </Sheet>
       )}

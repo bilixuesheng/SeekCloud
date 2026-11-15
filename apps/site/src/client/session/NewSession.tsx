@@ -185,6 +185,7 @@ export function NewSession({
           canSubmit={connected}
           submitLabel="发起会话"
           autoFocus
+          attach={{ vision: models.find((m) => m.id === model)?.vision ?? false }}
         />
         {/* 输入框下面：环境、仓库、分支一行；模型和思考强度靠右 */}
         <div className="composer-below">

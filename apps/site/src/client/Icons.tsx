@@ -215,6 +215,24 @@ export const LinkIcon = () => (
   </svg>
 );
 
+/** 图片。 */
+export const ImageIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M3 3.5h10v9H3zM3 10.5l3-3 3 3 1.5-1.5 2.5 2.5" {...line} />
+    <circle cx="10.5" cy="6" r="1" {...line} />
+  </svg>
+);
+
+/** 回形针：附件。 */
+export const PaperclipIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M10.5 5 6.2 9.3a1.2 1.2 0 0 0 1.7 1.7l4.6-4.6a2.4 2.4 0 0 0-3.4-3.4L4.4 7.7a3.6 3.6 0 0 0 5.1 5.1L13 9.3"
+      {...line}
+    />
+  </svg>
+);
+
 /** 实心的方块：停止。 */
 export const StopIcon = () => (
   <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">

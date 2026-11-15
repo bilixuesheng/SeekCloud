@@ -1036,12 +1036,57 @@ input:not([type="range"]):focus {
   background: var(--fg-2);
 }
 
-/* 发送键旁边的"⌄"：稍后排队、停止 */
-.send-more-wrap {
+/* 输入框上的小菜单（"+"、"⌄"）的外框：弹层相对它定位 */
+.pop-menu-wrap {
   position: relative;
   flex-shrink: 0;
   align-self: flex-end;
 }
+
+/* 输入框左边的"+"：附图片、附文件 */
+.composer.with-attach {
+  padding-left: 6px;
+  gap: 4px;
+}
+
+.composer-attach {
+  width: 32px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--fg-2);
+  transition: background 0.15s;
+}
+
+.composer-attach:hover,
+.composer-attach.active {
+  background: var(--hover);
+}
+
+.attach-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: 260px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  transform-origin: bottom left;
+}
+
+/* 菜单项下面一行小字：为什么用不了 */
+.sheet-item-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* 发送键旁边的"⌄"：稍后排队、停止 */
 
 .send-more {
   width: 22px;
