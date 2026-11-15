@@ -1,4 +1,4 @@
-import type { SessionEvent } from "@seekcloud/protocol";
+import type { ModelProgress, SessionEvent } from "@seekcloud/protocol";
 import { useEffect, useState } from "react";
 
 /** 连上以后这么久没有新事件，就当历史已经补完了。 */
@@ -16,9 +16,12 @@ export function useSessionEvents(sessionId: string) {
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [broken, setBroken] = useState(false);
   const [liveAfter, setLiveAfter] = useState(Number.POSITIVE_INFINITY);
+  // 模型这一轮的进度（只推送、不落库）。这一步落库的事件一到就清掉，下一轮从 0 数起。
+  const [progress, setProgress] = useState<ModelProgress>();
 
   useEffect(() => {
     setEvents([]);
+    setProgress(undefined);
     setBroken(false);
     setLiveAfter(Number.POSITIVE_INFINITY);
     let last = 0;
@@ -49,9 +52,13 @@ export function useSessionEvents(sessionId: string) {
       const event = JSON.parse(e.data) as SessionEvent;
       if (event.seq <= last) return;
       last = event.seq;
+      setProgress(undefined);
       pending.push(event);
       frame ||= requestAnimationFrame(flush);
       waitQuiet();
+    });
+    source.addEventListener("progress", (e) => {
+      setProgress(JSON.parse(e.data) as ModelProgress);
     });
     source.addEventListener("open", () => {
       setBroken(false);
@@ -72,5 +79,5 @@ export function useSessionEvents(sessionId: string) {
     };
   }, [sessionId]);
 
-  return { events, broken, liveAfter };
+  return { events, broken, liveAfter, progress };
 }

@@ -161,10 +161,21 @@ export type HostCommand =
     };
 
 /** 宿主机发给主站的事件。 */
+/**
+ * 一步里模型的进度：正在思考还是在写正文，这一轮（一次模型调用）到现在生成了多少 token，每一轮从 0 数起。
+ * 只推送、不落库：宿主机大约每 100 毫秒发一次，主站原样转给浏览器，断线重连也不补。
+ * 浏览器在思考时把对话底部的用时换成这个 token 数（照 Claude Code，2026-11-15 用户定的）。
+ */
+export interface ModelProgress {
+  phase: "thinking" | "text";
+  tokens: number;
+}
+
 export type HostEvent =
   | { type: "sandbox.ready"; sessionId: string }
   | { type: "sandbox.failed"; sessionId: string; error: SafeError }
-  | { type: "agent"; sessionId: string; turnId: string; event: AgentEvent };
+  | { type: "agent"; sessionId: string; turnId: string; event: AgentEvent }
+  | ({ type: "progress"; sessionId: string; turnId: string } & ModelProgress);
 
 /**
  * 主站和宿主机之间的一帧（WebSocket，以后接上）。

@@ -1,4 +1,4 @@
-import type { ThinkingEffort, TodoItem } from "@seekcloud/protocol";
+import type { ModelProgress, ThinkingEffort, TodoItem } from "@seekcloud/protocol";
 import {
   type ReactNode,
   type TouchEvent as ReactTouchEvent,
@@ -67,7 +67,7 @@ export function SessionPage({
   const [fetched, setFetched] = useState<Session>();
   const [missing, setMissing] = useState(false);
   const session = listed ?? fetched;
-  const { events, broken, liveAfter } = useSessionEvents(id);
+  const { events, broken, liveAfter, progress } = useSessionEvents(id);
   const timeline = useMemo(() => buildTimeline(events), [events]);
   const state = timeline.state ?? session;
   const status = state?.status;
@@ -204,6 +204,7 @@ export function SessionPage({
               <Working
                 text={state?.detail === "preparing_sandbox" ? "正在准备沙箱" : "深度求索中"}
                 since={timeline.since}
+                progress={progress}
               />
             ) : (
               <p className="timeline-tail">
@@ -616,13 +617,36 @@ function useElapsed(since: string | undefined): string | undefined {
 /** 对话最后一行鲸鱼的大小。 */
 const WHALE_SIZE = 30;
 
-function Working({ text, since }: { text: string; since?: string }) {
+/** token 数的写法：1234 → "1.2k"。 */
+export function formatTokens(tokens: number): string {
+  return tokens < 1000 ? String(tokens) : `${(tokens / 1000).toFixed(1)}k`;
+}
+
+/**
+ * 对话最后一行在工作时：鲸鱼游动，写着在做什么，后面是用时。
+ * 模型在思考时，用时的位置换成这一轮已经生成的 token 数，连续往上跳（照 Claude Code）；开始写正文、等工具时换回用时。
+ */
+function Working({
+  text,
+  since,
+  progress,
+}: {
+  text: string;
+  since?: string;
+  progress?: ModelProgress;
+}) {
   const elapsed = useElapsed(since);
+  const thinkingTokens =
+    progress?.phase === "thinking" && progress.tokens > 0 ? progress.tokens : undefined;
   return (
     <p className="timeline-tail working" role="status">
       <Whale size={WHALE_SIZE} swimming transitionName="seekcloud-whale" />
       <span className="working-text">{text}…</span>
-      {elapsed && <span className="working-time">{elapsed}</span>}
+      {thinkingTokens !== undefined ? (
+        <span className="working-time working-tokens">↓ {formatTokens(thinkingTokens)} tokens</span>
+      ) : (
+        elapsed && <span className="working-time">{elapsed}</span>
+      )}
     </p>
   );
 }
