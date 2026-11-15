@@ -1,6 +1,7 @@
 import { fitEffort, type ThinkingEffort } from "@seekcloud/protocol";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type ApiError, api } from "../api";
+import { prefetch, useCached } from "../cached";
 import { useDraft } from "../draft";
 import { useSerifReady } from "../fonts";
 import { GitHubConnectCard, type GitHubStatus } from "../GitHubConnectCard";
@@ -88,11 +89,19 @@ export function NewSession({
   const efforts = models.find((m) => m.id === model)?.efforts ?? [];
   const effort = fitEffort(efforts, chosenEffort ?? modelList?.defaultEffort ?? "high") ?? "high";
   const [picking, setPicking] = useState(false);
+  const closePicker = useCallback(() => setPicking(false), []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
-    api<GitHubStatus>("/api/github/status").then(setGitHub, () => undefined);
+    api<GitHubStatus>("/api/github/status").then(
+      (status) => {
+        setGitHub(status);
+        // 先把仓库列表拉下来放着：点"选择仓库"时列表直接就在，不用打开以后再等
+        if (status.connected) prefetch([REPOS]);
+      },
+      () => undefined,
+    );
     api<{ environments: Environment[] }>("/api/environments").then(
       (res) => {
         setEnvironments(res.environments);
@@ -190,7 +199,7 @@ export function NewSession({
               )}
               <button
                 type="button"
-                className={`chip${picking ? " active" : ""}`}
+                className={`chip repo-chip${picking ? " active" : ""}`}
                 aria-expanded={picking}
                 onClick={() => setPicking(!picking)}
               >
@@ -226,12 +235,7 @@ export function NewSession({
             />
           )}
           {github && connected && picking && (
-            <RepoPicker
-              status={github}
-              selected={repo}
-              onPick={pick}
-              onClose={() => setPicking(false)}
-            />
+            <RepoPicker status={github} selected={repo} onPick={pick} onClose={closePicker} />
           )}
         </div>
         {error && (
@@ -243,6 +247,8 @@ export function NewSession({
     </section>
   );
 }
+
+const REPOS = "/api/github/repos";
 
 function RepoPicker({
   status,
@@ -256,9 +262,31 @@ function RepoPicker({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const [repos, setRepos] = useState<Repo[]>();
-  const [error, setError] = useState<string>();
+  // 不搜的时候用预先拉好的列表（打开首页时就开始拉了）；搜的时候先在这份里筛，服务器的结果（含公开仓库）回来再换上
+  const all = useCached<{ repos: Repo[] }>(REPOS);
+  const [found, setFound] = useState<{ q: string; repos: Repo[] }>();
+  const [searchError, setSearchError] = useState<string>();
   const search = useRef<HTMLInputElement>(null);
+  const root = useRef<HTMLElement>(null);
+  const q = query.trim();
+  const local = all.data?.repos.filter((r) => r.fullName.toLowerCase().includes(q.toLowerCase()));
+  const repos = !q ? all.data?.repos : found?.q === q ? found.repos : local;
+  const error = q ? searchError : all.error;
+
+  // 点弹层外面或按 Esc 收起；点"选择仓库"那个按钮由按钮自己开关
+  useEffect(() => {
+    const onPointer = (e: PointerEvent) => {
+      const target = e.target as Element;
+      if (!root.current?.contains(target) && !target.closest?.(".repo-chip")) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
 
   // 电脑上打开就能直接打字；手机上不自动选中搜索框，免得输入法弹出来把列表挡住
   useEffect(() => {
@@ -266,21 +294,21 @@ function RepoPicker({
   }, []);
 
   useEffect(() => {
+    if (!q) return;
     const timer = setTimeout(() => {
-      const q = query.trim();
-      api<{ repos: Repo[] }>(`/api/github/repos${q ? `?q=${encodeURIComponent(q)}` : ""}`).then(
+      api<{ repos: Repo[] }>(`${REPOS}?q=${encodeURIComponent(q)}`).then(
         (res) => {
-          setRepos(res.repos);
-          setError(undefined);
+          setFound({ q, repos: res.repos });
+          setSearchError(undefined);
         },
-        (e) => setError(e.message),
+        (e: ApiError) => setSearchError(e.message),
       );
     }, 250);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [q]);
 
   return (
-    <section className="popover repo-picker" aria-label="选择仓库">
+    <section ref={root} className="popover repo-picker" aria-label="选择仓库">
       <input
         ref={search}
         className="popover-search"

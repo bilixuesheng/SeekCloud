@@ -93,11 +93,11 @@ export function contentKey(timeline: Timeline, extra: string): string {
   if (last?.kind === "assistant") size = last.text.length + (last.thinking?.length ?? 0);
   else if (last?.kind === "tools")
     size = last.calls.length * 2 + last.calls.filter((c) => c.result).length;
-  else if (last?.kind === "todo") size = last.items.length;
   return [
     timeline.items.length,
     size,
     timeline.queued.length,
+    timeline.plan?.items.map((i) => i.status).join(","),
     timeline.state?.status,
     timeline.state?.detail,
     extra,

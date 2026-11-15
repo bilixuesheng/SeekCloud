@@ -1136,6 +1136,24 @@ input:not([type="range"]):focus {
   animation: spin 0.8s linear infinite;
 }
 
+.spinner.small {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+  vertical-align: middle;
+}
+
+/* 发出去的消息：0.3 秒内就到了的话不出现转圈，免得每次都闪一下 */
+.sending-spinner {
+  margin-right: 6px;
+  color: var(--faint);
+  opacity: 0;
+  animation:
+    spin 0.8s linear infinite,
+    fade-in 0.2s ease 0.3s forwards;
+}
+
 /* 弹出层：选仓库、选模型 */
 
 .picker {

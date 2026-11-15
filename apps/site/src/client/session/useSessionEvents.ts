@@ -1,4 +1,4 @@
-import type { ModelProgress, SessionEvent } from "@seekcloud/protocol";
+import type { ModelProgress, SessionEvent, TextDelta } from "@seekcloud/protocol";
 import { useEffect, useState } from "react";
 
 /** 连上以后这么久没有新事件，就当历史已经补完了。 */
@@ -12,16 +12,31 @@ const HISTORY_MAX_MS = 1500;
  * liveAfter：序号比它大的是打开会话以后才发生的（Agent 回复的字要浮现出来），不大于它的是历史；
  * 历史还没补完时是 Infinity，这时一条都不算新的。
  */
+/** 宿主机推来的增量拼成的临时回复。key 是负数，不会和事件的序号撞上。 */
+export interface Draft {
+  key: number;
+  text: string;
+  thinking: string;
+}
+
 export function useSessionEvents(sessionId: string) {
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [broken, setBroken] = useState(false);
   const [liveAfter, setLiveAfter] = useState(Number.POSITIVE_INFINITY);
   // 模型在这个回合里的进度（只推送、不落库）：回合开始、结束时清掉，下一个回合从 0 数起。
   const [progress, setProgress] = useState<ModelProgress>();
+  // 宿主机推来的文字增量拼成的一条临时回复（只推送、不落库）。这一步完整的消息到了就由它接过去：
+  // adopted 记下"第几号事件接过了哪条临时回复"，会话页用同一个 key 画，字接着显示、不重播动画。
+  const [draft, setDraft] = useState<Draft>();
+  const [adopted] = useState(() => new Map<number, number>());
 
   useEffect(() => {
     setEvents([]);
     setProgress(undefined);
+    setDraft(undefined);
+    adopted.clear();
+    let current: Draft | undefined;
+    let nextKey = -1;
     setBroken(false);
     setLiveAfter(Number.POSITIVE_INFINITY);
     let last = 0;
@@ -41,11 +56,32 @@ export function useSessionEvents(sessionId: string) {
     };
     let pending: SessionEvent[] = [];
     let frame = 0;
+    // 临时回复和事件在同一帧里一起换：不会有一帧两条都在，也不会有一帧两条都没有
     const flush = () => {
       frame = 0;
       const batch = pending;
       pending = [];
       setEvents((list) => [...list, ...batch]);
+      setDraft(current && { ...current });
+    };
+    const settleDraft = (event: SessionEvent) => {
+      if (!current) return;
+      if (event.type === "message") {
+        if (event.text.startsWith(current.text)) {
+          adopted.set(event.seq, current.key);
+          current = undefined;
+        } else if (current.text.startsWith(event.text)) {
+          // 下一步的增量比这一步的完整消息先到了：前面这段交给这条消息，多出来的留着
+          adopted.set(event.seq, current.key);
+          current = { key: nextKey--, text: current.text.slice(event.text.length), thinking: "" };
+        } else current = undefined;
+      } else if (
+        event.type === "tool.call" ||
+        event.type === "turn.started" ||
+        event.type === "turn.ended"
+      ) {
+        current = undefined;
+      }
     };
     const source = new EventSource(`/api/sessions/${sessionId}/events`);
     source.addEventListener("session", (e) => {
@@ -53,12 +89,20 @@ export function useSessionEvents(sessionId: string) {
       if (event.seq <= last) return;
       last = event.seq;
       if (event.type === "turn.started" || event.type === "turn.ended") setProgress(undefined);
+      settleDraft(event);
       pending.push(event);
       frame ||= requestAnimationFrame(flush);
       waitQuiet();
     });
     source.addEventListener("progress", (e) => {
       setProgress(JSON.parse(e.data) as ModelProgress);
+    });
+    source.addEventListener("delta", (e) => {
+      const delta = JSON.parse(e.data) as TextDelta;
+      current ??= { key: nextKey--, text: "", thinking: "" };
+      if (delta.kind === "text") current.text += delta.text;
+      else current.thinking += delta.text;
+      if (!frame) setDraft({ ...current });
     });
     source.addEventListener("open", () => {
       setBroken(false);
@@ -77,7 +121,7 @@ export function useSessionEvents(sessionId: string) {
       clearTimeout(quiet);
       clearTimeout(deadline);
     };
-  }, [sessionId]);
+  }, [sessionId, adopted]);
 
-  return { events, broken, liveAfter, progress };
+  return { events, broken, liveAfter, progress, draft, adopted };
 }

@@ -27,8 +27,6 @@ export type TimelineItem =
     }
   /** 连续的工具调用合成一组，界面上先显示一行摘要。 */
   | { kind: "tools"; key: number; calls: ToolCall[] }
-  /** 待办清单只显示最新的一份，放在它最后一次更新的位置。 */
-  | { kind: "todo"; key: number; items: TodoItem[] }
   | { kind: "notice"; key: number; tone: "info" | "error"; text: string }
   | { kind: "model"; key: number; model: string; effort: ThinkingEffort };
 
@@ -45,6 +43,11 @@ export interface Timeline {
    * 没有工具在跑（模型在思考、写回复）时没有，那一行写"深度求索中"和这个回合的 token 数。
    */
   activity?: string;
+  /**
+   * 这个回合的计划（待办清单的最新一份）。照 Claude：回合进行中始终放在对话最下面，回合结束或停止以后就没有了。
+   * stale：计划最后一次更新以后管理员又发了消息，标题写"你上一条消息之前的计划"。
+   */
+  plan?: { items: TodoItem[]; stale: boolean };
 }
 
 const endNotices = {
@@ -54,7 +57,7 @@ const endNotices = {
 
 /** 把会话事件整理成界面上的一条条内容。 */
 export function buildTimeline(events: SessionEvent[]): Timeline {
-  let items: TimelineItem[] = [];
+  const items: TimelineItem[] = [];
   const calls = new Map<string, ToolCall>();
   let state: SessionState | undefined;
   let since: string | undefined;
@@ -65,6 +68,7 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
   let replies: Array<Extract<TimelineItem, { kind: "assistant" }>> = [];
   // 还没出结果的工具调用：callId → 一句话的描述
   let running = new Map<string, string>();
+  let plan: Timeline["plan"];
 
   for (const event of events) {
     switch (event.type) {
@@ -81,6 +85,7 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
         };
         if (!item.delivered) undelivered.push(item);
         items.push(item);
+        if (plan) plan = { ...plan, stale: true };
         break;
       }
       case "turn.started":
@@ -125,8 +130,7 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
         break;
       }
       case "todo":
-        items = items.filter((item) => item.kind !== "todo");
-        items.push({ kind: "todo", key: event.seq, items: event.items });
+        plan = { items: event.items, stale: false };
         break;
       case "model.changed":
         items.push({ kind: "model", key: event.seq, model: event.model, effort: event.effort });
@@ -142,6 +146,7 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
         }
         replies = [];
         running = new Map();
+        plan = undefined;
         if (event.reason !== "completed") {
           const notice = endNotices[event.reason];
           const text = event.error ? `${notice.text}：${errorText(event.error)}` : notice.text;
@@ -159,7 +164,7 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
         break;
     }
   }
-  return { items, state, since, queued, activity: [...running.values()].at(-1) };
+  return { items, state, since, queued, activity: [...running.values()].at(-1), plan };
 }
 
 /** 第一个不是空白的行（多行的命令只写第一行）。 */
