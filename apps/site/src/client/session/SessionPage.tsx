@@ -26,6 +26,7 @@ import { usePresence } from "../Motion";
 import { Whale } from "../Whale";
 import { catchUpBubble } from "./bubble-in";
 import { Composer } from "./Composer";
+import { firstMessageOf } from "./first-message";
 import { contentKey, ScrollFollower } from "./follow-scroll";
 import { LiveMarkdown, SessionLinks } from "./Markdown";
 import { effortLabels, ModelPicker } from "./ModelPicker";
@@ -75,7 +76,13 @@ export function SessionPage({
   const [reply, setReply] = useDraft(id);
   // 刚发出去、服务器还没回推的消息：先显示出来，不让人等一个来回。
   // after：发的时候已经有几条用户消息和排队消息，服务器回推一条（开始回合或者排队）就换成正式的。
-  const [pending, setPending] = useState<{ text: string; after: number; at: string }>();
+  // 首页发起会话时的第一条消息也是这样（first-message.ts）。
+  const [pending, setPending] = useState<{ text: string; after: number; at: string } | undefined>(
+    () => {
+      const first = firstMessageOf(id);
+      return first && { ...first, after: 0 };
+    },
+  );
   const sentCount = useMemo(
     () => events.filter((e) => e.type === "user.message" || e.type === "message.queued").length,
     [events],
@@ -202,9 +209,15 @@ export function SessionPage({
               <Working text="排队中，等待空闲资源" since={timeline.since} />
             ) : status === "running" ? (
               <Working
-                text={state?.detail === "preparing_sandbox" ? "正在准备沙箱" : "深度求索中"}
+                text={
+                  state?.detail === "preparing_sandbox"
+                    ? "正在准备沙箱"
+                    : (timeline.activity ?? "深度求索中")
+                }
                 since={timeline.since}
-                progress={progress}
+                // 有工具在跑时写它在做什么（不加省略号），不显示 token 数（timeline.ts 的 activity）
+                ellipsis={timeline.activity === undefined || state?.detail === "preparing_sandbox"}
+                progress={timeline.activity === undefined ? progress : undefined}
               />
             ) : (
               <p className="timeline-tail">
@@ -623,29 +636,72 @@ export function formatTokens(tokens: number): string {
 }
 
 /**
- * 对话最后一行在工作时：鲸鱼游动，写着在做什么，后面是用时。
- * 模型在思考时，用时的位置换成这一轮已经生成的 token 数，连续往上跳（照 Claude Code）；开始写正文、等工具时换回用时。
+ * token 数变了不直接跳过去，在约半秒里一个个数上去（照 Claude）：宿主机隔一会儿报一次，
+ * 看起来就是数字连贯地涨一阵、停一下、再涨一阵。变小（新的回合）时直接换；减少动效时也直接换。
+ */
+function useCountUp(target: number | undefined): number | undefined {
+  const [shown, setShown] = useState(target);
+  const current = useRef(target);
+  useEffect(() => {
+    const from = current.current;
+    const set = (value: number | undefined) => {
+      current.current = value;
+      setShown(value);
+    };
+    if (
+      target === undefined ||
+      from === undefined ||
+      target <= from ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      set(target);
+      return;
+    }
+    const start = performance.now();
+    let frame = requestAnimationFrame(function tick(now) {
+      const p = Math.min(1, (now - start) / COUNT_UP_MS);
+      set(Math.round(from + (target - from) * (1 - (1 - p) ** 3)));
+      if (p < 1) frame = requestAnimationFrame(tick);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [target]);
+  return shown;
+}
+
+const COUNT_UP_MS = 600;
+
+/**
+ * 对话最后一行在工作时：鲸鱼游动，写着在做什么，后面是用时（照 Claude Code）。
+ * 有工具在跑时写它（"运行 pnpm test"）；模型在思考、写回复时写"深度求索中"，用时后面跟着这个回合
+ * 到现在输出的 token 数，跨工具调用累加，下一个回合从 0 数起。
  */
 function Working({
   text,
   since,
   progress,
+  ellipsis = true,
 }: {
   text: string;
   since?: string;
   progress?: ModelProgress;
+  ellipsis?: boolean;
 }) {
   const elapsed = useElapsed(since);
-  const thinkingTokens =
-    progress?.phase === "thinking" && progress.tokens > 0 ? progress.tokens : undefined;
+  const tokens = useCountUp(progress && progress.tokens > 0 ? progress.tokens : undefined);
   return (
     <p className="timeline-tail working" role="status">
       <Whale size={WHALE_SIZE} swimming transitionName="seekcloud-whale" />
-      <span className="working-text">{text}…</span>
-      {thinkingTokens !== undefined ? (
-        <span className="working-time working-tokens">↓ {formatTokens(thinkingTokens)} tokens</span>
-      ) : (
-        elapsed && <span className="working-time">{elapsed}</span>
+      <span className="working-text">
+        {text}
+        {ellipsis && "…"}
+      </span>
+      {elapsed && (
+        <span className="working-time">
+          {elapsed}
+          {tokens !== undefined && (
+            <span className="working-tokens"> · ↓ {formatTokens(tokens)} tokens</span>
+          )}
+        </span>
       )}
     </p>
   );

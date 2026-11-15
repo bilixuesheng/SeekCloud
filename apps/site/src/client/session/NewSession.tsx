@@ -9,6 +9,7 @@ import { BoxIcon, BranchIcon, ChevronDownIcon } from "../Icons";
 import { Logo } from "../Logo";
 import { navigate } from "../router";
 import { Composer, handOffFocus } from "./Composer";
+import { handOffFirstMessage } from "./first-message";
 import { takeGreeting } from "./greetings";
 import { ModelPicker } from "./ModelPicker";
 import { OptionPicker } from "./OptionPicker";
@@ -142,6 +143,7 @@ export function NewSession({
       remember({ repo, branch, model });
       setText("");
       onCreated(session);
+      handOffFirstMessage(session.shortId, text);
       handOffFocus();
       navigate(`/s/${session.shortId}`);
     } catch (e) {
@@ -205,6 +207,7 @@ export function NewSession({
                   options={branches.map((b) => ({ value: b, text: b }))}
                   onChange={setBranch}
                   onOpen={() => setPicking(false)}
+                  searchable
                   emptyText="未找到匹配的分支。"
                 />
               )}
@@ -257,8 +260,9 @@ function RepoPicker({
   const [error, setError] = useState<string>();
   const search = useRef<HTMLInputElement>(null);
 
+  // 电脑上打开就能直接打字；手机上不自动选中搜索框，免得输入法弹出来把列表挡住
   useEffect(() => {
-    search.current?.focus();
+    if (!window.matchMedia("(pointer: coarse)").matches) search.current?.focus();
   }, []);
 
   useEffect(() => {

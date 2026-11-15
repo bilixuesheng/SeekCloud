@@ -156,4 +156,32 @@ describe("会话事件整理成界面内容", () => {
     expect(toolSummary({ other: 1, name: "x" })).toBe("x");
     expect(toolSummary(null)).toBe("");
   });
+
+  it("底部那一行：有工具在跑时写它在做什么，跑完了、回合结束了就没有", () => {
+    const activity = (...bodies: SessionEventBody[]) => buildTimeline(events(...bodies)).activity;
+    const start: SessionEventBody[] = [
+      { type: "user.message", text: "修一下测试" },
+      { type: "turn.started" },
+      { type: "message", text: "我先看看仓库的结构。" },
+    ];
+    expect(activity(...start)).toBeUndefined();
+    const call: SessionEventBody = {
+      type: "tool.call",
+      callId: "c1",
+      name: "Bash",
+      input: { command: "\npnpm test\n--reporter dot" },
+    };
+    expect(activity(...start, call)).toBe("运行 pnpm test");
+    const done: SessionEventBody = {
+      type: "tool.result",
+      callId: "c1",
+      output: "ok",
+      isError: false,
+    };
+    // 跑完了：模型接着思考，那一行回到"深度求索中"和 token 数
+    expect(activity(...start, call, done)).toBeUndefined();
+    // 回合结束、下一个回合开始时都清掉
+    expect(activity(...start, call, { type: "turn.ended", reason: "stopped" })).toBeUndefined();
+    expect(activity(...start, call, { type: "turn.started" })).toBeUndefined();
+  });
 });

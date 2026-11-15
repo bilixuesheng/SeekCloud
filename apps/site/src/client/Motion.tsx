@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useClaimTouch } from "./touch";
 
 export const reducedMotion = () =>
   typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -173,6 +174,9 @@ export function Sheet({
   const wasMounted = useRef(mounted);
   const closed = useRef(onClosed);
   closed.current = onClosed;
+  // 拖动条上的手指归弹层，不让 App 的手势抢走（touch.ts）
+  const grip = useRef<HTMLDivElement>(null);
+  useClaimTouch(grip, mounted);
 
   useEffect(() => {
     if (wasMounted.current && !mounted) closed.current?.();
@@ -227,6 +231,7 @@ export function Sheet({
         style={dragged ? { transform: `translateY(${dragged}px)` } : undefined}
       >
         <div
+          ref={grip}
           className="sheet-drag"
           onPointerDown={onDown}
           onPointerMove={onMove}
