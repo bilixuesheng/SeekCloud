@@ -45,6 +45,7 @@ export const sessionErrors = {
   session_not_found: { status: 404, message: "会话不存在" },
   session_closed: { status: 409, message: "会话已结束，无法继续发送消息" },
   queued_not_found: { status: 404, message: "该消息已发送或已撤回" },
+  session_archived: { status: 409, message: "已归档的会话不能置顶，请先取消归档" },
 } as const;
 
 export type SessionError = keyof typeof sessionErrors;
@@ -224,6 +225,28 @@ export class Sessions {
   }
 
   /**
+   * 置顶或取消置顶。和改名一样不动"最近有动静"的时间；已归档的会话不能置顶（归档时自动取消置顶）。
+   * 已经置顶的再置顶一次不变，置顶时间还是原来的。
+   */
+  async setPinned(userId: string, shortId: string, pinned: boolean): Promise<Result<Session>> {
+    const done = await this.#deps.db.transaction(async (tx) => {
+      const session = await this.#lockOwn(tx, userId, shortId);
+      if (!session) return "session_not_found" as const;
+      if (pinned && session.status === "archived") return "session_archived" as const;
+      if (pinned === (session.pinnedAt !== null)) return session;
+      const [row] = await tx
+        .update(sessions)
+        .set({ pinnedAt: pinned ? this.#deps.clock.now() : null })
+        .where(eq(sessions.id, session.id))
+        .returning();
+      return row as SessionRow;
+    });
+    if (typeof done === "string") return { ok: false, error: done };
+    this.#changes.emit(userId, shortId);
+    return { ok: true, value: (await this.#views([done]))[0] as Session };
+  }
+
+  /**
    * 归档：正在跑的回合停下，沙箱删掉，会话不再接收消息。已经归档的再归档一次什么都不做。
    * 排队的消息留着，取消归档以后发消息唤醒时一起处理。
    */
@@ -234,6 +257,8 @@ export class Sessions {
       if (session.status === "archived") return { session, changed: false };
       const number = await this.#stopRunningTurn(tx, session.id);
       await this.#setStatus(tx, session.id, number, { status: "archived", detail: null });
+      // 归档的会话收在列表最下面的一组里，不再留在置顶里
+      await tx.update(sessions).set({ pinnedAt: null }).where(eq(sessions.id, session.id));
       return { session, changed: true };
     });
     if (!done) return { ok: false, error: "session_not_found" };
@@ -819,6 +844,7 @@ export class Sessions {
       model: r.model,
       effort: r.effort,
       environmentName: (r.environmentId && environmentNames.get(r.environmentId)) || null,
+      pinnedAt: r.pinnedAt?.toISOString() ?? null,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));

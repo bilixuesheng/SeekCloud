@@ -215,6 +215,17 @@ export const LinkIcon = () => (
   </svg>
 );
 
+/** 图钉：置顶。filled 时是实心的（已置顶）。 */
+export const PinIcon = ({ filled = false, size = 16 }: { filled?: boolean; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M9.6 2.5 13.5 6.4l-1.6.5-2.4 2.4.3 2.6-1.1 1.1-2.4-2.4L3 13l2.4-3.3L3 7.3l1.1-1.1 2.6.3 2.4-2.4z"
+      {...line}
+      fill={filled ? "currentColor" : "none"}
+    />
+  </svg>
+);
+
 export const ArchiveIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
     <path d="M2.5 3.5h11v3h-11zM3.5 6.5v6h9v-6M6.5 9h3" {...line} />

@@ -221,6 +221,8 @@ export interface Session extends SessionState {
   effort: ThinkingEffort;
   /** 会话用的环境的名字；环境被删掉了时为 null。 */
   environmentName: string | null;
+  /** 置顶的时间，没置顶时为 null。归档时自动取消置顶。 */
+  pinnedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

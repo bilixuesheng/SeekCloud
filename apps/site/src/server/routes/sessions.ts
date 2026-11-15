@@ -34,6 +34,10 @@ const Session = z
     model: z.string(),
     effort: z.enum(THINKING_EFFORTS),
     environmentName: z.string().nullable().openapi({ description: "会话用的环境的名字" }),
+    pinnedAt: z
+      .string()
+      .nullable()
+      .openapi({ format: "date-time", description: "置顶的时间，没置顶时为 null" }),
     createdAt: z.string().openapi({ format: "date-time" }),
     updatedAt: z.string().openapi({ format: "date-time" }),
   })
@@ -225,6 +229,19 @@ const renameRoute = createRoute({
     400: errorResponse("标题为空或太长"),
     401: errorResponse("没有登录"),
     404: errorResponse("会话不存在"),
+  },
+});
+
+const pinRoute = createRoute({
+  method: "post",
+  path: "/sessions/{shortId}/pin",
+  summary: "置顶或取消置顶：侧栏里置顶的会话放在最上面一组",
+  request: { params: ShortIdParam, body: json(z.object({ pinned: z.boolean() })) },
+  responses: {
+    200: { description: "已置顶或已取消置顶（重复操作不变）", ...json(Session) },
+    401: errorResponse("没有登录"),
+    404: errorResponse("会话不存在"),
+    409: errorResponse("已归档的会话不能置顶"),
   },
 });
 
@@ -451,6 +468,20 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
         c.req.valid("json").title,
       );
       if (!result.ok) return c.json(fail(result.error).body, 404);
+      return c.json(result.value, 200);
+    })
+    .openapi(pinRoute, async (c) => {
+      const user = await currentUser(deps, c);
+      if (!user) return c.json(notLoggedIn, 401);
+      const result = await sessions.setPinned(
+        user.id,
+        c.req.valid("param").shortId,
+        c.req.valid("json").pinned,
+      );
+      if (!result.ok) {
+        const { body, status } = fail(result.error);
+        return c.json(body, status as 404 | 409);
+      }
       return c.json(result.value, 200);
     })
     .openapi(archiveRoute, async (c) => {
