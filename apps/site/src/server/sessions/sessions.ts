@@ -250,6 +250,24 @@ export class Sessions {
     return { ok: true, value: (await this.#views([done]))[0] as Session };
   }
 
+  /** 标为已读或未读（打开会话时浏览器标已读；菜单里能手动标未读）。不动"最近有动静"的时间。 */
+  async setUnread(userId: string, shortId: string, unread: boolean): Promise<Result<Session>> {
+    const [row] = await this.#deps.db
+      .update(sessions)
+      .set({ unread })
+      .where(and(eq(sessions.userId, userId), eq(sessions.shortId, shortId)))
+      .returning();
+    if (!row) return { ok: false, error: "session_not_found" };
+    this.#changes.emit(userId, shortId);
+    return { ok: true, value: (await this.#views([row]))[0] as Session };
+  }
+
+  /** 回合结束或会话失败时：没人开着这个会话（没有打开的事件流）就标成有新内容。 */
+  async #markUnreadIfAway(tx: Tx, sessionId: string): Promise<void> {
+    if (this.#events.count(sessionId) > 0) return;
+    await tx.update(sessions).set({ unread: true }).where(eq(sessions.id, sessionId));
+  }
+
   /** 会话里置顶的消息，按在会话里的先后排。 */
   async listPins(userId: string, shortId: string): Promise<Result<MessagePin[]>> {
     const [session] = await this.#deps.db
@@ -754,6 +772,7 @@ export class Sessions {
       { status: "failed", detail: null },
       error,
     );
+    await this.#markUnreadIfAway(tx, session.id);
   }
 
   /** Agent 事件只属于正在运行的回合；回合已经结束（包括重复的"回合结束"）就忽略。 */
@@ -781,6 +800,7 @@ export class Sessions {
       .update(turns)
       .set({ status: event.reason, endedAt: this.#deps.clock.now() })
       .where(eq(turns.id, turn.id));
+    await this.#markUnreadIfAway(tx, session.id);
     // 有排队的消息就直接开始下一个回合。
     const next = await this.#startQueued(tx, session);
     if (next) return next;
@@ -933,6 +953,7 @@ export class Sessions {
       effort: r.effort,
       environmentName: (r.environmentId && environmentNames.get(r.environmentId)) || null,
       pinnedAt: r.pinnedAt?.toISOString() ?? null,
+      unread: r.unread,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));

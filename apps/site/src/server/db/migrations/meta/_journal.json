@@ -36,6 +36,13 @@
       "when": 1794724058214,
       "tag": "0004_message_pins",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794738669434,
+      "tag": "0005_session_unread",
+      "breakpoints": true
     }
   ]
 }

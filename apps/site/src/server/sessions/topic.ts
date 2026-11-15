@@ -16,6 +16,11 @@ export class Topic<T> {
     };
   }
 
+  /** 有几个订阅者，比如某个会话开着几个事件流（有没有人在看）。 */
+  count(key: string): number {
+    return this.#listeners.get(key)?.size ?? 0;
+  }
+
   emit(key: string, value: T): void {
     for (const listener of this.#listeners.get(key) ?? []) listener(value);
   }

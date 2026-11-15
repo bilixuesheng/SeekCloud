@@ -223,6 +223,8 @@ export interface Session extends SessionState {
   environmentName: string | null;
   /** 置顶的时间，没置顶时为 null。归档时自动取消置顶。 */
   pinnedAt: string | null;
+  /** 有新内容：回合结束时没人开着这个会话就为真，打开就消掉；也能在菜单里手动标。 */
+  unread: boolean;
   createdAt: string;
   updatedAt: string;
 }

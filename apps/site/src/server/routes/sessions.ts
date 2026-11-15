@@ -38,6 +38,7 @@ const Session = z
       .string()
       .nullable()
       .openapi({ format: "date-time", description: "置顶的时间，没置顶时为 null" }),
+    unread: z.boolean().openapi({ description: "有新内容（回合结束时没人开着这个会话）" }),
     createdAt: z.string().openapi({ format: "date-time" }),
     updatedAt: z.string().openapi({ format: "date-time" }),
   })
@@ -270,6 +271,18 @@ const setPinRoute = createRoute({
     },
     401: errorResponse("没有登录"),
     404: errorResponse("会话或消息不存在"),
+  },
+});
+
+const readRoute = createRoute({
+  method: "post",
+  path: "/sessions/{shortId}/read",
+  summary: "标为已读或未读：打开会话时标已读，菜单里能手动标未读",
+  request: { params: ShortIdParam, body: json(z.object({ unread: z.boolean() })) },
+  responses: {
+    200: { description: "已标好", ...json(Session) },
+    401: errorResponse("没有登录"),
+    404: errorResponse("会话不存在"),
   },
 });
 
@@ -530,6 +543,17 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       );
       if (!result.ok) return c.json(fail(result.error).body, 404);
       return c.json({ pins: result.value }, 200);
+    })
+    .openapi(readRoute, async (c) => {
+      const user = await currentUser(deps, c);
+      if (!user) return c.json(notLoggedIn, 401);
+      const result = await sessions.setUnread(
+        user.id,
+        c.req.valid("param").shortId,
+        c.req.valid("json").unread,
+      );
+      if (!result.ok) return c.json(fail(result.error).body, 404);
+      return c.json(result.value, 200);
     })
     .openapi(pinRoute, async (c) => {
       const user = await currentUser(deps, c);

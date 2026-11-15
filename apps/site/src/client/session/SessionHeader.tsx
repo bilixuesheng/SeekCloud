@@ -8,6 +8,7 @@ import {
   BranchIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  DotIcon,
   ExternalIcon,
   LinkIcon,
   ListIcon,
@@ -189,9 +190,9 @@ function InfoRow({
  * 显示方式（轨迹视图）、编辑环境要等对应的功能做好再加。
  */
 /**
- * 会话的菜单（底部弹层），照 Claude：顶上是标题，下面是打开 PR、置顶、打开方式、重命名、复制链接、归档，最后是删除。
+ * 会话的菜单（底部弹层），照 Claude：顶上是标题，下面是打开 PR、置顶、标为未读、打开方式、重命名、复制链接、归档，最后是删除。
  * 会话页的标题和侧栏里会话右边的"⋯"打开的是同一个。已归档的会话没有"置顶"（归档时自动取消置顶）。
- * Claude 还有标为未读、移到分组、分享：分享不做（2026-11-11 定的），其余两项还没做。
+ * Claude 还有移到分组、分享：分享不做（2026-11-11 定的），移到分组还没做。
  */
 export function SessionMenu({
   id,
@@ -235,6 +236,10 @@ export function SessionMenu({
   };
 
   const pinned = session.pinnedAt !== null;
+  const toggleUnread = async () => {
+    const ok = await run(() => api(`/api/sessions/${id}/read`, { unread: !session.unread }));
+    if (ok) close();
+  };
   const togglePin = async () => {
     const ok = await run(() => api(`/api/sessions/${id}/pin`, { pinned: !pinned }));
     if (ok) close();
@@ -286,6 +291,9 @@ export function SessionMenu({
               {pinned ? "取消置顶" : "置顶"}
             </MenuItem>
           )}
+          <MenuItem icon={<DotIcon />} disabled={busy} onClick={() => void toggleUnread()}>
+            {session.unread ? "标为已读" : "标为未读"}
+          </MenuItem>
           <MenuItem icon={<ExternalIcon />} onClick={() => setPage("open")} more>
             打开方式
           </MenuItem>
