@@ -6,8 +6,8 @@ import { useSerifReady } from "../fonts";
 import { GitHubConnectCard, type GitHubStatus } from "../GitHubConnectCard";
 import { GitHubMark } from "../GitHubMark";
 import { BoxIcon, BranchIcon, ChevronDownIcon } from "../Icons";
+import { Logo } from "../Logo";
 import { navigate } from "../router";
-import { Whale } from "../Whale";
 import { Composer, handOffFocus } from "./Composer";
 import { takeGreeting } from "./greetings";
 import { ModelPicker } from "./ModelPicker";
@@ -156,8 +156,8 @@ export function NewSession({
   return (
     <section className="new-session">
       <div className="greeting">
-        {/* 发起会话时这只鲸鱼挪到会话页底部（同名的 view transition） */}
-        <Whale size={64} transitionName="seekcloud-whale" />
+        {/* 首页用原图；发起会话时它挪到会话页底部（同名的 view transition），在那里变小以后才换成会动的鲸鱼 */}
+        <Logo size={64} transitionName="seekcloud-whale" />
         <h1 className={`serif-text${greetingReady ? "" : " pending"}`}>{greeting}</h1>
       </div>
       {github && !connected && <GitHubConnectCard status={github} />}

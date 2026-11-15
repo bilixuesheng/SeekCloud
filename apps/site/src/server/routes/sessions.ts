@@ -391,8 +391,17 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
           }
         });
         const unsubscribe = handle.subscribe(() => void push());
+        // 模型进度只推送、不落库，没有序号，断线重连也不补
+        const stopProgress = handle.subscribeProgress((progress) => {
+          stream
+            .writeSSE({ event: "progress", data: JSON.stringify(progress) })
+            .catch(() => undefined);
+        });
         void push();
-        return unsubscribe;
+        return () => {
+          unsubscribe();
+          stopProgress();
+        };
       });
     })
     .openapi(sendMessageRoute, async (c) => {

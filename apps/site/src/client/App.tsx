@@ -72,14 +72,15 @@ export function App() {
   return <Shell me={me} notice={notice} onSignedOut={refresh} onGitHubChanged={refresh} />;
 }
 
-function HomeLink() {
+/** 侧栏左上角的标志：回首页。点了侧栏照样收起（手机上不做主区域的过渡，见 newSession）。 */
+function HomeLink({ onClick }: { onClick: () => void }) {
   return (
     <a
       href="/"
       className="home-link"
       onClick={(e) => {
         e.preventDefault();
-        navigate("/");
+        onClick();
       }}
     >
       <Brand size={28} />
@@ -152,7 +153,7 @@ function Shell({
           >
             <CloseIcon size={18} />
           </button>
-          <HomeLink />
+          <HomeLink onClick={newSession} />
         </div>
         <button type="button" className="new-session-button" onClick={newSession}>
           <span className="new-session-icon">

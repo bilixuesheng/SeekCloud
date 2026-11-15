@@ -2282,7 +2282,8 @@ details > summary::-webkit-details-marker {
 
 /*
  * 会动的鲸鱼（Whale.tsx）：三层图叠在一起。游动时整只轻轻上下浮动，尾巴绕着尾柄摆，闪光一闪一闪。
- * 转动的中心是原图里尾柄和闪光的位置（按图的比例算）。
+ * 转动的中心是原图里尾柄（稍微往身体里一点，接缝藏得住）和闪光的位置，按图的比例算。
+ * 首页的标志挪到这里要 0.5 秒（下面的 view-transition），挪完才开始游。
  */
 .whale {
   position: relative;
@@ -2304,7 +2305,7 @@ details > summary::-webkit-details-marker {
 }
 
 .whale-tail {
-  transform-origin: 80.3% 43.5%;
+  transform-origin: 80.3% 45.9%;
 }
 
 .whale-sparkle {
@@ -2312,15 +2313,15 @@ details > summary::-webkit-details-marker {
 }
 
 .whale.swimming .whale-bob {
-  animation: whale-bob 1.8s ease-in-out infinite;
+  animation: whale-bob 1.8s ease-in-out 0.5s infinite;
 }
 
 .whale.swimming .whale-tail {
-  animation: whale-tail 0.9s ease-in-out infinite alternate;
+  animation: whale-tail 0.9s ease-in-out 0.5s infinite alternate;
 }
 
 .whale.swimming .whale-sparkle {
-  animation: whale-sparkle 1.4s ease-in-out infinite;
+  animation: whale-sparkle 1.4s ease-in-out 0.5s infinite;
 }
 
 @keyframes whale-bob {
@@ -2335,10 +2336,10 @@ details > summary::-webkit-details-marker {
 
 @keyframes whale-tail {
   from {
-    transform: rotate(-10deg);
+    transform: rotate(-7deg);
   }
   to {
-    transform: rotate(8deg);
+    transform: rotate(6deg);
   }
 }
 
@@ -2354,8 +2355,8 @@ details > summary::-webkit-details-marker {
   }
 }
 
-/* 首页中间的鲸鱼轻轻浮动 */
-.greeting .whale {
+/* 首页中间的标志轻轻浮动 */
+.greeting .logo {
   animation: float 6s ease-in-out infinite;
 }
 
@@ -2398,7 +2399,7 @@ details > summary::-webkit-details-marker {
   .working-text,
   .spinner,
   .auth-hero .logo,
-  .greeting .whale {
+  .greeting .logo {
     animation: none;
   }
 }
