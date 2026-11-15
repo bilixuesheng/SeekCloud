@@ -246,6 +246,10 @@ describe("Agent 工作时发消息", () => {
       status: string;
     };
     expect(session.status).toBe("running");
+    // 重新准备沙箱的那条状态不属于第 1 个回合（它已经失败了），新回合是第 2 个
+    const all = await events(shortId);
+    const preparing = all.filter((e) => e.type === "status" && e.detail === "preparing_sandbox");
+    expect(preparing.map((e) => e.turn)).toEqual([1, null]);
   });
 
   it("失败前留下的排队消息点立即发送：同样重新准备沙箱，好了合成回合", async () => {

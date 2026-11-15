@@ -889,7 +889,17 @@ export class Sessions {
     const host = this.#deps.host;
     if (!host) return;
     const session = await this.#deps.db.transaction(async (tx) => {
-      await this.#setStatus(tx, sessionId, 1, { status: "running", detail: "preparing_sandbox" });
+      // 新会话有一个等着的回合（第 1 个）；唤醒休眠或失败的会话时没有，状态事件不挂在哪个回合上。
+      const [turn] = await tx
+        .select({ number: turns.number })
+        .from(turns)
+        .where(and(eq(turns.sessionId, sessionId), eq(turns.status, "running")))
+        .orderBy(desc(turns.number))
+        .limit(1);
+      await this.#setStatus(tx, sessionId, turn?.number ?? null, {
+        status: "running",
+        detail: "preparing_sandbox",
+      });
       const [row] = await tx.select().from(sessions).where(eq(sessions.id, sessionId));
       return row as SessionRow;
     });
