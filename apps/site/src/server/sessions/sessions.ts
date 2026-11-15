@@ -43,7 +43,7 @@ export const sessionErrors = {
   environment_not_found: { status: 404, message: "环境不存在" },
   model_not_found: { status: 400, message: "模型不存在或已下线" },
   session_not_found: { status: 404, message: "会话不存在" },
-  session_closed: { status: 409, message: "会话已结束，无法继续发送消息" },
+  session_closed: { status: 409, message: "会话已归档，请先取消归档再发送消息" },
   queued_not_found: { status: 404, message: "该消息已发送或已撤回" },
   session_archived: { status: 409, message: "已归档的会话不能置顶，请先取消归档" },
 } as const;
@@ -320,6 +320,7 @@ export class Sessions {
   /**
    * 发消息。会话在等待回复：开始下一个回合。Agent 还在工作（或者在排队等空位）：先排队，
    * 回合结束后合成下一回合的开头；排队的消息处理之前可以撤回或立即发送。
+   * 休眠或失败的会话：重新准备沙箱，好了再开始回合。只有已归档的会话不能发。
    */
   async sendMessage(
     userId: string,
@@ -345,8 +346,9 @@ export class Sessions {
         const queued = await this.#enqueue(tx, session, { ...message, text: body });
         return { kind: "queued" as const, session, queued };
       }
-      if (session.status === "dormant") {
-        // 休眠的会话没有沙箱：消息先排队，会话回到排队中去准备沙箱，沙箱好了再合成回合。
+      if (session.status === "dormant" || session.status === "failed") {
+        // 休眠的会话没有沙箱，失败的会话沙箱出了错（2026-11-15 用户定的：失败以后也能接着发）：
+        // 消息先排队，会话回到排队中去重新准备沙箱，沙箱好了再合成回合。
         const queued = await this.#enqueue(tx, session, { ...message, text: body });
         await this.#setStatus(tx, session.id, null, { status: "queued", detail: null });
         return { kind: "woken" as const, session, queued };
@@ -386,12 +388,22 @@ export class Sessions {
   /**
    * 排队的消息"立即发送"：Agent 在当前回合的下一步读到它（插话）。
    * 沙箱还在准备、回合还没真正开始：直接并进这个回合的输入。回合已经停了：用它开始下一个回合。
+   * 会话休眠或失败（失败前留下的排队消息）：和发消息一样重新准备沙箱，好了再合成回合。
    */
   async sendQueuedNow(userId: string, shortId: string, queueId: string): Promise<Result<void>> {
     if (!UUID.test(queueId)) return { ok: false, error: "queued_not_found" };
     const outcome = await this.#deps.db.transaction(async (tx) => {
       const session = await this.#lockOwn(tx, userId, shortId);
       if (!session) return "session_not_found" as const;
+      if (session.status === "dormant" || session.status === "failed") {
+        const [kept] = await tx
+          .select({ id: queuedMessages.id })
+          .from(queuedMessages)
+          .where(and(eq(queuedMessages.id, queueId), eq(queuedMessages.sessionId, session.id)));
+        if (!kept) return "queued_not_found" as const;
+        await this.#setStatus(tx, session.id, null, { status: "queued", detail: null });
+        return { session, command: undefined, wake: true };
+      }
       const [row] = await tx
         .delete(queuedMessages)
         .where(and(eq(queuedMessages.id, queueId), eq(queuedMessages.sessionId, session.id)))
@@ -438,7 +450,8 @@ export class Sessions {
     });
     if (typeof outcome === "string") return { ok: false, error: outcome };
     this.#notify(outcome.session);
-    if (outcome.command) this.#deps.host?.send(outcome.command);
+    if ("wake" in outcome) await this.#dispatch(outcome.session.id);
+    else if (outcome.command) this.#deps.host?.send(outcome.command);
     return { ok: true, value: undefined };
   }
 

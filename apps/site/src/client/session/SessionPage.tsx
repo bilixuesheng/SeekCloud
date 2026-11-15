@@ -55,7 +55,7 @@ const placeholders = {
   waiting: "输入 / 使用命令",
   dormant: "输入 / 使用命令",
   archived: "会话已归档",
-  failed: "会话已失败",
+  failed: "会话出错，发送消息即可重试",
 } as const;
 
 /** 会话页：消息、思考、工具调用、待办清单，底下是输入框。 */
@@ -155,7 +155,8 @@ export function SessionPage({
   }
 
   const repo = session?.repos[0];
-  const closed = status === "archived" || status === "failed";
+  // 只有归档的会话不能发消息；失败的会话发消息就重新准备沙箱（2026-11-15 用户定的）
+  const closed = status === "archived";
   // Agent 在工作（或者排队等位置）时重试是灰的；会话关了也不能重试。
   const canRetry = !busy && !closed && status !== "running" && status !== "queued";
   const nameOf = (model: string) => models?.models.find((m) => m.id === model)?.name ?? model;
