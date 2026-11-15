@@ -261,3 +261,41 @@ describe("会话的改名、归档、取消归档、删除", () => {
     }
   });
 });
+
+describe("会话很多时的列表", () => {
+  let t: TestApp;
+  let browser: TestBrowser;
+
+  beforeAll(async () => {
+    t = await createTestApp();
+    ({ browser } = await t.adminWithGitHub("many", "many/app"));
+    t.host.manual = true;
+  });
+  afterAll(() => t.close());
+
+  it("置顶的会话再久没动也在列表里，不被最近的 200 个挤掉", async () => {
+    const start = async (text: string) => {
+      const res = await browser.post("/api/sessions", {
+        repo: "many/app",
+        baseBranch: "main",
+        text,
+      });
+      return (await res.json()) as SessionBody;
+    };
+    const pinned = await start("很久以前置顶的");
+    await browser.post(`/api/sessions/${pinned.shortId}/pin`, { pinned: true });
+    const old = await start("很久以前没置顶的");
+    for (let i = 0; i < 200; i++) {
+      t.clock.advance(1000);
+      await start(`后来的第 ${i + 1} 个`);
+    }
+
+    const { sessions } = (await (await browser.get("/api/sessions")).json()) as {
+      sessions: SessionBody[];
+    };
+
+    expect(sessions).toHaveLength(201);
+    expect(sessions.at(-1)?.shortId).toBe(pinned.shortId);
+    expect(sessions.some((s) => s.shortId === old.shortId)).toBe(false);
+  }, 60_000);
+});

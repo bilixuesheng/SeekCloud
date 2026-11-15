@@ -16,7 +16,7 @@ import type {
   ThinkingEffort,
 } from "@seekcloud/protocol";
 import { fitEffort } from "@seekcloud/protocol";
-import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import type { AppDeps } from "../app";
 import type { Tx } from "../db/client";
 import {
@@ -38,6 +38,9 @@ import { Topic } from "./topic";
 
 /** 一次读多少条事件。 */
 export const EVENT_PAGE = 500;
+
+/** 会话列表最多给这么多个最近有动静的会话；置顶的不受这个数限制。 */
+const LIST_LIMIT = 200;
 
 export const sessionErrors = {
   github_not_connected: { status: 409, message: githubNotConnected.error.message },
@@ -194,13 +197,35 @@ export class Sessions {
     return { ok: true, value: (await this.#view(created.id)) as Session };
   }
 
+  /** 最近有动静的 200 个，加上所有置顶的（置顶的再久没动也要在侧栏里），最近有动静的在前。 */
   async list(userId: string): Promise<Session[]> {
-    const rows = await this.#deps.db
+    const { db } = this.#deps;
+    const recent = await db
       .select()
       .from(sessions)
       .where(eq(sessions.userId, userId))
       .orderBy(desc(sessions.updatedAt))
-      .limit(200);
+      .limit(LIST_LIMIT);
+    const rows =
+      recent.length < LIST_LIMIT
+        ? recent
+        : [
+            ...recent,
+            ...(await db
+              .select()
+              .from(sessions)
+              .where(
+                and(
+                  eq(sessions.userId, userId),
+                  isNotNull(sessions.pinnedAt),
+                  notInArray(
+                    sessions.id,
+                    recent.map((r) => r.id),
+                  ),
+                ),
+              )
+              .orderBy(desc(sessions.updatedAt))),
+          ];
     return this.#views(rows);
   }
 
