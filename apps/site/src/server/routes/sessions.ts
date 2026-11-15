@@ -172,19 +172,42 @@ const sendMessageRoute = createRoute({
         text: Text,
         model: z.string().optional().openapi({ description: "换模型，从这个回合起生效" }),
         effort: z.enum(THINKING_EFFORTS).optional().openapi({ description: "换思考强度" }),
+        mode: z.enum(["now", "later"]).optional().openapi({
+          description:
+            "Agent 在工作时：now 直接插进当前回合，later（默认）排队到回合结束。换了模型或思考强度时总是排队",
+        }),
       }),
     ),
   },
   responses: {
     201: { description: "已开始下一个回合", ...json(Session) },
     202: {
-      description: "Agent 还在工作，消息已排队，回合结束后作为下一回合的开头",
-      ...json(z.object({ queued: z.object({ id: z.string(), text: z.string() }) })),
+      description:
+        "Agent 还在工作：消息已排队（queued），回合结束后作为下一回合的开头；或者已插进当前回合（injected）",
+      ...json(
+        z.union([
+          z.object({ queued: z.object({ id: z.string(), text: z.string() }) }),
+          z.object({ injected: z.literal(true) }),
+        ]),
+      ),
     },
     400: errorResponse("没有这个模型"),
     401: errorResponse("没有登录"),
     404: errorResponse("会话不存在"),
     409: errorResponse("会话已经结束"),
+  },
+});
+
+const stopRoute = createRoute({
+  method: "post",
+  path: "/sessions/{shortId}/stop",
+  summary: "停止正在跑的回合（后台命令不停；还有排队的消息就用它们开始下一个回合）",
+  request: { params: ShortIdParam },
+  responses: {
+    200: { description: "已停止", ...json(z.object({ stopped: z.literal(true) })) },
+    401: errorResponse("没有登录"),
+    404: errorResponse("会话不存在"),
+    409: errorResponse("当前没有正在运行的回合"),
   },
 });
 
@@ -489,7 +512,18 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       }
       await recordAccess(deps, c, user.id, "message");
       if ("queued" in result.value) return c.json({ queued: result.value.queued }, 202);
+      if ("injected" in result.value) return c.json({ injected: true as const }, 202);
       return c.json(result.value.started, 201);
+    })
+    .openapi(stopRoute, async (c) => {
+      const user = await currentUser(deps, c);
+      if (!user) return c.json(notLoggedIn, 401);
+      const result = await sessions.stopTurn(user.id, c.req.valid("param").shortId);
+      if (!result.ok) {
+        const { body, status } = fail(result.error);
+        return c.json(body, status as 404 | 409);
+      }
+      return c.json({ stopped: true as const }, 200);
     })
     .openapi(withdrawRoute, async (c) => {
       const user = await currentUser(deps, c);

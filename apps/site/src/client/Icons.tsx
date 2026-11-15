@@ -215,6 +215,27 @@ export const LinkIcon = () => (
   </svg>
 );
 
+/** 实心的方块：停止。 */
+export const StopIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+    <rect x="1" y="1" width="10" height="10" rx="2" fill="currentColor" />
+  </svg>
+);
+
+/** ↵：Agent 工作时发送（插进当前回合）。 */
+export const ReturnIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M12.5 3.5v4.5a2 2 0 0 1-2 2H3.5M6 7.5 3.5 10 6 12.5" {...line} />
+  </svg>
+);
+
+/** 排到后面：稍后排队。 */
+export const QueueIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M3 4.5h10M3 8h10M3 11.5h6M11.5 10v3.5M10 12h3" {...line} />
+  </svg>
+);
+
 /** 一个圆点：标为未读。 */
 export const DotIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">

@@ -1,6 +1,8 @@
-import { type FormEvent, useEffect, useLayoutEffect, useRef } from "react";
-import { ArrowUpIcon } from "../Icons";
+import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowUpIcon, ChevronDownIcon, QueueIcon, ReturnIcon, StopIcon } from "../Icons";
 import { keyboardOpen } from "../keyboard";
+import { Sheet, usePresence } from "../Motion";
+import { MenuItem } from "./SessionHeader";
 
 const coarsePointer = () => window.matchMedia("(pointer: coarse)").matches;
 
@@ -29,6 +31,7 @@ export function Composer({
   busy = false,
   submitLabel,
   autoFocus = false,
+  working,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -40,6 +43,11 @@ export function Composer({
   /** 发送按钮的无障碍名称，比如"发起会话"。 */
   submitLabel: string;
   autoFocus?: boolean;
+  /**
+   * Agent 在工作（照 Claude 的 App）：输入框是空的时，发送键是停止键；有字时发送键是"↵"（插进当前回合，
+   * Agent 下一步读到），旁边一个"⌄"，点开是"稍后排队"（等这个回合结束再发）和"停止"（只停下回合，字留在输入框里）。
+   */
+  working?: { onStop: () => void; onLater: () => void; stopping: boolean };
 }) {
   const textarea = useRef<HTMLTextAreaElement>(null);
   // 按下发送按钮时输入法开着没有（输入框有焦点、可见区域被顶矮了）：开着的发完不关，关着的发完不弹出来。
@@ -93,24 +101,117 @@ export function Composer({
           submit();
         }}
       />
-      <button
-        type="submit"
-        className="send"
-        disabled={!ready}
-        aria-label={submitLabel}
-        title={submitLabel}
-        // 输入法开着时点发送，不让按钮抢走焦点：输入法不收起，发完可以接着打字。
-        // 输入法关着时让按钮拿走焦点，输入框失焦，发完以后输入法也不会弹出来。
-        onPointerDown={() => {
-          keepKeyboard.current =
-            document.activeElement === textarea.current && (!coarsePointer() || keyboardOpen());
-        }}
-        onMouseDown={(e) => {
-          if (keepKeyboard.current) e.preventDefault();
-        }}
-      >
-        {busy ? <span className="spinner" aria-hidden="true" /> : <ArrowUpIcon />}
-      </button>
+      {working && !value.trim() ? (
+        <button
+          type="button"
+          className="send stop"
+          aria-label="停止"
+          title="停止"
+          disabled={working.stopping}
+          onClick={working.onStop}
+        >
+          {working.stopping ? <span className="spinner" aria-hidden="true" /> : <StopIcon />}
+        </button>
+      ) : (
+        <button
+          type="submit"
+          className="send"
+          disabled={!ready}
+          aria-label={working ? "发送（Agent 下一步读到）" : submitLabel}
+          title={working ? "发送（Agent 下一步读到）" : submitLabel}
+          // 输入法开着时点发送，不让按钮抢走焦点：输入法不收起，发完可以接着打字。
+          // 输入法关着时让按钮拿走焦点，输入框失焦，发完以后输入法也不会弹出来。
+          onPointerDown={() => {
+            keepKeyboard.current =
+              document.activeElement === textarea.current && (!coarsePointer() || keyboardOpen());
+          }}
+          onMouseDown={(e) => {
+            if (keepKeyboard.current) e.preventDefault();
+          }}
+        >
+          {busy ? (
+            <span className="spinner" aria-hidden="true" />
+          ) : working ? (
+            <ReturnIcon />
+          ) : (
+            <ArrowUpIcon />
+          )}
+        </button>
+      )}
+      {working && value.trim() && (
+        <SendMenu disabled={!ready} onLater={working.onLater} onStop={working.onStop} />
+      )}
     </form>
+  );
+}
+
+/**
+ * 发送键旁边的"⌄"：稍后排队、停止。手机上照 Claude 从底部弹出，电脑上是发送键上方的小弹层。
+ */
+function SendMenu({
+  disabled,
+  onLater,
+  onStop,
+}: {
+  disabled: boolean;
+  onLater: () => void;
+  onStop: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const popover = usePresence(open && !coarsePointer(), 180);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open || coarsePointer()) return;
+    const onPointer = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const pick = (action: () => void) => {
+    setOpen(false);
+    action();
+  };
+  const items = (
+    <>
+      <MenuItem icon={<QueueIcon />} onClick={() => pick(onLater)}>
+        稍后排队
+      </MenuItem>
+      <MenuItem icon={<StopIcon />} onClick={() => pick(onStop)}>
+        停止
+      </MenuItem>
+    </>
+  );
+  return (
+    <div className="send-more-wrap" ref={root}>
+      <button
+        type="button"
+        className={`send-more${open ? " active" : ""}`}
+        aria-label="更多发送方式"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+      >
+        <ChevronDownIcon />
+      </button>
+      {popover.mounted && (
+        <div className={`popover send-menu${popover.closing ? " closing" : ""}`} role="menu">
+          {items}
+        </div>
+      )}
+      {coarsePointer() && (
+        <Sheet open={open} label="发送方式" onClose={() => setOpen(false)}>
+          <div className="sheet-menu" role="menu">
+            {items}
+          </div>
+        </Sheet>
+      )}
+    </div>
   );
 }

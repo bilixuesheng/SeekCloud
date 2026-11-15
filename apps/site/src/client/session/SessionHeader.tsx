@@ -386,7 +386,7 @@ export function SessionMenu({
   );
 }
 
-function MenuItem({
+export function MenuItem({
   icon,
   children,
   onClick,
