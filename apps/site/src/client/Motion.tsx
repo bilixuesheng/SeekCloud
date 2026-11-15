@@ -6,6 +6,7 @@
 import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -21,6 +22,51 @@ export const reducedMotion = () =>
  * 关的时候先播完动画再拿掉：open 变成 false 后，mounted 还保持 ms 毫秒。
  * shown 晚一帧才变成 true，让"从关着到开着"的过渡有起点。
  */
+/**
+ * 列表里的项换了位置时平滑地滑过去，不是在新位置一下子出现（FLIP）：每次渲染后量一遍带 data-flip 的元素
+ * 在容器内容里的位置，和上一次比，变了就从旧位置滑到新位置。新出现的轻轻浮现。
+ * 用内容坐标（加上容器的滚动量），容器滚动、抽屉滑进滑出都不算位置变了。侧栏的会话列表用：
+ * 置顶、取消置顶、有动静的会话排到前面、新会话插到最上面时，别的会话跟着滑动（2026-11-15 用户要求）。
+ */
+export function useFlip(ref: RefObject<HTMLElement | null>): void {
+  const last = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const top = root.getBoundingClientRect().top - root.scrollTop;
+    const next = new Map<string, number>();
+    const first = last.current.size === 0;
+    for (const el of root.querySelectorAll<HTMLElement>("[data-flip]")) {
+      const id = el.dataset.flip as string;
+      const y = el.getBoundingClientRect().top - top;
+      next.set(id, y);
+      if (first || reducedMotion()) continue;
+      const before = last.current.get(id);
+      if (before === undefined) {
+        el.animate(
+          [
+            { opacity: 0, transform: "translateY(-6px)" },
+            { opacity: 1, transform: "none" },
+          ],
+          {
+            duration: FLIP_MS,
+            easing: FLIP_EASE,
+          },
+        );
+      } else if (Math.abs(before - y) > 1) {
+        el.animate([{ transform: `translateY(${before - y}px)` }, { transform: "none" }], {
+          duration: FLIP_MS,
+          easing: FLIP_EASE,
+        });
+      }
+    }
+    last.current = next;
+  });
+}
+
+const FLIP_MS = 320;
+const FLIP_EASE = "cubic-bezier(0.2, 0, 0, 1)";
+
 export function usePresence(open: boolean, ms: number) {
   const [mounted, setMounted] = useState(open);
   const [shown, setShown] = useState(false);

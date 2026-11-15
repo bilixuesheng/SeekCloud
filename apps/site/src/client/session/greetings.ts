@@ -143,8 +143,10 @@ export function pickGreeting({
   return pool[Math.floor(random() * pool.length)] ?? "今日有何计划？";
 }
 
-/** 页面一打开就先挑好的那一句，首页第一次显示时用它（它的字体已经在拉了）。 */
+/** 先挑好的下一句，首页显示时用它（它的字体已经在拉了）。 */
 let early: { name: string | null; text: string } | undefined;
+/** 拉字体的函数，prepareGreeting 时记下，之后每次都用它给下一句先拉字体。 */
+let preloader: ((text: string) => void) | undefined;
 
 /**
  * 页面刚打开时先挑一句，并开始拉它要用的字体：等登录状态回来、首页画出来时字体多半已经到了，问候语不用干等。
@@ -155,14 +157,31 @@ export function prepareGreeting(
   preload: (text: string) => void,
   region?: string,
 ): void {
+  preloader = preload;
   early = { name, text: pickGreeting({ name, region }) };
   preload(early.text);
 }
 
-/** 首页要显示的问候语：昵称和先挑的那句对得上就用它（只用一次），不然现挑一句。 */
+/** 拉下一句的字体要等多久：别和这一次显示要拉的字体抢。 */
+const NEXT_DELAY_MS = 1500;
+
+/**
+ * 首页要显示的问候语：昵称和先挑的那句对得上就用它（只用一次），不然现挑一句。
+ * 用掉以后在后台把下一次的那句先挑好、先拉字体：重进首页时换的新句子字体已经在了，
+ * 不会先用系统字体（安卓上会粗一档）显示、再跳成思源宋体。
+ */
 export function takeGreeting(name: string | null, region?: string): string {
+  const who = name?.trim() || null;
   const picked = early;
   early = undefined;
-  if (picked && picked.name === (name?.trim() || null)) return picked.text;
-  return pickGreeting({ name, region });
+  const text = picked && picked.name === who ? picked.text : pickGreeting({ name, region });
+  if (preloader) {
+    const preload = preloader;
+    let next = pickGreeting({ name, region });
+    // 尽量不和这一次重样
+    for (let i = 0; i < 3 && next === text; i++) next = pickGreeting({ name, region });
+    early = { name: who, text: next };
+    setTimeout(() => preload(next), NEXT_DELAY_MS);
+  }
+  return text;
 }

@@ -47,6 +47,7 @@ export function SessionList({
   loaded,
   currentId,
   searching = false,
+  flip = true,
   onPick,
 }: {
   sessions: Session[];
@@ -54,6 +55,8 @@ export function SessionList({
   currentId?: string;
   /** 列表是搜索的结果：一个都没有时说"未找到"，不说"暂无会话"。 */
   searching?: boolean;
+  /** 换位置时平滑滑动（侧栏的 useFlip）。收在"已归档"里的不用，展开时由折叠的动画管。 */
+  flip?: boolean;
   /** 点了某个会话之后（手机上用来收起侧栏）。 */
   onPick?: () => void;
 }) {
@@ -76,7 +79,7 @@ export function SessionList({
           const current = session.shortId === currentId;
           const pr = session.repos[0]?.pullRequest;
           return (
-            <li key={session.shortId}>
+            <li key={session.shortId} data-flip={flip ? session.shortId : undefined}>
               <a
                 href={`/s/${session.shortId}`}
                 className={`session-item${current ? " current" : ""}`}
