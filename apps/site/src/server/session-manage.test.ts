@@ -158,18 +158,50 @@ describe("会话的改名、归档、取消归档、删除", () => {
     expect((await get(session.shortId)).environmentName).toBe("默认环境");
   });
 
+  it("置顶：记下置顶的时间，重复置顶不变；不动列表里的顺序；归档时自动取消，已归档的不能置顶", async () => {
+    const session = await start("要置顶的");
+    const before = (await get(session.shortId)) as { updatedAt: string; pinnedAt: string | null };
+    expect(before.pinnedAt).toBeNull();
+    t.clock.advance(60_000);
+    const pin = (pinned: boolean) =>
+      browser.post(`/api/sessions/${session.shortId}/pin`, { pinned });
+    const pinned = (await (await pin(true)).json()) as { updatedAt: string; pinnedAt: string };
+    expect(pinned.pinnedAt).toBe(t.clock.now().toISOString());
+    expect(pinned.updatedAt).toBe(before.updatedAt);
+    t.clock.advance(60_000);
+    expect(((await (await pin(true)).json()) as { pinnedAt: string }).pinnedAt).toBe(
+      pinned.pinnedAt,
+    );
+    expect(((await (await pin(false)).json()) as { pinnedAt: null }).pinnedAt).toBeNull();
+
+    await pin(true);
+    await browser.post(`/api/sessions/${session.shortId}/archive`, {});
+    expect(((await get(session.shortId)) as { pinnedAt: null }).pinnedAt).toBeNull();
+    const refused = await pin(true);
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: { code: string } }).error.code).toBe(
+      "session_archived",
+    );
+    // 已归档的取消置顶不报错
+    expect((await pin(false)).status).toBe(200);
+  });
+
   it("没登录、别人的会话都不行", async () => {
     const session = await start();
     const stranger = t.browser();
-    for (const action of ["rename", "archive", "unarchive"]) {
+    for (const action of ["rename", "archive", "unarchive", "pin"]) {
       const res = await stranger.post(`/api/sessions/${session.shortId}/${action}`, {
         title: "x",
+        pinned: true,
       });
       expect(res.status).toBe(401);
     }
     expect((await stranger.post(`/api/sessions/${session.shortId}/delete`, {})).status).toBe(401);
-    for (const action of ["rename", "archive", "unarchive", "delete"]) {
-      const res = await browser.post(`/api/sessions/nosuchid/${action}`, { title: "x" });
+    for (const action of ["rename", "archive", "unarchive", "delete", "pin"]) {
+      const res = await browser.post(`/api/sessions/nosuchid/${action}`, {
+        title: "x",
+        pinned: true,
+      });
       expect(res.status).toBe(404);
     }
   });

@@ -532,6 +532,15 @@ input:not([type="range"]):focus {
   color: var(--faint);
 }
 
+/* 列表里的分组标题（已置顶、最近）：和会话标题左边对齐，第二组上面空一点 */
+.sidebar-list .sidebar-section {
+  padding: 0 10px 6px;
+}
+
+.sidebar-list .sidebar-section:not(:first-child) {
+  margin-top: 12px;
+}
+
 /* 已归档的会话：列表最下面一组，默认收起 */
 .sidebar-archived {
   margin-top: 10px;

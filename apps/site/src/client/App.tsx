@@ -125,9 +125,16 @@ function Shell({
           s.repos.some((r) => r.fullName.toLowerCase().includes(query)),
       )
     : sessions;
-  // 已归档的会话收在列表最下面的一组里；搜索时一起搜
+  // 置顶的放在最上面一组（后置顶的在前），已归档的收在列表最下面的一组里；搜索时不分组，一起搜
+  const pinned = query
+    ? []
+    : shown
+        .filter((s) => s.pinnedAt !== null && s.status !== "archived")
+        .sort((a, b) => (b.pinnedAt ?? "").localeCompare(a.pinnedAt ?? ""));
   const archived = query ? [] : shown.filter((s) => s.status === "archived");
-  const listed = query ? shown : shown.filter((s) => s.status !== "archived");
+  const listed = query
+    ? shown
+    : shown.filter((s) => s.status !== "archived" && s.pinnedAt === null);
   const [showArchived, setShowArchived] = useState(false);
   // 侧栏开着时换页（回首页、删掉正在看的会话）不做主区域的过渡：侧栏自己滑走就是过渡（router.ts）
   useLayoutEffect(() => setOverlayOpen(drawer), [drawer]);
@@ -172,15 +179,31 @@ function Shell({
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
-        <div className="sidebar-section">最近</div>
         <div className="sidebar-list">
-          <SessionList
-            sessions={listed}
-            loaded={loaded}
-            currentId={currentId}
-            searching={query !== ""}
-            onPick={() => setDrawer(false)}
-          />
+          {pinned.length > 0 && (
+            <>
+              <div className="sidebar-section">已置顶</div>
+              <SessionList
+                sessions={pinned}
+                loaded
+                currentId={currentId}
+                onPick={() => setDrawer(false)}
+              />
+            </>
+          )}
+          {/* 会话都置顶了时不显示空的"最近" */}
+          {(listed.length > 0 || pinned.length === 0) && (
+            <>
+              <div className="sidebar-section">最近</div>
+              <SessionList
+                sessions={listed}
+                loaded={loaded}
+                currentId={currentId}
+                searching={query !== ""}
+                onPick={() => setDrawer(false)}
+              />
+            </>
+          )}
           {archived.length > 0 && (
             <div className="sidebar-archived">
               <button

@@ -123,6 +123,8 @@ export const sessions = pgTable(
     effort: text("effort").$type<ThinkingEffort>().notNull(),
     // 最后一条会话事件的序号。追加事件时在这一行上加锁取号，保证序号连续、不重复。
     lastSeq: integer("last_seq").notNull().default(0),
+    // 置顶的时间：侧栏里置顶的会话放在最上面一组，按这个时间排（后置顶的在前）。没置顶时为空。
+    pinnedAt: timestamp("pinned_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },

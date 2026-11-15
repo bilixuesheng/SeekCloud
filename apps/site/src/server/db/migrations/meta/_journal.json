@@ -22,6 +22,13 @@
       "when": 1794632045411,
       "tag": "0002_nickname",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794722623551,
+      "tag": "0003_session_pin",
+      "breakpoints": true
     }
   ]
 }
