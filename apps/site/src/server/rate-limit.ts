@@ -11,16 +11,25 @@ export interface Rule {
   windowMs: number;
 }
 
+/** 记着的来源超过这么多个时，把已经过了窗口的清掉，最多一分钟清一次。 */
+const SWEEP_AT = 10_000;
+
 /**
  * 滑动窗口计数，存在内存里。主站只有一个进程，重启后计数清零可以接受。
  * take 一步完成"能不能做"和"记一次"，中间没有 await，同时到达的请求不会一起漏过去。
  */
 export class RateLimiter {
   readonly #clock: Clock;
-  readonly #hits = new Map<string, number[]>();
+  readonly #hits = new Map<string, { windowMs: number; times: number[] }>();
+  #sweptAt = Number.NEGATIVE_INFINITY;
 
   constructor(clock: Clock) {
     this.#clock = clock;
+  }
+
+  /** 内存里记着多少个来源。 */
+  get size(): number {
+    return this.#hits.size;
   }
 
   /** 每条规则都没到上限就各记一次，返回 0；否则什么都不记，返回还要等几秒。 */
@@ -36,19 +45,28 @@ export class RateLimiter {
     }
     if (waitMs > 0) return Math.ceil(waitMs / 1000);
     for (const rule of rules) this.#recent(rule, now).push(now);
+    // 来源是请求里带的地址，不清的话换着地址来的请求能把内存一点点占满。
+    if (this.#hits.size > SWEEP_AT && now - this.#sweptAt >= MINUTE) this.#sweep(now);
     return 0;
   }
 
   /** 退回最近一次 take 记下的次数，比如密码输对了、不算输错时。 */
   release(rules: Rule[]): void {
-    for (const rule of rules) this.#hits.get(storageKey(rule))?.pop();
+    for (const rule of rules) this.#hits.get(storageKey(rule))?.times.pop();
   }
 
   #recent(rule: Rule, now: number): number[] {
     const id = storageKey(rule);
-    const recent = (this.#hits.get(id) ?? []).filter((t) => t > now - rule.windowMs);
-    this.#hits.set(id, recent);
-    return recent;
+    const times = (this.#hits.get(id)?.times ?? []).filter((t) => t > now - rule.windowMs);
+    this.#hits.set(id, { windowMs: rule.windowMs, times });
+    return times;
+  }
+
+  #sweep(now: number): void {
+    this.#sweptAt = now;
+    for (const [id, { windowMs, times }] of this.#hits) {
+      if ((times.at(-1) ?? 0) <= now - windowMs) this.#hits.delete(id);
+    }
   }
 }
 
