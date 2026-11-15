@@ -2,6 +2,7 @@ import { fitEffort, THINKING_EFFORTS, type ThinkingEffort } from "@seekcloud/pro
 import { type CSSProperties, type RefObject, useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../Icons";
 import { Pages, reducedMotion, usePresence } from "../Motion";
+import { useClaimTouch } from "../touch";
 
 export interface ModelInfo {
   id: string;
@@ -301,6 +302,7 @@ function EffortSlider({
   const ratio = drag ?? index / LAST;
 
   useParticles(canvas, track);
+  useClaimTouch(track);
 
   const at = (clientX: number) => {
     const rect = track.current?.getBoundingClientRect();

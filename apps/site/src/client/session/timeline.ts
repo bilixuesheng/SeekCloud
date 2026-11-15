@@ -40,6 +40,11 @@ export interface Timeline {
   since?: string;
   /** Agent 工作时发的、还在排队的消息，按发的顺序。显示在对话末尾，可以撤回或立即发送。 */
   queued: Array<{ id: string; text: string }>;
+  /**
+   * 正在运行的工具调用（"运行 pnpm test"），对话底部那一行这时写它、不显示 token 数（照 Claude）。
+   * 没有工具在跑（模型在思考、写回复）时没有，那一行写"深度求索中"和这个回合的 token 数。
+   */
+  activity?: string;
 }
 
 const endNotices = {
@@ -58,6 +63,8 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
   let undelivered: Array<Extract<TimelineItem, { kind: "user" }>> = [];
   // 当前回合里 Agent 的回复，回合结束时在最后一条下面放"复制"。
   let replies: Array<Extract<TimelineItem, { kind: "assistant" }>> = [];
+  // 还没出结果的工具调用：callId → 一句话的描述
+  let running = new Map<string, string>();
 
   for (const event of events) {
     switch (event.type) {
@@ -80,6 +87,7 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
         for (const item of undelivered) item.delivered = true;
         undelivered = [];
         replies = [];
+        running = new Map();
         break;
       case "message.queued":
         queued.push({ id: event.id, text: event.text });
@@ -104,11 +112,16 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
         const last = items.at(-1);
         if (last?.kind === "tools") last.calls.push(call);
         else items.push({ kind: "tools", key: event.seq, calls: [call] });
+        running.set(
+          event.callId,
+          `${toolLabel(event.name)} ${firstLine(toolSummary(event.input)) ?? ""}`.trim(),
+        );
         break;
       }
       case "tool.result": {
         const call = calls.get(event.callId);
         if (call) call.result = { output: event.output, isError: event.isError };
+        running.delete(event.callId);
         break;
       }
       case "todo":
@@ -128,6 +141,7 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
           if (reply) last.turnEnd = { reply, at: event.at };
         }
         replies = [];
+        running = new Map();
         if (event.reason !== "completed") {
           const notice = endNotices[event.reason];
           const text = event.error ? `${notice.text}：${errorText(event.error)}` : notice.text;
@@ -145,7 +159,15 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
         break;
     }
   }
-  return { items, state, since, queued };
+  return { items, state, since, queued, activity: [...running.values()].at(-1) };
+}
+
+/** 第一个不是空白的行（多行的命令只写第一行）。 */
+function firstLine(text: string): string | undefined {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
 }
 
 const toolLabels: Record<string, string> = {

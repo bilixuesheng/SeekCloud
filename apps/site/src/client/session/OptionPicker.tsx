@@ -22,6 +22,7 @@ export function OptionPicker({
   options,
   onChange,
   onOpen,
+  searchable: alwaysSearchable = false,
   emptyText = "未找到匹配的选项。",
 }: {
   icon: ReactNode;
@@ -32,6 +33,8 @@ export function OptionPicker({
   onChange: (value: string) => void;
   /** 打开时（让别的弹层收起来）。 */
   onOpen?: () => void;
+  /** 选项不多时也有搜索框（分支）。 */
+  searchable?: boolean;
   emptyText?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -40,7 +43,7 @@ export function OptionPicker({
   const root = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const current = options.find((o) => o.value === value)?.text ?? value;
-  const searchable = options.length > SEARCH_AFTER;
+  const searchable = alwaysSearchable || options.length > SEARCH_AFTER;
   const q = query.trim().toLowerCase();
   const shown = q ? options.filter((o) => o.text.toLowerCase().includes(q)) : options;
 
@@ -59,10 +62,11 @@ export function OptionPicker({
     };
   }, [open]);
 
-  // 有搜索框时打开就能直接打字；关掉以后清空
+  // 电脑上有搜索框时打开就能直接打字；手机上不自动选中，免得输入法弹出来把列表挡住。关掉以后清空
   useEffect(() => {
-    if (open) search.current?.focus({ preventScroll: true });
-    else setQuery("");
+    if (open && !window.matchMedia("(pointer: coarse)").matches) {
+      search.current?.focus({ preventScroll: true });
+    } else if (!open) setQuery("");
   }, [open]);
 
   const toggle = () => {

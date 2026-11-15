@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { type ApiError, api } from "./api";
 import { takeAuthResult } from "./auth-results";
 import {
@@ -20,7 +20,7 @@ import {
   pathOf,
   type Route,
   type SettingsSection,
-  sidebarOverlays,
+  setOverlayOpen,
   useRoute,
 } from "./router";
 import { NewSession } from "./session/NewSession";
@@ -129,9 +129,10 @@ function Shell({
   const archived = query ? [] : shown.filter((s) => s.status === "archived");
   const listed = query ? shown : shown.filter((s) => s.status !== "archived");
   const [showArchived, setShowArchived] = useState(false);
+  // 侧栏开着时换页（回首页、删掉正在看的会话）不做主区域的过渡：侧栏自己滑走就是过渡（router.ts）
+  useLayoutEffect(() => setOverlayOpen(drawer), [drawer]);
   const newSession = () => {
-    // 手机上从侧栏点的：侧栏滑走就是过渡，主区域不再淡入上浮
-    navigate("/", { transition: !(drawer && sidebarOverlays()) });
+    navigate("/");
     setDrawer(false);
   };
 

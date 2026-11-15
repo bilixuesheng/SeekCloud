@@ -1077,8 +1077,8 @@ input:not([type="range"]):focus {
 .option-picker .popover-search {
   flex-shrink: 0;
   width: 100%;
-  height: 40px;
-  border-radius: 9px;
+  height: 32px;
+  border-radius: 8px;
   font-size: 16px;
 }
 
@@ -1163,8 +1163,8 @@ input:not([type="range"]):focus {
 
 .repo-picker .popover-search {
   width: 100%;
-  height: 40px;
-  border-radius: 9px;
+  height: 32px;
+  border-radius: 8px;
   font-size: 16px;
   margin-bottom: 4px;
 }
@@ -1655,10 +1655,18 @@ input:not([type="range"]):focus {
   min-width: 0;
 }
 
-/* 放不下时整行横着滑，不把分支名之类的挤成省略号 */
+/* 放不下时各自收成省略号，整行不能横着滑（2026-11-15 用户要求） */
 .composer-below-options .chip {
-  flex-shrink: 0;
+  flex-shrink: 1;
   max-width: 44vw;
+}
+
+.composer-below-options > * {
+  min-width: 0;
+}
+
+.composer-below-options .chip-text {
+  white-space: nowrap;
 }
 
 @media (max-width: 899px) {
@@ -1696,12 +1704,6 @@ input:not([type="range"]):focus {
 
   .composer-below-options {
     flex: 1 1 100%;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .composer-below-options::-webkit-scrollbar {
-    display: none;
   }
 }
 
@@ -2363,7 +2365,8 @@ details > summary::-webkit-details-marker {
 /* 首页中间的鲸鱼挪到会话页底部：位置和大小一起平滑过去 */
 ::view-transition-group(seekcloud-whale) {
   animation-duration: 0.5s;
-  animation-timing-function: var(--ease-out);
+  /* 前后都缓一点，看得出是从首页中间滑过来的，不是一下子到位 */
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .working {
@@ -2381,9 +2384,16 @@ details > summary::-webkit-details-marker {
   -webkit-background-clip: text;
   color: transparent;
   animation: shimmer 2.4s linear infinite;
+  /* 长命令收成省略号，用时和 token 数总在同一行 */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .working-time {
+  flex-shrink: 0;
+  white-space: nowrap;
   color: var(--faint);
   font-size: 13px;
   font-variant-numeric: tabular-nums;

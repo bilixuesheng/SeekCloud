@@ -16,7 +16,7 @@ export function useSessionEvents(sessionId: string) {
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [broken, setBroken] = useState(false);
   const [liveAfter, setLiveAfter] = useState(Number.POSITIVE_INFINITY);
-  // 模型这一轮的进度（只推送、不落库）。这一步落库的事件一到就清掉，下一轮从 0 数起。
+  // 模型在这个回合里的进度（只推送、不落库）：回合开始、结束时清掉，下一个回合从 0 数起。
   const [progress, setProgress] = useState<ModelProgress>();
 
   useEffect(() => {
@@ -52,7 +52,7 @@ export function useSessionEvents(sessionId: string) {
       const event = JSON.parse(e.data) as SessionEvent;
       if (event.seq <= last) return;
       last = event.seq;
-      setProgress(undefined);
+      if (event.type === "turn.started" || event.type === "turn.ended") setProgress(undefined);
       pending.push(event);
       frame ||= requestAnimationFrame(flush);
       waitQuiet();
