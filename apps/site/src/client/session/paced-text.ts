@@ -6,7 +6,7 @@ import { useEffect, useLayoutEffect, useMemo, useState } from "react";
  * 平时每秒约 BASE_CPS 个字（2026-11-15 用户看预览后要快一点）；没显示的积压多了就加快，
  * 保证 CATCH_UP_S 秒内追上，不会越落越远。
  * 不把 Markdown 的标记截在半截：加粗、行内代码、链接、英文单词、代码块的围栏行、行首的标题号和列表符号
- * 都整体出现，免得先露出一个"**"或"#"再变样子。表格整张出来：表格要等第二行的"|---|"到了才画得出来，
+ * 都整体出现，免得先露出一个"**"或"#"再变样子；代码块里一整行一起出。表格整张出来：表格要等第二行的"|---|"到了才画得出来，
  * 一行行出的话前面先显示成带竖线的文字，表格成形时整块一换，像一下子全出来了。
  */
 const BASE_CPS = 100;
@@ -28,8 +28,17 @@ export function cutMap(text: string): boolean[] {
   // 行内的整体：加粗、行内代码、链接；英文单词和数字
   each(/\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]*\]\([^)\n]*\)/g, block);
   each(/[A-Za-z0-9_][A-Za-z0-9_.\-/]*/g, block);
-  // 代码块的围栏行整行出现；表格（连续的以"|"开头的行）整张出现
+  // 代码块的围栏行整行出现；代码块里一行一行地出（代码有语法高亮，一行写到一半时分词会变，
+  // 已经出来的字会重新播一遍动画、闪一下）；表格（连续的以"|"开头的行）整张出现
   each(/^[ \t]*```.*$/gm, block);
+  let fenced = false;
+  let at = 0;
+  for (const line of text.split("\n")) {
+    const end = at + line.length;
+    if (/^[ \t]*```/.test(line)) fenced = !fenced;
+    else if (fenced) block(at, end + 1);
+    at = end + 1;
+  }
   each(/(?:^[ \t]*\|.*(?:\n|$))+/gm, (start, end) =>
     block(start, text[end - 1] === "\n" ? end - 1 : end),
   );

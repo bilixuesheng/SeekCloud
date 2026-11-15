@@ -51,7 +51,19 @@ const FADE_ONLY = new Set(["pre", "table"]);
  */
 export function rehypeLiveChunks(options: { source: string; chunks: LiveChunk[] }) {
   const { source, chunks } = options;
-  const chunkAt = (offset: number) => chunks.find((c) => offset >= c.from && offset < c.to);
+  // 段落按出现的先后排着、互不重叠：二分查找，长回复一点点显示时段落有几百段
+  const chunkAt = (offset: number) => {
+    let lo = 0;
+    let hi = chunks.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const c = chunks[mid] as LiveChunk;
+      if (offset < c.from) hi = mid - 1;
+      else if (offset >= c.to) lo = mid + 1;
+      else return c;
+    }
+    return undefined;
+  };
   const delayAt = (offset: number, chunk: LiveChunk) =>
     charDelay(offset - chunk.from, chunk.to - chunk.from);
   /** 文字里第 index 个位置的字在原文里的位置。 */
@@ -163,19 +175,20 @@ export function useLiveChunks(text: string, live: boolean): LiveChunk[] {
     s.seen = text;
   }
 
-  // 动画播完的段落合并回普通文字。
+  // 动画都播完以后，所有段落一起合并回普通文字。不能一段段合并：早到的一段一合并，
+  // 后面还在动的字在页面结构里的位置就往前挪了，浏览器当成新的元素，动画从头再播一次，那几个字就闪一下
+  // （2026-11-15 用户看预览发现的）。回复还在一点点显示时最后一段一直是新的，就一直不合并。
   const [, settle] = useState(0);
   const chunks = s.chunks;
   useEffect(() => {
-    const first = chunks[0];
-    if (!first) return;
+    const last = chunks.at(-1);
+    if (!last) return;
     const timer = setTimeout(
       () => {
-        const now = Date.now();
-        s.chunks = s.chunks.filter((c) => now - c.born < SETTLE_MS);
+        s.chunks = [];
         settle((n) => n + 1);
       },
-      Math.max(0, first.born + SETTLE_MS - Date.now()),
+      Math.max(0, last.born + SETTLE_MS - Date.now()),
     );
     return () => clearTimeout(timer);
   }, [chunks, s]);

@@ -65,6 +65,26 @@ export function useFlip(ref: RefObject<HTMLElement | null>): void {
 }
 
 const FLIP_MS = 320;
+
+/**
+ * 一行字带着轻微的模糊一个个浮现出来（照 Claude 置顶消息的标题，2026-11-15 用户要求）：每个字从模糊、透明
+ * 变清楚，从左往右错开。挂上时播一次；字变了（比如标题生成好了）就换一组重新播。减少动效时直接显示。
+ */
+export function BlurText({ text, step = 30 }: { text: string; step?: number }) {
+  return (
+    <span className="blur-text" key={text}>
+      {/* 读屏软件读整句，不一个个字地读 */}
+      <span className="visually-hidden">{text}</span>
+      {[...text].map((char, i) => (
+        // 每个字一组动画，内容不会重排，用位置当 key
+        // biome-ignore lint/suspicious/noArrayIndexKey: 见上
+        <span key={i} aria-hidden="true" style={{ animationDelay: `${i * step}ms` }}>
+          {char}
+        </span>
+      ))}
+    </span>
+  );
+}
 const FLIP_EASE = "cubic-bezier(0.2, 0, 0, 1)";
 
 export function usePresence(open: boolean, ms: number) {
