@@ -3825,8 +3825,13 @@ details > summary::-webkit-details-marker {
   animation: fade-in 0.25s var(--ease-out);
 }
 
-/* 展开收起：高度过渡（浏览器支持 ::details-content 时） */
+/*
+ * 展开收起：高度过渡（浏览器支持 ::details-content 时）。
+ * flow-root：里面内容的上下外边距算在这一块里面。不然过渡中（固定高度）和过渡完（auto）外边距的算法不一样，
+ * 展开、收起的最后会突然跳 4–6 像素，看着像抖了一下。
+ */
 details::details-content {
+  display: flow-root;
   block-size: 0;
   overflow-y: clip;
   transition:
