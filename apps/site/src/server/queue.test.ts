@@ -170,7 +170,7 @@ describe("Agent 工作时发消息", () => {
     ).toBe(404);
   });
 
-  it("会话已经失败：不能再发", async () => {
+  it("会话失败以后还能接着发：和唤醒休眠的会话一样，先重新准备沙箱，沙箱好了用这条消息开始回合", async () => {
     const res = await browser.post("/api/sessions", {
       repo: "queue/app",
       baseBranch: "main",
@@ -179,9 +179,34 @@ describe("Agent 工作时发消息", () => {
     const { shortId } = (await res.json()) as { shortId: string };
     const sessionId = t.host.last("prepare_sandbox").sessionId;
     await t.host.emit({ type: "sandbox.failed", sessionId, error: { code: "internal" } });
+    const prepares = t.host.commands.filter((c) => c.type === "prepare_sandbox").length;
 
     const after = await send(shortId, "再试一次");
 
-    expect(after.status).toBe(409);
+    expect(after.status).toBe(202);
+    expect(t.host.commands.filter((c) => c.type === "prepare_sandbox")).toHaveLength(prepares + 1);
+    await t.host.emit({ type: "sandbox.ready", sessionId });
+    expect(t.host.last("start_turn")).toMatchObject({ sessionId, text: "再试一次" });
+    const session = (await (await browser.get(`/api/sessions/${shortId}`)).json()) as {
+      status: string;
+    };
+    expect(session.status).toBe("running");
+  });
+
+  it("失败前留下的排队消息点立即发送：同样重新准备沙箱，好了合成回合", async () => {
+    const { shortId, sessionId } = await running();
+    const queued = (await (await send(shortId, "排着的")).json()) as { queued: { id: string } };
+    await t.host.emit({ type: "sandbox.failed", sessionId, error: { code: "internal" } });
+    const prepares = t.host.commands.filter((c) => c.type === "prepare_sandbox").length;
+
+    const now = await browser.post(
+      `/api/sessions/${shortId}/queue/${queued.queued.id}/send-now`,
+      {},
+    );
+
+    expect(now.status).toBe(200);
+    expect(t.host.commands.filter((c) => c.type === "prepare_sandbox")).toHaveLength(prepares + 1);
+    await t.host.emit({ type: "sandbox.ready", sessionId });
+    expect(t.host.last("start_turn")).toMatchObject({ sessionId, text: "排着的" });
   });
 });
