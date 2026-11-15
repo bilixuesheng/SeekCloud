@@ -232,6 +232,47 @@ const renameRoute = createRoute({
   },
 });
 
+const MessagePinSchema = z
+  .object({
+    seq: z.number().int().openapi({ description: "那条 Agent 回复的事件序号" }),
+    title: z.string().nullable().openapi({ description: "短标题，为 null 表示还在生成" }),
+    createdAt: z.string().openapi({ format: "date-time" }),
+  })
+  .openapi("MessagePin");
+
+const listPinsRoute = createRoute({
+  method: "get",
+  path: "/sessions/{shortId}/pins",
+  summary: "会话里置顶的消息",
+  request: { params: ShortIdParam },
+  responses: {
+    200: {
+      description: "按在会话里的先后排",
+      ...json(z.object({ pins: z.array(MessagePinSchema) })),
+    },
+    401: errorResponse("没有登录"),
+    404: errorResponse("会话不存在"),
+  },
+});
+
+const setPinRoute = createRoute({
+  method: "post",
+  path: "/sessions/{shortId}/pins",
+  summary: "置顶或取消置顶一条 Agent 回复",
+  request: {
+    params: ShortIdParam,
+    body: json(z.object({ seq: z.number().int().positive(), pinned: z.boolean() })),
+  },
+  responses: {
+    200: {
+      description: "置顶后的整个列表",
+      ...json(z.object({ pins: z.array(MessagePinSchema) })),
+    },
+    401: errorResponse("没有登录"),
+    404: errorResponse("会话或消息不存在"),
+  },
+});
+
 const pinRoute = createRoute({
   method: "post",
   path: "/sessions/{shortId}/pin",
@@ -469,6 +510,26 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       );
       if (!result.ok) return c.json(fail(result.error).body, 404);
       return c.json(result.value, 200);
+    })
+    .openapi(listPinsRoute, async (c) => {
+      const user = await currentUser(deps, c);
+      if (!user) return c.json(notLoggedIn, 401);
+      const result = await sessions.listPins(user.id, c.req.valid("param").shortId);
+      if (!result.ok) return c.json(fail(result.error).body, 404);
+      return c.json({ pins: result.value }, 200);
+    })
+    .openapi(setPinRoute, async (c) => {
+      const user = await currentUser(deps, c);
+      if (!user) return c.json(notLoggedIn, 401);
+      const { seq, pinned } = c.req.valid("json");
+      const result = await sessions.setMessagePin(
+        user.id,
+        c.req.valid("param").shortId,
+        seq,
+        pinned,
+      );
+      if (!result.ok) return c.json(fail(result.error).body, 404);
+      return c.json({ pins: result.value }, 200);
     })
     .openapi(pinRoute, async (c) => {
       const user = await currentUser(deps, c);

@@ -227,6 +227,13 @@ export interface Session extends SessionState {
   updatedAt: string;
 }
 
+/** 置顶的一条消息：seq 是那条 Agent 回复的事件序号；title 是短标题，为 null 表示还在生成。 */
+export interface MessagePin {
+  seq: number;
+  title: string | null;
+  createdAt: string;
+}
+
 /** 会话事件流里的一条（主站 → 浏览器）。seq 是会话内从 1 开始的序号，断线后用 Last-Event-ID 续上。 */
 export type SessionEvent = { seq: number; at: string; turn: number | null } & SessionEventBody;
 

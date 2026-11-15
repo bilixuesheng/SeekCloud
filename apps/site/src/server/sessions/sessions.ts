@@ -5,6 +5,7 @@ import type {
   HostCommand,
   HostEvent,
   LiveEvent,
+  MessagePin,
   PullRequestState,
   SafeError,
   Session,
@@ -20,6 +21,7 @@ import type { AppDeps } from "../app";
 import type { Tx } from "../db/client";
 import {
   environments,
+  messagePins,
   queuedMessages,
   sessionEvents,
   sessionRepos,
@@ -30,6 +32,7 @@ import { githubNotConnected } from "../errors";
 import { withGitHubToken } from "../github/tokens";
 import { getAiLabels, getDefaultEffort } from "../settings";
 import { DEFAULT_MODEL, findModel } from "./models";
+import { pinTitle } from "./pin-title";
 import { toSafeError } from "./safe-error";
 import { Topic } from "./topic";
 
@@ -46,6 +49,7 @@ export const sessionErrors = {
   session_closed: { status: 409, message: "会话已归档，请先取消归档再发送消息" },
   queued_not_found: { status: 404, message: "该消息已发送或已撤回" },
   session_archived: { status: 409, message: "已归档的会话不能置顶，请先取消归档" },
+  message_not_found: { status: 404, message: "该消息不存在，或不是 Agent 的回复" },
 } as const;
 
 export type SessionError = keyof typeof sessionErrors;
@@ -244,6 +248,77 @@ export class Sessions {
     if (typeof done === "string") return { ok: false, error: done };
     this.#changes.emit(userId, shortId);
     return { ok: true, value: (await this.#views([done]))[0] as Session };
+  }
+
+  /** 会话里置顶的消息，按在会话里的先后排。 */
+  async listPins(userId: string, shortId: string): Promise<Result<MessagePin[]>> {
+    const [session] = await this.#deps.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(and(eq(sessions.userId, userId), eq(sessions.shortId, shortId)));
+    if (!session) return { ok: false, error: "session_not_found" };
+    return { ok: true, value: await this.#pins(session.id) };
+  }
+
+  /**
+   * 置顶或取消置顶一条 Agent 回复（seq 是它的事件序号）。置顶时给它取一个短标题（pin-title.ts）：
+   * 用这个回合里到这条为止的回复。重复置顶不变。返回置顶后的整个列表。
+   */
+  async setMessagePin(
+    userId: string,
+    shortId: string,
+    seq: number,
+    pinned: boolean,
+  ): Promise<Result<MessagePin[]>> {
+    const done = await this.#deps.db.transaction(async (tx) => {
+      const session = await this.#lockOwn(tx, userId, shortId);
+      if (!session) return "session_not_found" as const;
+      if (!pinned) {
+        await tx
+          .delete(messagePins)
+          .where(and(eq(messagePins.sessionId, session.id), eq(messagePins.seq, seq)));
+        return session;
+      }
+      const [target] = await tx
+        .select()
+        .from(sessionEvents)
+        .where(and(eq(sessionEvents.sessionId, session.id), eq(sessionEvents.seq, seq)));
+      if (target?.body.type !== "message") return "message_not_found" as const;
+      const turn = target.turn;
+      const replies = await tx
+        .select({ body: sessionEvents.body, seq: sessionEvents.seq })
+        .from(sessionEvents)
+        .where(
+          and(
+            eq(sessionEvents.sessionId, session.id),
+            turn === null ? sql`${sessionEvents.turn} is null` : eq(sessionEvents.turn, turn),
+            sql`${sessionEvents.seq} <= ${seq}`,
+          ),
+        )
+        .orderBy(asc(sessionEvents.seq));
+      const texts = replies.flatMap((r) => (r.body.type === "message" ? [r.body.text] : []));
+      await tx
+        .insert(messagePins)
+        .values({
+          sessionId: session.id,
+          seq,
+          title: pinTitle(texts),
+          createdAt: this.#deps.clock.now(),
+        })
+        .onConflictDoNothing();
+      return session;
+    });
+    if (typeof done === "string") return { ok: false, error: done };
+    return { ok: true, value: await this.#pins(done.id) };
+  }
+
+  async #pins(sessionId: string): Promise<MessagePin[]> {
+    const rows = await this.#deps.db
+      .select()
+      .from(messagePins)
+      .where(eq(messagePins.sessionId, sessionId))
+      .orderBy(asc(messagePins.seq));
+    return rows.map((r) => ({ seq: r.seq, title: r.title, createdAt: r.createdAt.toISOString() }));
   }
 
   /**

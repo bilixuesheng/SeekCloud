@@ -210,6 +210,23 @@ export const sessionEvents = pgTable(
   (t) => [primaryKey({ columns: [t.sessionId, t.seq] })],
 );
 
+/**
+ * 置顶的消息（照 Claude）：会话里某一条 Agent 回复，seq 是它在会话事件里的序号。
+ * title 是几个字的短标题，显示在这条消息上方和左上角的置顶列表里；为空表示还在生成。
+ */
+export const messagePins = pgTable(
+  "message_pins",
+  {
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    title: text("title"),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.sessionId, t.seq] })],
+);
+
 export const accessEvent = pgEnum("access_event", ["login", "session_start", "message"]);
 
 /**
