@@ -11,19 +11,23 @@ describe("按浏览器的使用习惯猜地区", () => {
   it("只写了语言时：几种基本只在一个地方用的语言直接对上；中文看时区", () => {
     expect(guessRegion(["ja"], undefined)).toBe("JP");
     expect(guessRegion(["zh"], "Asia/Shanghai")).toBe("CN");
-    expect(guessRegion(["zh-Hant"], "Asia/Taipei")).toBe("TW");
+    expect(guessRegion(["zh-Hant"], "Asia/Hong_Kong")).toBe("HK");
     expect(guessRegion(["zh"], "Europe/Berlin")).toBeUndefined();
     expect(guessRegion(["en", "fr"], "Asia/Tokyo")).toBeUndefined();
   });
 
-  it("有争议的地区、写错的语言标签都不说", () => {
+  it("台湾、有争议的地区、写错的语言标签都不说", () => {
+    expect(guessRegion(["zh-TW"], "Asia/Taipei")).toBeUndefined();
+    expect(guessRegion(["zh-Hant"], "Asia/Taipei")).toBeUndefined();
     expect(guessRegion(["sq-XK"], undefined)).toBeUndefined();
     expect(guessRegion(["not a tag!", "ko"], undefined)).toBe("KR");
   });
 
-  it("地区名用简称", () => {
+  it("大陆、香港、澳门都说中国；台湾不说", () => {
     expect(regionName("CN")).toBe("中国");
-    expect(regionName("HK")).toBe("香港");
+    expect(regionName("HK")).toBe("中国");
+    expect(regionName("MO")).toBe("中国");
+    expect(regionName("TW")).toBeUndefined();
     expect(regionName("US")).toBe("美国");
   });
 

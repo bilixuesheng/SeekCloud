@@ -1,7 +1,8 @@
 /**
  * 按浏览器的使用习惯猜管理员是哪里人，首页的问候语用（"你是中国人吗，某某"）。
  * IP 能换，看的是使用习惯：浏览器的语言列表（第一个带地区的，比如 zh-CN、en-US、pt-BR）；
- * 只写了语言、没写地区时，几种基本只在一个地方用的语言直接对上（ja → 日本）；中文再看时区（Asia/Taipei → 台湾）。
+ * 只写了语言、没写地区时，几种基本只在一个地方用的语言直接对上（ja → 日本）；中文再看时区。
+ * 大陆、香港、澳门都说"中国"；台湾不说这句。
  * 只在浏览器里算，不发给服务器、不存；字体探测、WebRTC 地址这类指纹手段不用。猜不出来就不说这句。
  */
 
@@ -41,8 +42,11 @@ const CHINESE_TIME_ZONES: Record<string, string> = {
   "Asia/Singapore": "SG",
 };
 
-/** 有争议的地区不说。 */
-const SKIP = new Set(["XK", "EH"]);
+/** 这几个地区不说这句（2026-11-14 用户定的：台湾不出现）。 */
+const SKIP = new Set(["TW", "XK", "EH"]);
+
+/** 说成"中国"的地区：大陆、香港、澳门都是中国（2026-11-14 用户定的）。 */
+const CHINA = new Set(["CN", "HK", "MO"]);
 
 export function guessRegion(
   languages: readonly string[],
@@ -59,7 +63,7 @@ export function guessRegion(
     if (region && /^[A-Z]{2}$/.test(region)) return SKIP.has(region) ? undefined : region;
     if (locale.language === "zh") {
       const byZone = timeZone ? CHINESE_TIME_ZONES[timeZone] : undefined;
-      if (byZone) return byZone;
+      if (byZone) return SKIP.has(byZone) ? undefined : byZone;
       continue;
     }
     const only = ONE_PLACE_LANGUAGES[locale.language];
@@ -68,8 +72,10 @@ export function guessRegion(
   return undefined;
 }
 
-/** 地区的中文简称（香港、台湾、美国……）；浏览器给不出名字时返回 undefined。 */
+/** 地区的中文名（中国、美国……）；浏览器给不出名字时返回 undefined。 */
 export function regionName(code: string): string | undefined {
+  if (CHINA.has(code)) return "中国";
+  if (SKIP.has(code)) return undefined;
   try {
     const name = new Intl.DisplayNames(["zh-CN"], { type: "region", style: "short" }).of(code);
     return name && name !== code ? name : undefined;
