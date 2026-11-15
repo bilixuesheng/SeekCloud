@@ -103,6 +103,14 @@ export function SessionPage({
   const models = useModels();
   const scroller = useRef<HTMLDivElement>(null);
 
+  // 打开会话就把"有新内容"消掉。每次打开只看一次：在这一页里从菜单手动标的未读留着，下次打开再消。
+  const markedRead = useRef(false);
+  useEffect(() => {
+    if (markedRead.current || !session) return;
+    markedRead.current = true;
+    if (session.unread) api(`/api/sessions/${id}/read`, { unread: false }).catch(() => undefined);
+  }, [id, session]);
+
   // 会话列表里还没有（比如很久以前的会话）时，单独取一次。
   useEffect(() => {
     if (listed) return;

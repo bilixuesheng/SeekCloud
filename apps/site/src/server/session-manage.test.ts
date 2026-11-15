@@ -218,22 +218,44 @@ describe("会话的改名、归档、取消归档、删除", () => {
     ).toEqual([]);
   });
 
+  it("有新内容：回合结束时没人开着会话就标上；开着的不标；能手动标已读、未读", async () => {
+    // 没人开着：第一个回合跑完就是有新内容
+    const away = await start("没人看着");
+    expect(((await get(away.shortId)) as { unread: boolean }).unread).toBe(true);
+    const read = await browser.post(`/api/sessions/${away.shortId}/read`, { unread: false });
+    expect(read.status).toBe(200);
+    expect(((await read.json()) as { unread: boolean }).unread).toBe(false);
+
+    // 开着会话页（事件流开着）时回合结束：不标
+    const stream = await browser.stream(`/api/sessions/${away.shortId}/events`);
+    await browser.post(`/api/sessions/${away.shortId}/messages`, { text: "再来一次" });
+    await t.host.idle();
+    expect(((await get(away.shortId)) as { unread: boolean }).unread).toBe(false);
+    await stream.close();
+
+    // 菜单里手动标未读
+    const marked = await browser.post(`/api/sessions/${away.shortId}/read`, { unread: true });
+    expect(((await marked.json()) as { unread: boolean }).unread).toBe(true);
+  });
+
   it("没登录、别人的会话都不行", async () => {
     const session = await start();
     const stranger = t.browser();
-    for (const action of ["rename", "archive", "unarchive", "pin", "pins"]) {
+    for (const action of ["rename", "archive", "unarchive", "pin", "pins", "read"]) {
       const res = await stranger.post(`/api/sessions/${session.shortId}/${action}`, {
         title: "x",
         pinned: true,
         seq: 1,
+        unread: true,
       });
       expect(res.status).toBe(401);
     }
     expect((await stranger.post(`/api/sessions/${session.shortId}/delete`, {})).status).toBe(401);
-    for (const action of ["rename", "archive", "unarchive", "delete", "pin"]) {
+    for (const action of ["rename", "archive", "unarchive", "delete", "pin", "read"]) {
       const res = await browser.post(`/api/sessions/nosuchid/${action}`, {
         title: "x",
         pinned: true,
+        unread: true,
       });
       expect(res.status).toBe(404);
     }

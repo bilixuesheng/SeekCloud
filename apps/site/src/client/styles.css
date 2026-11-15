@@ -913,6 +913,24 @@ input:not([type="range"]):focus {
   color: var(--muted);
 }
 
+/* 有新内容：一个蓝点，出现、消失都是缩放加淡入淡出 */
+.session-unread {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin: 0 3px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: unread-in 0.28s var(--ease-out) both;
+}
+
+@keyframes unread-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

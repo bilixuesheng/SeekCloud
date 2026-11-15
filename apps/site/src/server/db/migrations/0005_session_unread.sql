@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "unread" boolean DEFAULT false NOT NULL;

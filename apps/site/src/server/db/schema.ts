@@ -125,6 +125,8 @@ export const sessions = pgTable(
     lastSeq: integer("last_seq").notNull().default(0),
     // 置顶的时间：侧栏里置顶的会话放在最上面一组，按这个时间排（后置顶的在前）。没置顶时为空。
     pinnedAt: timestamp("pinned_at", { withTimezone: true }),
+    // 有新内容（照 Claude）：回合结束或会话失败时没人开着这个会话就标上，打开就消掉；也能在菜单里手动标。
+    unread: boolean("unread").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },

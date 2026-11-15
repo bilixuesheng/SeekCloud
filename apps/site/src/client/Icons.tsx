@@ -215,6 +215,13 @@ export const LinkIcon = () => (
   </svg>
 );
 
+/** 一个圆点：标为未读。 */
+export const DotIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="3.2" {...line} />
+  </svg>
+);
+
 /** 图钉：置顶。filled 时是实心的（已置顶）。 */
 export const PinIcon = ({ filled = false, size = 16 }: { filled?: boolean; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
