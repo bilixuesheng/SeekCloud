@@ -26,7 +26,7 @@ import {
   RetryIcon,
   UndoIcon,
 } from "../Icons";
-import { Collapse, usePresence } from "../Motion";
+import { BlurText, Collapse, usePresence } from "../Motion";
 import { Whale } from "../Whale";
 import { catchUpBubble } from "./bubble-in";
 import { Composer } from "./Composer";
@@ -878,7 +878,11 @@ function PinTitle({ pin }: { pin?: MessagePin }) {
     <Collapse open={pin !== undefined}>
       <p className="pin-title">
         <PinIcon filled size={13} />
-        {title ?? <span className="pin-title-loading" role="status" aria-label="正在生成标题" />}
+        {title ? (
+          <BlurText text={title} />
+        ) : (
+          <span className="pin-title-loading" role="status" aria-label="正在生成标题" />
+        )}
       </p>
     </Collapse>
   );
@@ -946,7 +950,7 @@ function PinNav({
               onClick={() => go()}
             >
               <span className="pin-nav-dash" />
-              会话开头
+              <BlurText text="会话开头" />
             </button>
             {pins.map((p) => (
               <button
@@ -957,7 +961,7 @@ function PinNav({
                 onClick={() => go(p.seq)}
               >
                 <span className="pin-nav-dash" />
-                {p.title ?? <span className="pin-title-loading" />}
+                {p.title ? <BlurText text={p.title} /> : <span className="pin-title-loading" />}
               </button>
             ))}
           </div>

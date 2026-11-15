@@ -41,4 +41,10 @@ describe("回复逐字显示", () => {
     expect(step(1000)).toBe(20);
     expect(step(0)).toBe(5);
   });
+
+  it("代码块里一整行一起出", () => {
+    const shown = stops("看：\n```ts\nconst a = 1;\nlet b = 2;\n```\n完", 1);
+    expect(shown.some((x) => x.endsWith("const a = "))).toBe(false);
+    expect(shown).toContain("看：\n```ts\nconst a = 1;\n");
+  });
 });

@@ -1980,6 +1980,21 @@ input:not([type="range"]):focus {
   color: var(--accent-fg);
 }
 
+/* 一行字带着轻微的模糊一个个浮现（Motion.tsx 的 BlurText）：置顶的标题、左上角的置顶列表 */
+.blur-text > span:not(.visually-hidden) {
+  display: inline-block;
+  white-space: pre;
+  animation: blur-in 0.45s var(--ease-out) both;
+}
+
+@keyframes blur-in {
+  from {
+    opacity: 0;
+    filter: blur(5px);
+    transform: translateY(3px);
+  }
+}
+
 /* 标题还在生成时的占位：一条淡淡的闪烁条 */
 .pin-title-loading {
   display: inline-block;
@@ -4053,6 +4068,7 @@ a.button:active,
   .queued.bubble-in .user-message,
   .chunk > span,
   .chunk-box,
+  .blur-text > span:not(.visually-hidden),
   .to-bottom,
   .bounce-dots span,
   .swap-in,
