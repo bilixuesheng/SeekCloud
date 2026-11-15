@@ -8,6 +8,7 @@ import { GitHubConnectCard, type GitHubStatus } from "../GitHubConnectCard";
 import { GitHubMark } from "../GitHubMark";
 import { BoxIcon, BranchIcon, ChevronDownIcon } from "../Icons";
 import { Logo } from "../Logo";
+import { usePresence } from "../Motion";
 import { navigate } from "../router";
 import { Composer, handOffFocus } from "./Composer";
 import { handOffFirstMessage } from "./first-message";
@@ -90,6 +91,8 @@ export function NewSession({
   const effort = fitEffort(efforts, chosenEffort ?? modelList?.defaultEffort ?? "high") ?? "high";
   const [picking, setPicking] = useState(false);
   const closePicker = useCallback(() => setPicking(false), []);
+  // 关的时候先播完收起的动画再拿掉（和环境、分支的弹层一样）
+  const repoPicker = usePresence(picking, 180);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -234,8 +237,14 @@ export function NewSession({
               }}
             />
           )}
-          {github && connected && picking && (
-            <RepoPicker status={github} selected={repo} onPick={pick} onClose={closePicker} />
+          {github && connected && repoPicker.mounted && (
+            <RepoPicker
+              status={github}
+              selected={repo}
+              closing={repoPicker.closing}
+              onPick={pick}
+              onClose={closePicker}
+            />
           )}
         </div>
         {error && (
@@ -253,11 +262,13 @@ const REPOS = "/api/github/repos";
 function RepoPicker({
   status,
   selected,
+  closing,
   onPick,
   onClose,
 }: {
   status: GitHubStatus;
   selected?: Repo;
+  closing: boolean;
   onPick: (repo: Repo) => void;
   onClose: () => void;
 }) {
@@ -275,6 +286,7 @@ function RepoPicker({
 
   // 点弹层外面或按 Esc 收起；点"选择仓库"那个按钮由按钮自己开关
   useEffect(() => {
+    if (closing) return;
     const onPointer = (e: PointerEvent) => {
       const target = e.target as Element;
       if (!root.current?.contains(target) && !target.closest?.(".repo-chip")) onClose();
@@ -286,7 +298,7 @@ function RepoPicker({
       document.removeEventListener("pointerdown", onPointer);
       document.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, [onClose, closing]);
 
   // 电脑上打开就能直接打字；手机上不自动选中搜索框，免得输入法弹出来把列表挡住
   useEffect(() => {
@@ -308,7 +320,11 @@ function RepoPicker({
   }, [q]);
 
   return (
-    <section ref={root} className="popover repo-picker" aria-label="选择仓库">
+    <section
+      ref={root}
+      className={`popover repo-picker${closing ? " closing" : ""}`}
+      aria-label="选择仓库"
+    >
       <input
         ref={search}
         className="popover-search"

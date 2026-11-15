@@ -27,18 +27,18 @@ describe("回复逐字显示", () => {
     expect(shown).not.toContain("看 **重点** 和 `src/app.ts` 里的 bu");
   });
 
-  it("行首的标题号连同第一个字出来；表格整行出来", () => {
-    const shown = stops("## 改了\n| 步骤 | 结果 |\n|---|---|\n", 1);
+  it("行首的标题号连同第一个字出来；表格整张出来", () => {
+    const shown = stops("## 改了\n| 步骤 | 结果 |\n|---|---|\n| 看 | 完 |\n后面", 1);
     expect(shown).not.toContain("#");
     expect(shown).not.toContain("## ");
     expect(shown).toContain("## 改");
-    expect(shown.some((s) => s.endsWith("| 步"))).toBe(false);
-    expect(shown).toContain("## 改了\n| 步骤 | 结果 |");
+    expect(shown.some((s) => s.includes("|") && !s.includes("| 看 | 完 |"))).toBe(false);
+    expect(shown).toContain("## 改了\n| 步骤 | 结果 |\n|---|---|\n| 看 | 完 |");
   });
 
-  it("平时每秒约 40 个字，积压多了加快，6 秒内追上", () => {
-    expect(step(10)).toBe(2);
-    expect(step(1200)).toBe(10);
-    expect(step(0)).toBe(2);
+  it("平时每秒约 100 个字，积压多了加快，2.5 秒内追上", () => {
+    expect(step(10)).toBe(5);
+    expect(step(1000)).toBe(20);
+    expect(step(0)).toBe(5);
   });
 });

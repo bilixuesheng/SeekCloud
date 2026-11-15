@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { greetingPool, pickGreeting, prepareGreeting, takeGreeting } from "./greetings";
 
 // 2026-11-02 是周一，11-07 是周六
@@ -46,18 +46,27 @@ describe("新会话页的问候语", () => {
     expect(pickGreeting({ name: "雪生", now, random: () => 0.999 })).toBe(pool.at(-1));
   });
 
-  it("页面一打开先挑一句并开始拉字体；首页第一次显示用它，只用一次；昵称变了就现挑", () => {
-    const preloaded: string[] = [];
-    prepareGreeting("雪生", (text) => preloaded.push(text));
-    expect(preloaded).toHaveLength(1);
-    expect(takeGreeting("雪生")).toBe(preloaded[0]);
-    // 第二次是现挑的，照样在能用的里面
-    expect(greetingPool("雪生", new Date())).toContain(takeGreeting("雪生"));
+  it("页面一打开先挑一句并开始拉字体；首页第一次显示用它；用掉以后在后台先挑好下一句、拉它的字体", async () => {
+    vi.useFakeTimers();
+    try {
+      const preloaded: string[] = [];
+      prepareGreeting("雪生", (text) => preloaded.push(text));
+      expect(preloaded).toHaveLength(1);
+      expect(takeGreeting("雪生")).toBe(preloaded[0]);
+      // 下一句过一会儿才开始拉字体，不和这一次抢
+      expect(preloaded).toHaveLength(1);
+      vi.advanceTimersByTime(2000);
+      expect(preloaded).toHaveLength(2);
+      // 重进首页用的就是先拉好字体的那句
+      expect(takeGreeting("雪生")).toBe(preloaded[1]);
+      expect(greetingPool("雪生", new Date())).toContain(preloaded[1]);
 
-    prepareGreeting("雪生", (text) => preloaded.push(text));
-    const other = takeGreeting("求索者");
-    expect(greetingPool("求索者", new Date())).toContain(other);
-    // 先挑的那句已经作废
-    expect(greetingPool(null, new Date())).toContain(takeGreeting(null));
+      // 昵称变了：先挑的那句作废，现挑一句
+      const other = takeGreeting("求索者");
+      expect(greetingPool("求索者", new Date())).toContain(other);
+      expect(greetingPool(null, new Date())).toContain(takeGreeting(null));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
