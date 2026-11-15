@@ -186,13 +186,46 @@ describe("会话的改名、归档、取消归档、删除", () => {
     expect((await pin(false)).status).toBe(200);
   });
 
+  it("置顶消息：只能置顶 Agent 的回复，带一个短标题；重复置顶不变；能取消；按先后排", async () => {
+    const session = await start("看看测试");
+    const all = await events(session.shortId);
+    const reply = all.find((e) => e.type === "message");
+    const user = all.find((e) => e.type === "user.message");
+    expect(reply).toBeDefined();
+    const pin = (seq: number, pinned = true) =>
+      browser.post(`/api/sessions/${session.shortId}/pins`, { seq, pinned });
+
+    const res = await pin(reply?.seq as number);
+    expect(res.status).toBe(200);
+    const { pins } = (await res.json()) as { pins: { seq: number; title: string }[] };
+    expect(pins).toHaveLength(1);
+    expect(pins[0]?.seq).toBe(reply?.seq);
+    expect(pins[0]?.title.length).toBeGreaterThan(0);
+    expect(pins[0]?.title.length).toBeLessThanOrEqual(21);
+
+    expect(
+      ((await (await pin(reply?.seq as number)).json()) as { pins: unknown[] }).pins,
+    ).toHaveLength(1);
+    const listed = await browser.get(`/api/sessions/${session.shortId}/pins`);
+    expect(((await listed.json()) as { pins: unknown[] }).pins).toHaveLength(1);
+
+    // 用户的消息、不存在的序号都不行
+    expect((await pin(user?.seq as number)).status).toBe(404);
+    expect((await pin(9999)).status).toBe(404);
+
+    expect(
+      ((await (await pin(reply?.seq as number, false)).json()) as { pins: unknown[] }).pins,
+    ).toEqual([]);
+  });
+
   it("没登录、别人的会话都不行", async () => {
     const session = await start();
     const stranger = t.browser();
-    for (const action of ["rename", "archive", "unarchive", "pin"]) {
+    for (const action of ["rename", "archive", "unarchive", "pin", "pins"]) {
       const res = await stranger.post(`/api/sessions/${session.shortId}/${action}`, {
         title: "x",
         pinned: true,
+        seq: 1,
       });
       expect(res.status).toBe(401);
     }

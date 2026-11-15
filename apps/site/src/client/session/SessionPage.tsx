@@ -1,4 +1,4 @@
-import type { ModelProgress, ThinkingEffort, TodoItem } from "@seekcloud/protocol";
+import type { MessagePin, ModelProgress, ThinkingEffort, TodoItem } from "@seekcloud/protocol";
 import {
   createContext,
   type ReactNode,
@@ -22,10 +22,11 @@ import {
   ChevronRightIcon,
   CloseIcon,
   DoubleCheckIcon,
+  PinIcon,
   RetryIcon,
   UndoIcon,
 } from "../Icons";
-import { usePresence } from "../Motion";
+import { Collapse, usePresence } from "../Motion";
 import { Whale } from "../Whale";
 import { catchUpBubble } from "./bubble-in";
 import { Composer } from "./Composer";
@@ -46,6 +47,7 @@ import {
 } from "./timeline";
 import type { Session } from "./types";
 import { useModels } from "./useModels";
+import { usePins } from "./usePins";
 import { useSessionEvents } from "./useSessionEvents";
 
 // 空闲时提示可以用命令；Agent 在工作时照样能发，发出去先排队。
@@ -96,6 +98,8 @@ export function SessionPage({
   const [choice, setChoice] = useState<{ model: string; effort: ThinkingEffort }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  // 置顶的消息（照 Claude）：回复下面的图钉，上方的短标题，左上角的置顶列表
+  const { pins, toggle: togglePin } = usePins(id, setError);
   const models = useModels();
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -166,6 +170,7 @@ export function SessionPage({
   return (
     <div className="session-page">
       <SessionHeader id={id} session={session} onMenu={onMenu} />
+      {pins.length > 0 && <PinNav pins={pins} scroller={scroller} />}
 
       <div className="timeline" ref={scroller} {...follow.handlers}>
         <SessionLinks.Provider
@@ -197,6 +202,12 @@ export function SessionPage({
                     item.kind === "user" && item.text === pending?.text ? pending.at : undefined
                   }
                   now={now}
+                  pin={pins.find((p) => p.seq === item.key)}
+                  onPin={
+                    item.kind === "assistant" && item.turnEnd
+                      ? (pinned) => void togglePin(item.key, pinned)
+                      : undefined
+                  }
                   onRetry={canRetry ? (text) => void send(text, false) : undefined}
                 />
               ))}
@@ -603,12 +614,36 @@ function SentMessage({
 }
 
 /** 回合结束后，最后一条回复下面的一行：复制这个回合的全部回复（Markdown 原文），和结束的时间。 */
-function ReplyMeta({ reply, at, now }: { reply: string; at: string; now: Date }) {
+function ReplyMeta({
+  reply,
+  at,
+  now,
+  pinned,
+  onPin,
+}: {
+  reply: string;
+  at: string;
+  now: Date;
+  pinned: boolean;
+  onPin?: (pinned: boolean) => void;
+}) {
   const [copied, copy] = useCopy(reply);
   const time = new Date(at);
   return (
     <div className="message-meta reply-meta">
       <CopyButton copied={copied} onCopy={copy} />
+      {onPin && (
+        <button
+          type="button"
+          className={`icon-button small pin-button${pinned ? " pinned" : ""}`}
+          aria-label={pinned ? "取消置顶" : "置顶"}
+          aria-pressed={pinned}
+          data-tip={pinned ? "取消置顶" : "置顶"}
+          onClick={() => onPin(!pinned)}
+        >
+          <PinIcon filled={pinned} size={14} />
+        </button>
+      )}
       <MetaInfo className="message-time" tip={fullTime(time)}>
         <time dateTime={at}>{relativeTime(time, now)}</time>
       </MetaInfo>
@@ -763,6 +798,8 @@ function TimelineEntry({
   live,
   pendingAt,
   now,
+  pin,
+  onPin,
   onRetry,
 }: {
   item: TimelineItem;
@@ -770,6 +807,10 @@ function TimelineEntry({
   live: boolean;
   pendingAt?: string;
   now: Date;
+  /** 这条回复置顶了：上方显示短标题。 */
+  pin?: MessagePin;
+  /** 能置顶（一个回合最后的那条回复）：下面那一行有图钉。 */
+  onPin?: (pinned: boolean) => void;
   onRetry?: (text: string) => void;
 }) {
   const motion = " fresh";
@@ -788,7 +829,8 @@ function TimelineEntry({
       );
     case "assistant":
       return (
-        <div className={`assistant-message${live ? "" : motion}`}>
+        <div className={`assistant-message${live ? "" : motion}`} data-seq={item.key}>
+          <PinTitle pin={pin} />
           {item.thinking && (
             <details className="thinking">
               <summary>
@@ -800,7 +842,13 @@ function TimelineEntry({
           )}
           <PacedReply text={item.text} live={live}>
             {item.turnEnd && (
-              <ReplyMeta reply={item.turnEnd.reply} at={item.turnEnd.at} now={now} />
+              <ReplyMeta
+                reply={item.turnEnd.reply}
+                at={item.turnEnd.at}
+                now={now}
+                pinned={pin !== undefined}
+                onPin={onPin}
+              />
             )}
           </PacedReply>
         </div>
@@ -816,6 +864,107 @@ function TimelineEntry({
     case "notice":
       return <p className={`timeline-notice ${item.tone}${motion}`}>{item.text}</p>;
   }
+}
+
+/**
+ * 置顶回复上方的短标题，展开、收起都是平滑的高度变化。标题还没回来时是一条占位的闪烁条
+ * （Claude 这时会闪一下上一条回复的内容，是它的毛病，不照搬）。取消置顶时留着原来的字，收起来再拿掉。
+ */
+function PinTitle({ pin }: { pin?: MessagePin }) {
+  const last = useRef<string | null>(null);
+  if (pin) last.current = pin.title;
+  const title = pin ? pin.title : last.current;
+  return (
+    <Collapse open={pin !== undefined}>
+      <p className="pin-title">
+        <PinIcon filled size={13} />
+        {title ?? <span className="pin-title-loading" role="status" aria-label="正在生成标题" />}
+      </p>
+    </Collapse>
+  );
+}
+
+/**
+ * 左上角的置顶列表（照 Claude）：几道短横，点开是"会话开头"和每条置顶的标题，点哪个就平滑地滚到哪条。
+ */
+function PinNav({
+  pins,
+  scroller,
+}: {
+  pins: MessagePin[];
+  scroller: RefObject<HTMLDivElement | null>;
+}) {
+  const [open, setOpen] = useState(false);
+  const { mounted, closing } = usePresence(open, 180);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const go = (seq?: number) => {
+    setOpen(false);
+    const box = scroller.current;
+    if (!box) return;
+    if (seq === undefined) {
+      box.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    box
+      .querySelector(`[data-seq="${seq}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  return (
+    <div className="pin-nav-anchor">
+      <div className="pin-nav" ref={root}>
+        <button
+          type="button"
+          className={`pin-nav-button${open ? " active" : ""}`}
+          aria-label={`置顶的消息（${pins.length} 条）`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          {[undefined, ...pins.slice(0, 5)].map((p) => (
+            <span key={p?.seq ?? "start"} className={p ? "" : "start"} />
+          ))}
+        </button>
+        {mounted && (
+          <div className={`popover pin-nav-menu${closing ? " closing" : ""}`} role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              className="pin-nav-item start"
+              onClick={() => go()}
+            >
+              <span className="pin-nav-dash" />
+              会话开头
+            </button>
+            {pins.map((p) => (
+              <button
+                key={p.seq}
+                type="button"
+                role="menuitem"
+                className="pin-nav-item"
+                onClick={() => go(p.seq)}
+              >
+                <span className="pin-nav-dash" />
+                {p.title ?? <span className="pin-title-loading" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** 页面长高了（回复多显示了几个字），贴着底部时跟着往下。 */

@@ -29,6 +29,13 @@
       "when": 1794722623551,
       "tag": "0003_session_pin",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794724058214,
+      "tag": "0004_message_pins",
+      "breakpoints": true
     }
   ]
 }
