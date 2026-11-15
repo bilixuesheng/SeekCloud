@@ -48,6 +48,7 @@ export const sessionErrors = {
   session_not_found: { status: 404, message: "会话不存在" },
   session_closed: { status: 409, message: "会话已归档，请先取消归档再发送消息" },
   queued_not_found: { status: 404, message: "该消息已发送或已撤回" },
+  nothing_running: { status: 409, message: "当前没有正在运行的回合" },
   session_archived: { status: 409, message: "已归档的会话不能置顶，请先取消归档" },
   message_not_found: { status: 404, message: "该消息不存在，或不是 Agent 的回复" },
 } as const;
@@ -80,7 +81,10 @@ export interface SessionHandle {
 type SessionRow = typeof sessions.$inferSelect;
 
 /** 发消息的结果：开始了下一个回合，或者 Agent 还在工作、先排队。 */
-export type SendOutcome = { started: Session } | { queued: { id: string; text: string } };
+export type SendOutcome =
+  | { started: Session }
+  | { queued: { id: string; text: string } }
+  | { injected: true };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -401,6 +405,69 @@ export class Sessions {
     return turn.number;
   }
 
+  /**
+   * 把一条消息插进正在跑的回合：Agent 在下一步读到（插话）。沙箱还在准备、回合还没真正开始时，
+   * 直接并进这个回合的输入。queued 是它由哪几条排队的消息变来的（界面上把那几条换成这一条）。
+   * 返回要发给宿主机的命令；没有正在跑的回合时返回 "no_turn"。
+   */
+  async #injectIntoRunning(
+    tx: Tx,
+    session: SessionRow,
+    text: string,
+    queued: string[],
+  ): Promise<HostCommand | undefined | "no_turn"> {
+    const [turn] = await tx
+      .select()
+      .from(turns)
+      .where(and(eq(turns.sessionId, session.id), eq(turns.status, "running")))
+      .orderBy(desc(turns.number))
+      .limit(1);
+    if (!turn) return "no_turn";
+    await this.#append(tx, session.id, turn.number, {
+      type: "user.message",
+      text,
+      injected: true,
+      ...(queued.length > 0 ? { queued } : {}),
+    });
+    if (session.statusDetail === "preparing_sandbox" || session.status === "queued") {
+      await tx
+        .update(turns)
+        .set({ input: `${turn.input}\n\n${text}` })
+        .where(eq(turns.id, turn.id));
+      return undefined;
+    }
+    return { type: "inject_message", sessionId: session.id, turnId: turn.id, text };
+  }
+
+  /**
+   * 停止：停下正在跑的回合（照 Claude，输入框里的字不动）。回合马上记成已停止，再让宿主机停下；
+   * 之后这个回合的事件都忽略。还有"稍后排队"的消息时，照 2026-11-14 的决定用它们开始下一个回合。
+   */
+  async stopTurn(userId: string, shortId: string): Promise<Result<void>> {
+    const outcome = await this.#deps.db.transaction(async (tx) => {
+      const session = await this.#lockOwn(tx, userId, shortId);
+      if (!session) return "session_not_found" as const;
+      const [turn] = await tx
+        .select({ id: turns.id })
+        .from(turns)
+        .where(and(eq(turns.sessionId, session.id), eq(turns.status, "running")))
+        .limit(1);
+      if (!turn || (session.status !== "running" && session.status !== "queued")) {
+        return "nothing_running" as const;
+      }
+      const number = await this.#stopRunningTurn(tx, session.id);
+      const stop: HostCommand = { type: "stop_turn", sessionId: session.id, turnId: turn.id };
+      const next = await this.#startQueued(tx, session);
+      if (!next) await this.#setStatus(tx, session.id, number, { status: "waiting", detail: null });
+      return { session, stop, next };
+    });
+    if (typeof outcome === "string") return { ok: false, error: outcome };
+    this.#notify(outcome.session);
+    this.#deps.host?.send(outcome.stop);
+    if (outcome.next) this.#deps.host?.send(outcome.next);
+    return { ok: true, value: undefined };
+  }
+
   /** 订阅这个用户的会话列表变化：listener 收到变了的会话的短 ID。 */
   subscribeChanges(userId: string, listener: (shortId: string) => void): () => void {
     return this.#changes.on(userId, listener);
@@ -418,7 +485,16 @@ export class Sessions {
   async sendMessage(
     userId: string,
     shortId: string,
-    message: { text: string; model?: string; effort?: ThinkingEffort },
+    message: {
+      text: string;
+      model?: string;
+      effort?: ThinkingEffort;
+      /**
+       * Agent 在工作时：now 直接插进当前回合（Agent 下一步读到），later 排队到回合结束。
+       * 换了模型或思考强度时总是排队（要到下一个回合才生效）。会话没在工作时两个都一样。
+       */
+      mode?: "now" | "later";
+    },
   ): Promise<Result<SendOutcome>> {
     const body = message.text.trim();
     if (message.model !== undefined || message.effort !== undefined) {
@@ -436,6 +512,13 @@ export class Sessions {
         return { kind: "started" as const, session, command };
       }
       if (session.status === "running" || session.status === "queued") {
+        const switching = message.model !== undefined || message.effort !== undefined;
+        if (message.mode === "now" && !switching) {
+          const injected = await this.#injectIntoRunning(tx, session, body, []);
+          if (injected !== "no_turn") {
+            return { kind: "injected" as const, session, command: injected };
+          }
+        }
         const queued = await this.#enqueue(tx, session, { ...message, text: body });
         return { kind: "queued" as const, session, queued };
       }
@@ -455,6 +538,10 @@ export class Sessions {
       return { ok: true, value: { queued: outcome.queued } };
     }
     if (outcome.kind === "queued") return { ok: true, value: { queued: outcome.queued } };
+    if (outcome.kind === "injected") {
+      if (outcome.command) this.#deps.host?.send(outcome.command);
+      return { ok: true, value: { injected: true } };
+    }
     this.#deps.host?.send(outcome.command);
     return { ok: true, value: { started: (await this.#view(outcome.session.id)) as Session } };
   }
@@ -513,33 +600,9 @@ export class Sessions {
           command: await this.#startTurn(tx, session, { ...queued, queued: [row.id] }),
         };
       }
-      const [turn] = await tx
-        .select()
-        .from(turns)
-        .where(and(eq(turns.sessionId, session.id), eq(turns.status, "running")))
-        .orderBy(desc(turns.number))
-        .limit(1);
-      if (!turn) return "session_closed" as const;
-      await this.#append(tx, session.id, turn.number, {
-        type: "user.message",
-        text: row.text,
-        injected: true,
-        queued: [row.id],
-      });
-      if (session.statusDetail === "preparing_sandbox" || session.status === "queued") {
-        await tx
-          .update(turns)
-          .set({ input: `${turn.input}\n\n${row.text}` })
-          .where(eq(turns.id, turn.id));
-        return { session, command: undefined };
-      }
-      const command: HostCommand = {
-        type: "inject_message",
-        sessionId: session.id,
-        turnId: turn.id,
-        text: row.text,
-      };
-      return { session, command };
+      const injected = await this.#injectIntoRunning(tx, session, row.text, [row.id]);
+      if (injected === "no_turn") return "session_closed" as const;
+      return { session, command: injected };
     });
     if (typeof outcome === "string") return { ok: false, error: outcome };
     this.#notify(outcome.session);

@@ -52,8 +52,8 @@ import { useSessionEvents } from "./useSessionEvents";
 
 // 空闲时提示可以用命令；Agent 在工作时照样能发，发出去先排队。
 const placeholders = {
-  queued: "排队一条消息",
-  running: "排队一条消息",
+  queued: "输入 / 使用命令",
+  running: "输入 / 使用命令",
   waiting: "输入 / 使用命令",
   dormant: "输入 / 使用命令",
   archived: "会话已归档",
@@ -135,15 +135,18 @@ export function SessionPage({
   // 消息下面的"刚刚""5 分钟前"：每半分钟刷新一次。
   const now = useNow(30_000);
 
-  /** 发一条消息。fromComposer：从输入框发的，发出去清空输入框，没发出去把字还回去；重试不动输入框。 */
-  const send = async (text: string, fromComposer: boolean) => {
+  /**
+   * 发一条消息。fromComposer：从输入框发的，发出去清空输入框，没发出去把字还回去；重试不动输入框。
+   * Agent 在工作时 now 插进当前回合（下一步读到），later 排队到回合结束。
+   */
+  const send = async (text: string, fromComposer: boolean, mode: "now" | "later" = "now") => {
     setBusy(true);
     setError(undefined);
     setPending({ text, after: sentCount, at: new Date().toISOString() });
     if (fromComposer) setReply("");
     follow.toBottom();
     try {
-      await api(`/api/sessions/${id}/messages`, { text, ...choice });
+      await api(`/api/sessions/${id}/messages`, { text, ...choice, mode });
       setChoice(undefined);
     } catch (e) {
       // 没发出去：气泡收回，字还给输入框。
@@ -152,6 +155,20 @@ export function SessionPage({
       setError((e as ApiError).message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  // 停止：只停下回合，输入框里的字不动（照 Claude）
+  const [stopping, setStopping] = useState(false);
+  const stop = async () => {
+    setStopping(true);
+    setError(undefined);
+    try {
+      await api(`/api/sessions/${id}/stop`, {});
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setStopping(false);
     }
   };
 
@@ -299,6 +316,15 @@ export function SessionPage({
             disabled={closed}
             busy={busy}
             submitLabel="发送"
+            working={
+              working
+                ? {
+                    onStop: () => void stop(),
+                    onLater: () => void send(reply, true, "later"),
+                    stopping,
+                  }
+                : undefined
+            }
           />
           {/* 输入框下面一行：模型和思考强度（以后还有权限模式） */}
           {models && picked && (

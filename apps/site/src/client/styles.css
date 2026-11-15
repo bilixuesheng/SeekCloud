@@ -1026,6 +1026,56 @@ input:not([type="range"]):focus {
   color: var(--faint);
 }
 
+/* Agent 在工作、输入框是空的：停止键（照 Claude，黑色方块） */
+.send.stop {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.send.stop:hover:not(:disabled) {
+  background: var(--fg-2);
+}
+
+/* 发送键旁边的"⌄"：稍后排队、停止 */
+.send-more-wrap {
+  position: relative;
+  flex-shrink: 0;
+  align-self: flex-end;
+}
+
+.send-more {
+  width: 22px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  margin-left: -4px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  transition: background 0.15s;
+}
+
+.send-more:hover:not(:disabled),
+.send-more.active {
+  background: var(--hover);
+}
+
+.send-more:disabled {
+  color: var(--faint);
+}
+
+.send-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 180px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  transform-origin: bottom right;
+}
+
 .chip {
   height: 32px;
   max-width: 100%;

@@ -150,6 +150,11 @@ export type HostCommand =
    * 沙箱已经不在时什么也不做。
    */
   | { type: "destroy_sandbox"; sessionId: string }
+  /**
+   * 管理员点了"停止"：停下这个回合，不停后台命令；宿主机照常补提交和推送。
+   * 主站这时已经把回合记成已停止，之后这个回合的事件都会被忽略。
+   */
+  | { type: "stop_turn"; sessionId: string; turnId: string }
   /** 每个回合都带上模型和思考强度：用户中途切换后，从下一个回合起生效。 */
   | {
       type: "start_turn";

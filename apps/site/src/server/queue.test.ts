@@ -170,6 +170,61 @@ describe("Agent 工作时发消息", () => {
     ).toBe(404);
   });
 
+  it("Agent 在工作时发消息选 now：直接插进当前回合，不排队；换了模型时照样排队", async () => {
+    const { shortId, sessionId, turnId } = await running();
+    const res = await browser.post(`/api/sessions/${shortId}/messages`, {
+      text: "顺便改个名",
+      mode: "now",
+    });
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ injected: true });
+    expect(t.host.last("inject_message")).toMatchObject({ sessionId, turnId, text: "顺便改个名" });
+    const all = await events(shortId);
+    expect(all.at(-1)).toMatchObject({ type: "user.message", text: "顺便改个名", injected: true });
+    expect(all.some((e) => e.type === "message.queued")).toBe(false);
+
+    const switching = await browser.post(`/api/sessions/${shortId}/messages`, {
+      text: "下一回合换模型",
+      mode: "now",
+      effort: "high",
+    });
+    expect(switching.status).toBe(202);
+    expect(await switching.json()).toMatchObject({ queued: { text: "下一回合换模型" } });
+  });
+
+  it("停止：回合记成已停止、会话回到等待回复、通知宿主机；没在跑时 409；有排队的消息就用它们开始下一个回合", async () => {
+    const { shortId, sessionId, turnId } = await running();
+    const stop = () => browser.post(`/api/sessions/${shortId}/stop`, {});
+    const res = await stop();
+    expect(res.status).toBe(200);
+    expect(t.host.last("stop_turn")).toMatchObject({ sessionId, turnId });
+    const all = await events(shortId);
+    expect(all.some((e) => e.type === "turn.ended" && e.reason === "stopped")).toBe(true);
+    const session = (await (await browser.get(`/api/sessions/${shortId}`)).json()) as {
+      status: string;
+    };
+    expect(session.status).toBe("waiting");
+    expect((await stop()).status).toBe(409);
+    // 停下的回合晚到的事件不再记录
+    await t.host.emit({
+      type: "agent",
+      sessionId,
+      turnId,
+      event: { type: "message", text: "晚到的" },
+    });
+    expect((await events(shortId)).some((e) => e.type === "message" && e.text === "晚到的")).toBe(
+      false,
+    );
+
+    const second = await running();
+    await send(second.shortId, "稍后再说");
+    const before = startTurns(second.sessionId).length;
+    expect((await browser.post(`/api/sessions/${second.shortId}/stop`, {})).status).toBe(200);
+    const turnsAfter = startTurns(second.sessionId);
+    expect(turnsAfter).toHaveLength(before + 1);
+    expect(turnsAfter.at(-1)?.text).toBe("稍后再说");
+  });
+
   it("会话失败以后还能接着发：和唤醒休眠的会话一样，先重新准备沙箱，沙箱好了用这条消息开始回合", async () => {
     const res = await browser.post("/api/sessions", {
       repo: "queue/app",
