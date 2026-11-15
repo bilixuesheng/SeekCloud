@@ -3,26 +3,38 @@ import { greetingPool } from "./greetings";
 import { guessRegion, regionName } from "./region";
 
 describe("按浏览器的使用习惯猜地区", () => {
-  it("浏览器语言列表优先：第一个带地区的为准，时区不看", () => {
+  it("语言列表优先：按顺序第一个说得出地区的为准，时区不看", () => {
     expect(guessRegion(["zh-CN", "en"], "America/Los_Angeles")).toBe("CN");
-    expect(guessRegion(["en", "pt-BR"], "Asia/Tokyo")).toBe("BR");
+    expect(guessRegion(["pt-BR", "en"], "Asia/Tokyo")).toBe("BR");
+    expect(guessRegion(["ja"], "Europe/Berlin")).toBe("JP");
   });
 
-  it("语言都没带地区时，几种基本只在一个地方用的语言直接对上", () => {
-    expect(guessRegion(["en", "ja"], "Europe/Berlin")).toBe("JP");
+  it("英文不当强信号：列表里有别的语言就看别的；只有英文时时区优先", () => {
+    expect(guessRegion(["en-US", "zh-CN"], "America/New_York")).toBe("CN");
+    expect(guessRegion(["en-US", "ja"], undefined)).toBe("JP");
+    expect(guessRegion(["en-US"], "Asia/Shanghai")).toBe("CN");
+    expect(guessRegion(["en-US"], "America/New_York")).toBe("US");
+    expect(guessRegion(["en-GB"], "UTC")).toBe("GB");
+  });
+
+  it("中文只写了文字时：简体是中国，不因为时区在台湾就当成台湾", () => {
+    expect(guessRegion(["zh-Hans"], "Asia/Taipei")).toBe("CN");
+    expect(guessRegion(["en-US", "zh-Hans"], "Asia/Taipei")).toBe("CN");
+    expect(guessRegion(["zh-Hant"], "Asia/Hong_Kong")).toBe("HK");
+    expect(guessRegion(["zh-Hant"], "Asia/Taipei")).toBeUndefined();
   });
 
   it("语言说不出来时看时区（包括浏览器报的旧名字）", () => {
-    expect(guessRegion(["en"], "Asia/Shanghai")).toBe("CN");
-    expect(guessRegion(["zh"], "Asia/Hong_Kong")).toBe("HK");
-    expect(guessRegion(["en", "fr"], "Asia/Calcutta")).toBe("IN");
-    expect(guessRegion(["en"], "UTC")).toBeUndefined();
-    expect(guessRegion(["en"], undefined)).toBeUndefined();
+    expect(guessRegion(["zh"], "Asia/Shanghai")).toBe("CN");
+    expect(guessRegion(["fr"], "Asia/Calcutta")).toBe("IN");
+    expect(guessRegion(["fr"], "UTC")).toBeUndefined();
+    expect(guessRegion([], undefined)).toBeUndefined();
   });
 
   it("台湾、有争议的地区、写错的语言标签都不说", () => {
     expect(guessRegion(["zh-TW"], "Asia/Shanghai")).toBeUndefined();
     expect(guessRegion(["zh"], "Asia/Taipei")).toBeUndefined();
+    expect(guessRegion(["en-US"], "Asia/Taipei")).toBeUndefined();
     expect(guessRegion(["sq-XK"], undefined)).toBeUndefined();
     expect(guessRegion(["not a tag!", "ko"], undefined)).toBe("KR");
   });
