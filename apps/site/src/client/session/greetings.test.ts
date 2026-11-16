@@ -3,30 +3,42 @@ import { greetingPool, pickGreeting, prepareGreeting, takeGreeting } from "./gre
 
 // 2026-11-02 是周一，11-07 是周六
 const at = (day: number, hour: number) => new Date(2026, 10, day, hour, 0);
+/** 此刻可能挑出来的：池子里的，加上单独给机会的"吾将上下而求索"。 */
+const possible = (name: string | null) => [...greetingPool(name, new Date()), "吾将上下而求索"];
 
 describe("新会话页的问候语", () => {
-  it("没设昵称时，没有一句带名字或占位符", () => {
+  it("没设昵称时，没有一句带名字或占位符；每句不超过 14 个字", () => {
     const pool = greetingPool(null, at(2, 9));
-    expect(pool).toContain("吾将上下而求索");
     expect(pool.some((g) => g.includes("{name}") || g.includes("，null"))).toBe(false);
     expect(greetingPool("  ", at(2, 9))).toEqual(pool);
+    for (const hour of [2, 9, 12, 15, 20, 23]) {
+      for (const day of [2, 7, 8]) {
+        for (const g of greetingPool(null, at(day, hour))) expect([...g].length).toBeLessThan(15);
+      }
+    }
   });
 
-  it("设了昵称时，有的带上昵称（去掉首尾空格），并且出现的机会是两倍", () => {
+  it("设了昵称时，有的带上昵称（去掉首尾空格），每句机会一样", () => {
     const pool = greetingPool(" 雪生 ", at(2, 9));
     expect(pool).toContain("欢迎回来，雪生");
-    expect(pool).toContain("早上好，雪生");
-    expect(pool.filter((g) => g === "欢迎回来，雪生")).toHaveLength(2);
+    expect(pool.filter((g) => g === "欢迎回来，雪生")).toHaveLength(1);
     expect(pool.some((g) => g.includes("{name}"))).toBe(false);
   });
 
-  it("看时段：早上不出现晚上好；夜里跨过零点", () => {
-    const morning = greetingPool("雪生", at(2, 9));
-    expect(morning).toContain("早上好");
-    expect(morning).not.toContain("晚上好");
+  it("不再有早上好、中午好、下午好、晚上好；合在一起的那句拆开了", () => {
+    const all = [2, 9, 12, 15, 20, 23].flatMap((h) => greetingPool("雪生", at(2, h)));
+    for (const gone of ["早上好", "中午好", "下午好", "晚上好", "早上好，雪生", "晚上好，雪生"]) {
+      expect(all).not.toContain(gone);
+    }
+    expect(all).toContain("路漫漫其修远兮");
+    expect(all.some((g) => g.includes("路漫漫其修远兮，"))).toBe(false);
+  });
+
+  it("看时段：夜里跨过零点", () => {
     expect(greetingPool("雪生", at(2, 23))).toContain("夜深了，雪生");
     expect(greetingPool("雪生", at(2, 2))).toContain("星垂平野阔，月涌大江流");
-    expect(greetingPool("雪生", at(2, 2))).not.toContain("早上好");
+    expect(greetingPool("雪生", at(2, 2))).not.toContain("一日之计在于晨");
+    expect(greetingPool("雪生", at(2, 9))).toContain("一日之计在于晨");
   });
 
   it("看星期几：只在当天出现", () => {
@@ -39,11 +51,23 @@ describe("新会话页的问候语", () => {
     expect(saturday).toContain("偷得浮生半日闲");
   });
 
-  it("随机挑一句，总在当时能用的里面", () => {
+  it("吾将上下而求索、你是某地人吗各占 20%，剩下的在其余句子里平均分", () => {
     const now = at(2, 9);
     const pool = greetingPool("雪生", now);
-    expect(pickGreeting({ name: "雪生", now, random: () => 0 })).toBe(pool[0]);
-    expect(pickGreeting({ name: "雪生", now, random: () => 0.999 })).toBe(pool.at(-1));
+    const pick = (r: number, region?: string) =>
+      pickGreeting({ name: "雪生", now, random: () => r, region });
+    expect(pick(0)).toBe("吾将上下而求索");
+    expect(pick(0.19)).toBe("吾将上下而求索");
+    expect(pick(0.2, "日本")).toBe("你是日本人吗，雪生");
+    expect(pick(0.39, "日本")).toBe("你是日本人吗，雪生");
+    expect(pick(0.4, "日本")).toBe(pool[0]);
+    expect(pick(0.999, "日本")).toBe(pool.at(-1));
+    // 猜不出地区时，那 20% 分给其余的句子
+    expect(pick(0.2)).toBe(pool[0]);
+    expect(pick(0.999)).toBe(pool.at(-1));
+    // 没设昵称时也没有"你是某地人吗"
+    expect(pickGreeting({ now, random: () => 0.3, region: "日本" })).not.toContain("人吗");
+    expect(pool).not.toContain("吾将上下而求索");
   });
 
   it("页面一打开先挑一句并开始拉字体；首页第一次显示用它；用掉以后在后台先挑好下一句、拉它的字体", async () => {
@@ -59,12 +83,12 @@ describe("新会话页的问候语", () => {
       expect(preloaded).toHaveLength(2);
       // 重进首页用的就是先拉好字体的那句
       expect(takeGreeting("雪生")).toBe(preloaded[1]);
-      expect(greetingPool("雪生", new Date())).toContain(preloaded[1]);
+      expect(possible("雪生")).toContain(preloaded[1]);
 
       // 昵称变了：先挑的那句作废，现挑一句
       const other = takeGreeting("求索者");
-      expect(greetingPool("求索者", new Date())).toContain(other);
-      expect(greetingPool(null, new Date())).toContain(takeGreeting(null));
+      expect(possible("求索者")).toContain(other);
+      expect(possible(null)).toContain(takeGreeting(null));
     } finally {
       vi.useRealTimers();
     }
