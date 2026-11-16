@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { greetingPool } from "./greetings";
+import { pickGreeting } from "./greetings";
 import { guessRegion, regionName } from "./region";
 
 describe("按浏览器的使用习惯猜地区", () => {
@@ -47,10 +47,12 @@ describe("按浏览器的使用习惯猜地区", () => {
     expect(regionName("US")).toBe("美国");
   });
 
-  it('设了昵称、猜得出地区时，问候语里多一句"你是某地人吗"', () => {
+  it('设了昵称、猜得出地区时，才会挑到"你是某地人吗"', () => {
     const now = new Date(2026, 10, 2, 15, 0);
-    expect(greetingPool("雪生", now, "中国")).toContain("你是中国人吗，雪生");
-    expect(greetingPool("雪生", now).some((g) => g.startsWith("你是"))).toBe(false);
-    expect(greetingPool(null, now, "中国").some((g) => g.startsWith("你是"))).toBe(false);
+    const pick = (name: string | null, region?: string) =>
+      pickGreeting({ name, now, random: () => 0.3, region });
+    expect(pick("雪生", "中国")).toBe("你是中国人吗，雪生");
+    expect(pick("雪生").startsWith("你是")).toBe(false);
+    expect(pick(null, "中国").startsWith("你是")).toBe(false);
   });
 });
