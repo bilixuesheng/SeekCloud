@@ -1,5 +1,7 @@
 # 沙箱用 Docker + Sysbox 系统容器隔离
 
+> **2026-11-15 说明**：下文的"内测规格""内测阶段的廉价 VPS"是迁移过来时的说法。开源版里沙箱的规格在设置里可以改；宿主机还可以装在 Windows 上（WSL2 或 Hyper-V 虚拟机，规格 #117）。Sysbox 的维护状态和 WSL2 上能不能跑已经查过，见 `docs/research/sysbox-2026-11-08.md`；单个沙箱的磁盘配额靠什么实现还要在测试机上验（#18 的评论）。隔离方案的决定不变。
+
 每个沙箱是沙箱宿主机上的一个 Sysbox 系统容器（运行时为 `sysbox-runc`），不是普通 Docker 容器，也不是 microVM。这样定有三个原因：
 
 - **能在沙箱里跑 Docker**：每个沙箱里有自己的 Docker 守护进程，用户可以 `docker compose up`，和 Claude Code 云端一样。

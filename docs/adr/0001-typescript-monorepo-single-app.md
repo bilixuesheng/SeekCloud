@@ -1,5 +1,7 @@
 # TypeScript monorepo，用户端和管理端合成一个应用
 
+> **2026-11-08 修订**：开源版只有一个管理员（ADR 0008），"用户端"和"管理端"的区分没有了，也没有 `/admin` 路由：主站整个都是管理员用的，管理功能放在设置窗口里。技术栈和"一个应用"的决定不变。下文是原文。
+
 SeekCloud 由一个人主要借助 AI 编程 Agent 开发，部署在 1–2 GB 内存的廉价 VPS 上。因此整套系统都用 TypeScript，放在一个 pnpm monorepo 里：
 
 - 主站：Hono 写 API，用 SSE 推送 Agent 的实时进度；前端是 React + Vite 的 PWA；数据库是 PostgreSQL + Drizzle。
