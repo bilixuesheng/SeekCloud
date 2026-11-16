@@ -1029,7 +1029,7 @@ input:not([type="range"]):focus {
 /* Agent 在工作、输入框是空的：停止键（照 Claude，黑色方块） */
 .send.stop {
   background: var(--fg);
-  color: var(--bg);
+  color: var(--page);
 }
 
 .send.stop:hover:not(:disabled) {

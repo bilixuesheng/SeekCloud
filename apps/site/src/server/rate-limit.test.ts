@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createTestApp, type TestApp } from "../testing/test-app";
 import type { TestBrowser } from "../testing/test-browser";
+import { RateLimiter } from "./rate-limit";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -85,5 +86,20 @@ describe("频率限制：输错密码", () => {
     expect((await login(t.browser(), t.adminPassword, "203.0.113.40")).status).toBe(429);
     t.clock.advance(HOUR);
     expect((await change(t.adminPassword)).status).toBe(204);
+  });
+});
+
+describe("频率限制：内存", () => {
+  it("来源很多时，过了窗口的不再留在内存里", () => {
+    let now = 0;
+    const limiter = new RateLimiter({ now: () => new Date(now) });
+    const rule = (ip: string) => [{ key: `password-ip:${ip}`, limit: 10, windowMs: HOUR }];
+    for (let i = 0; i < 20_000; i++) limiter.take(rule(`198.51.${i >> 8}.${i & 255}`));
+    expect(limiter.size).toBe(20_000);
+
+    now = 2 * HOUR;
+    limiter.take(rule("203.0.113.9"));
+
+    expect(limiter.size).toBe(1);
   });
 });

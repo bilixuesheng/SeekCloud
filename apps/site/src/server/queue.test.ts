@@ -246,6 +246,10 @@ describe("Agent 工作时发消息", () => {
       status: string;
     };
     expect(session.status).toBe("running");
+    // 重新准备沙箱的那条状态不属于第 1 个回合（它已经失败了），新回合是第 2 个
+    const all = await events(shortId);
+    const preparing = all.filter((e) => e.type === "status" && e.detail === "preparing_sandbox");
+    expect(preparing.map((e) => e.turn)).toEqual([1, null]);
   });
 
   it("失败前留下的排队消息点立即发送：同样重新准备沙箱，好了合成回合", async () => {
@@ -263,5 +267,48 @@ describe("Agent 工作时发消息", () => {
     expect(t.host.commands.filter((c) => c.type === "prepare_sandbox")).toHaveLength(prepares + 1);
     await t.host.emit({ type: "sandbox.ready", sessionId });
     expect(t.host.last("start_turn")).toMatchObject({ sessionId, text: "排着的" });
+  });
+
+  it("重新准备沙箱期间点立即发送：消息留在队里，沙箱好了照常合成回合，不丢", async () => {
+    const res = await browser.post("/api/sessions", {
+      repo: "queue/app",
+      baseBranch: "main",
+      text: "试试",
+    });
+    const { shortId } = (await res.json()) as { shortId: string };
+    const sessionId = t.host.last("prepare_sandbox").sessionId;
+    await t.host.emit({ type: "sandbox.failed", sessionId, error: { code: "internal" } });
+    const queued = (await (await send(shortId, "再试一次")).json()) as { queued: { id: string } };
+
+    const now = await browser.post(
+      `/api/sessions/${shortId}/queue/${queued.queued.id}/send-now`,
+      {},
+    );
+
+    expect(now.status).toBe(200);
+    await t.host.emit({ type: "sandbox.ready", sessionId });
+    expect(t.host.last("start_turn")).toMatchObject({ sessionId, text: "再试一次" });
+  });
+
+  it("已归档的会话点立即发送：报会话已归档，消息还留在队里，取消归档以后发消息时一起处理", async () => {
+    const { shortId, sessionId } = await running();
+    const queued = (await (await send(shortId, "归档前排着的")).json()) as {
+      queued: { id: string };
+    };
+    await browser.post(`/api/sessions/${shortId}/archive`, {});
+
+    const now = await browser.post(
+      `/api/sessions/${shortId}/queue/${queued.queued.id}/send-now`,
+      {},
+    );
+
+    expect(now.status).toBe(409);
+    await browser.post(`/api/sessions/${shortId}/unarchive`, {});
+    await send(shortId, "接着做");
+    await t.host.emit({ type: "sandbox.ready", sessionId });
+    expect(t.host.last("start_turn")).toMatchObject({
+      sessionId,
+      text: "归档前排着的\n\n接着做",
+    });
   });
 });

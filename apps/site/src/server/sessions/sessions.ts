@@ -16,7 +16,7 @@ import type {
   ThinkingEffort,
 } from "@seekcloud/protocol";
 import { fitEffort } from "@seekcloud/protocol";
-import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import type { AppDeps } from "../app";
 import type { Tx } from "../db/client";
 import {
@@ -38,6 +38,9 @@ import { Topic } from "./topic";
 
 /** 一次读多少条事件。 */
 export const EVENT_PAGE = 500;
+
+/** 会话列表最多给这么多个最近有动静的会话；置顶的不受这个数限制。 */
+const LIST_LIMIT = 200;
 
 export const sessionErrors = {
   github_not_connected: { status: 409, message: githubNotConnected.error.message },
@@ -194,13 +197,35 @@ export class Sessions {
     return { ok: true, value: (await this.#view(created.id)) as Session };
   }
 
+  /** 最近有动静的 200 个，加上所有置顶的（置顶的再久没动也要在侧栏里），最近有动静的在前。 */
   async list(userId: string): Promise<Session[]> {
-    const rows = await this.#deps.db
+    const { db } = this.#deps;
+    const recent = await db
       .select()
       .from(sessions)
       .where(eq(sessions.userId, userId))
       .orderBy(desc(sessions.updatedAt))
-      .limit(200);
+      .limit(LIST_LIMIT);
+    const rows =
+      recent.length < LIST_LIMIT
+        ? recent
+        : [
+            ...recent,
+            ...(await db
+              .select()
+              .from(sessions)
+              .where(
+                and(
+                  eq(sessions.userId, userId),
+                  isNotNull(sessions.pinnedAt),
+                  notInArray(
+                    sessions.id,
+                    recent.map((r) => r.id),
+                  ),
+                ),
+              )
+              .orderBy(desc(sessions.updatedAt))),
+          ];
     return this.#views(rows);
   }
 
@@ -569,18 +594,31 @@ export class Sessions {
    * 排队的消息"立即发送"：Agent 在当前回合的下一步读到它（插话）。
    * 沙箱还在准备、回合还没真正开始：直接并进这个回合的输入。回合已经停了：用它开始下一个回合。
    * 会话休眠或失败（失败前留下的排队消息）：和发消息一样重新准备沙箱，好了再合成回合。
+   * 已经在重新准备沙箱、已归档：消息留在队里不动（归档的报"会话已归档"）。
    */
   async sendQueuedNow(userId: string, shortId: string, queueId: string): Promise<Result<void>> {
     if (!UUID.test(queueId)) return { ok: false, error: "queued_not_found" };
     const outcome = await this.#deps.db.transaction(async (tx) => {
       const session = await this.#lockOwn(tx, userId, shortId);
       if (!session) return "session_not_found" as const;
-      if (session.status === "dormant" || session.status === "failed") {
+      const [turn] = await tx
+        .select()
+        .from(turns)
+        .where(and(eq(turns.sessionId, session.id), eq(turns.status, "running")))
+        .orderBy(desc(turns.number))
+        .limit(1);
+      // 没有回合可以插话，也不能马上开始回合：消息留在队里，不能删。
+      // 休眠或失败的去重新准备沙箱；已经在重新准备的（没有等着的回合）沙箱好了自然会合成回合；已归档的不能发。
+      if (session.status !== "waiting" && !turn) {
         const [kept] = await tx
           .select({ id: queuedMessages.id })
           .from(queuedMessages)
           .where(and(eq(queuedMessages.id, queueId), eq(queuedMessages.sessionId, session.id)));
         if (!kept) return "queued_not_found" as const;
+        if (session.status === "archived") return "session_closed" as const;
+        if (session.status !== "dormant" && session.status !== "failed") {
+          return { session, command: undefined };
+        }
         await this.#setStatus(tx, session.id, null, { status: "queued", detail: null });
         return { session, command: undefined, wake: true };
       }
@@ -594,7 +632,7 @@ export class Sessions {
         model: row.model ?? undefined,
         effort: row.effort ?? undefined,
       };
-      if (session.status === "waiting") {
+      if (session.status === "waiting" || !turn) {
         return {
           session,
           command: await this.#startTurn(tx, session, { ...queued, queued: [row.id] }),
@@ -876,7 +914,17 @@ export class Sessions {
     const host = this.#deps.host;
     if (!host) return;
     const session = await this.#deps.db.transaction(async (tx) => {
-      await this.#setStatus(tx, sessionId, 1, { status: "running", detail: "preparing_sandbox" });
+      // 新会话有一个等着的回合（第 1 个）；唤醒休眠或失败的会话时没有，状态事件不挂在哪个回合上。
+      const [turn] = await tx
+        .select({ number: turns.number })
+        .from(turns)
+        .where(and(eq(turns.sessionId, sessionId), eq(turns.status, "running")))
+        .orderBy(desc(turns.number))
+        .limit(1);
+      await this.#setStatus(tx, sessionId, turn?.number ?? null, {
+        status: "running",
+        detail: "preparing_sandbox",
+      });
       const [row] = await tx.select().from(sessions).where(eq(sessions.id, sessionId));
       return row as SessionRow;
     });
