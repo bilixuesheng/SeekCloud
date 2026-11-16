@@ -78,6 +78,7 @@
 - 后台的定期任务在 `apps/site/src/server/maintenance.ts`：打包数据导出、删过期的导出、删满 180 天的访问记录。main.ts 每分钟跑一次；测试里调用 `t.runMaintenance()`，导出的压缩包写在 `t.dataDir`（临时目录）。
 - 主站的环境变量：`SEEKCLOUD_DATA_DIR`（主站的数据目录，导出的压缩包放这里，默认 `./data`，要放在会备份的磁盘上）、`DATABASE_URL`、`PORT`（默认 3000）、`SEEKCLOUD_VERSION`、`NODE_ENV=production`（登录 Cookie 只走 HTTPS）、`SEEKCLOUD_SECRET_KEY`（加密令牌用的 32 字节密钥，base64，用 `openssl rand -base64 32` 生成）、`PUBLIC_URL`（主站对外的地址）、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_APP_SLUG`、`GITHUB_WEBHOOK_SECRET`（没配 GitHub 时，GitHub 相关功能直接报错）。部署时只有一层反向代理，它把客户端地址追加到 `X-Forwarded-For` 末尾；频率限制只认最后一个值。
 - 许可证是 AGPL-3.0，加了署名附加条款（ADR 0009，条款原文在 `NOTICE`）。不要拷贝许可证和 AGPL-3.0 不兼容的代码；借用 DSH Go 的代码要保留它的版权声明。
+- 主站和宿主机的运行时依赖只用宽松的许可证（MIT、Apache-2.0、BSD、ISC 这类，`licenses.ts` 的类型里列着现在允许的几种）。别人的 GPL、AGPL 代码不进主站和宿主机：`CONTRIBUTING.md` 的再授权声明要成立，整个程序里就不能有作者没法另行授权的代码。借用 DSH Go（AGPL-3.0）的代码只能进安卓 App。
 - 加了运行时依赖，要在 `apps/site/src/client/legal/licenses.ts` 的开源声明里补上，有测试检查。开源声明页开头 SeekCloud 自己的署名（`legal/LegalPage.tsx`）不能删，这是附加条款要求的。
 - 忘记管理员密码：在 `apps/site` 里运行 `DATABASE_URL=... pnpm admin:reset-password`，打印一个随机的新密码，所有设备退出登录。
 - 访问记录（登录、发起会话、发消息时的 IP）在 `apps/site/src/server/access-log.ts`，保存 180 天。
