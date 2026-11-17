@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type ComponentType,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { type ApiError, api } from "./api";
 import { takeAuthResult } from "./auth-results";
 import {
@@ -12,36 +19,22 @@ import {
 } from "./Icons";
 import { LoginPage } from "./LoginPage";
 import { Brand, Logo } from "./Logo";
-import { LegalLink, LegalPage } from "./legal/LegalPage";
+import { LegalLink } from "./legal/LegalPage";
 import { Collapse, useFlip, usePresence } from "./Motion";
 import { rememberNickname } from "./nickname";
-import {
-  navigate,
-  pathOf,
-  type Route,
-  type SettingsSection,
-  setOverlayOpen,
-  useRoute,
-} from "./router";
-import { NewSession } from "./session/NewSession";
+import type { OverlayProps, PageProps } from "./registry";
+import { Slot, useRegistry } from "./registry";
+import { isOverlay, navigate, pathOf, type Route, setOverlayOpen, useRoute } from "./router";
 import { SessionList } from "./session/SessionList";
-import { SessionPage } from "./session/SessionPage";
 import { useSessions } from "./session/useSessions";
-import { SettingsDialog } from "./settings/SettingsDialog";
-
-interface Me {
-  id: string;
-  /** 关联的 GitHub 用户名；没关联时为 null。 */
-  githubLogin: string | null;
-  /** 昵称：SeekCloud 称呼管理员时用的名字（侧栏、问候语）；加上昵称之前就设置好的部署是 null。 */
-  nickname: string | null;
-}
+import { type Me, ShellProvider, type ShellValue } from "./shell";
 
 export function App() {
   // undefined：还在问；null：没登录；"setup"：还没设置管理员密码。
   const [me, setMe] = useState<Me | "setup" | null>();
   const [notice] = useState(takeAuthResult);
   const route = useRoute();
+  const registry = useRegistry();
 
   const refresh = useCallback(() => {
     api<Me>("/api/me").then(
@@ -55,8 +48,12 @@ export function App() {
 
   useEffect(refresh, [refresh]);
 
-  // 开源声明：登没登录都能看。
-  if (route.page === "legal") return <LegalPage doc={route.doc} />;
+  // 不用登录也能看的页面（开源声明）：不等登录状态，占满整个窗口。
+  const entry = registry.pageById(route.page);
+  if (entry?.public) {
+    const Page = entry.component as ComponentType<PageProps>;
+    return <Page params={route.params} />;
+  }
 
   // 等登录状态的时候先空着；超过一小会儿还没回来，才淡入一个标志（见 .splash），快的时候什么都不闪。
   if (me === undefined) {
@@ -69,7 +66,7 @@ export function App() {
   if (me === null || me === "setup") {
     return <LoginPage setup={me === "setup"} onSignedIn={refresh} notice={notice} />;
   }
-  return <Shell me={me} notice={notice} onSignedOut={refresh} onGitHubChanged={refresh} />;
+  return <Shell me={me} notice={notice} onSignedOut={refresh} onProfileChanged={refresh} />;
 }
 
 /** 侧栏左上角的标志：回首页。点了侧栏照样收起（手机上不做主区域的过渡，见 newSession）。 */
@@ -93,30 +90,30 @@ function Shell({
   me,
   notice,
   onSignedOut,
-  onGitHubChanged,
+  onProfileChanged,
 }: {
   me: Me;
   /** 关联 GitHub 跳回来时出的问题。 */
   notice?: string;
   onSignedOut: () => void;
-  onGitHubChanged: () => void;
+  onProfileChanged: () => void;
 }) {
   const route = useRoute();
-  // 设置是盖在原来页面上的弹窗：记住打开设置之前在哪一页，底下照常显示它，关掉时回去。
-  const lastPage = useRef<Route>({ page: "home" });
-  if (route.page !== "settings") lastPage.current = route;
-  const page = route.page === "settings" ? lastPage.current : route;
-  const closeSettings = useCallback(() => navigate(pathOf(lastPage.current)), []);
-  const settingsOpen = route.page === "settings";
-  // 关设置时弹窗先播完收起的动画再拿掉；这段时间里还画着关之前的那个分类
-  const settings = usePresence(settingsOpen, 200);
-  const lastSection = useRef<SettingsSection>("general");
-  if (route.page === "settings") lastSection.current = route.section;
+  const registry = useRegistry();
+  // 设置这类弹窗盖在原来的页面上：记住打开之前在哪一页，底下照常显示它，关掉时回去。
+  const lastPage = useRef<Route>({ page: "home", params: {} });
+  const overlayRoute = isOverlay(route);
+  if (!overlayRoute) lastPage.current = route;
+  const page = overlayRoute ? lastPage.current : route;
+  const closeOverlay = useCallback(() => navigate(pathOf(lastPage.current)), []);
+  // 关弹窗时先播完收起的动画再拿掉；这段时间里还画着关之前的那个分类
+  const overlay = usePresence(overlayRoute, 200);
+  const lastOverlay = useRef<Route>(route);
+  if (overlayRoute) lastOverlay.current = route;
   const { sessions, loaded, upsert } = useSessions();
   const [drawer, setDrawer] = useState(false);
   const [search, setSearch] = useState("");
-  const currentId = page.page === "session" ? page.id : undefined;
-  const current = sessions.find((s) => s.shortId === currentId);
+  const currentId = page.page === "session" ? page.params.id : undefined;
   const query = search.trim().toLowerCase();
   const shown = query
     ? sessions.filter(
@@ -145,162 +142,162 @@ function Shell({
     navigate("/");
     setDrawer(false);
   };
+  const shell: ShellValue = {
+    me,
+    notice,
+    sessions,
+    upsert,
+    openDrawer: () => setDrawer(true),
+    overlayOpen: overlayRoute,
+    onSignedOut,
+    onProfileChanged,
+  };
+  const pageEntry = registry.pageById(page.page);
+  const Page = pageEntry?.component as ComponentType<PageProps> | undefined;
+  const overlayEntry = registry.pageById(lastOverlay.current.page);
+  const Overlay = overlayEntry?.component as ComponentType<OverlayProps> | undefined;
 
   return (
-    <div className="shell">
-      {/* 设置窗口打开时，底下的页面不能用 Tab 或读屏摸到 */}
-      <aside
-        className={`sidebar${drawer ? " open" : ""}`}
-        aria-label="会话列表"
-        inert={settingsOpen}
-      >
-        <div className="sidebar-head">
-          {/* 手机上侧栏铺满整屏（照 Claude），左上角是收起按钮 */}
-          <button
-            type="button"
-            className="icon-button sidebar-close"
-            aria-label="收起会话列表"
-            onClick={() => setDrawer(false)}
-          >
-            <CloseIcon size={18} />
+    <ShellProvider value={shell}>
+      <div className="shell">
+        {/* 设置窗口打开时，底下的页面不能用 Tab 或读屏摸到 */}
+        <aside
+          className={`sidebar${drawer ? " open" : ""}`}
+          aria-label="会话列表"
+          inert={overlayRoute}
+        >
+          <div className="sidebar-head">
+            {/* 手机上侧栏铺满整屏（照 Claude），左上角是收起按钮 */}
+            <button
+              type="button"
+              className="icon-button sidebar-close"
+              aria-label="收起会话列表"
+              onClick={() => setDrawer(false)}
+            >
+              <CloseIcon size={18} />
+            </button>
+            <HomeLink onClick={newSession} />
+          </div>
+          <button type="button" className="new-session-button" onClick={newSession}>
+            <span className="new-session-icon">
+              <PlusIcon size={14} />
+            </span>
+            新会话
           </button>
-          <HomeLink onClick={newSession} />
-        </div>
-        <button type="button" className="new-session-button" onClick={newSession}>
-          <span className="new-session-icon">
-            <PlusIcon size={14} />
-          </span>
-          新会话
-        </button>
-        <label className="sidebar-search">
-          <SearchIcon />
-          <input
-            type="search"
-            placeholder="搜索会话"
-            aria-label="搜索会话"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </label>
-        <div className="sidebar-list" ref={sidebarList}>
-          {pinned.length > 0 && (
-            <>
-              <div className="sidebar-section" data-flip="section:pinned">
-                已置顶
-              </div>
-              <SessionList
-                sessions={pinned}
-                loaded
-                currentId={currentId}
-                onPick={() => setDrawer(false)}
-              />
-            </>
-          )}
-          {/* 会话都置顶了时不显示空的"最近" */}
-          {(listed.length > 0 || pinned.length === 0) && (
-            <>
-              <div className="sidebar-section" data-flip="section:recent">
-                最近
-              </div>
-              <SessionList
-                sessions={listed}
-                loaded={loaded}
-                currentId={currentId}
-                searching={query !== ""}
-                onPick={() => setDrawer(false)}
-              />
-            </>
-          )}
-          {archived.length > 0 && (
-            <div className="sidebar-archived" data-flip="section:archived">
-              <button
-                type="button"
-                className={`sidebar-archived-toggle${showArchived ? " open" : ""}`}
-                aria-expanded={showArchived}
-                onClick={() => setShowArchived((v) => !v)}
-              >
-                <span className="sidebar-archived-chevron">
-                  <ChevronRightIcon />
-                </span>
-                已归档
-                <span className="sidebar-archived-count">{archived.length}</span>
-              </button>
-              <Collapse open={showArchived}>
+          <label className="sidebar-search">
+            <SearchIcon />
+            <input
+              type="search"
+              placeholder="搜索会话"
+              aria-label="搜索会话"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          <div className="sidebar-list" ref={sidebarList}>
+            {pinned.length > 0 && (
+              <>
+                <div className="sidebar-section" data-flip="section:pinned">
+                  已置顶
+                </div>
                 <SessionList
-                  sessions={archived}
+                  sessions={pinned}
                   loaded
-                  flip={false}
                   currentId={currentId}
                   onPick={() => setDrawer(false)}
                 />
-              </Collapse>
-            </div>
-          )}
-        </div>
-        <AccountFoot
-          name={me.nickname ?? me.githubLogin ?? "管理员"}
-          onSettings={() => {
-            navigate("/settings/general");
-            setDrawer(false);
-          }}
-          onSignedOut={onSignedOut}
+              </>
+            )}
+            {/* 会话都置顶了时不显示空的"最近" */}
+            {(listed.length > 0 || pinned.length === 0) && (
+              <>
+                <div className="sidebar-section" data-flip="section:recent">
+                  最近
+                </div>
+                <SessionList
+                  sessions={listed}
+                  loaded={loaded}
+                  currentId={currentId}
+                  searching={query !== ""}
+                  onPick={() => setDrawer(false)}
+                />
+              </>
+            )}
+            {archived.length > 0 && (
+              <div className="sidebar-archived" data-flip="section:archived">
+                <button
+                  type="button"
+                  className={`sidebar-archived-toggle${showArchived ? " open" : ""}`}
+                  aria-expanded={showArchived}
+                  onClick={() => setShowArchived((v) => !v)}
+                >
+                  <span className="sidebar-archived-chevron">
+                    <ChevronRightIcon />
+                  </span>
+                  已归档
+                  <span className="sidebar-archived-count">{archived.length}</span>
+                </button>
+                <Collapse open={showArchived}>
+                  <SessionList
+                    sessions={archived}
+                    loaded
+                    flip={false}
+                    currentId={currentId}
+                    onPick={() => setDrawer(false)}
+                  />
+                </Collapse>
+              </div>
+            )}
+          </div>
+          <Slot name="sidebar-foot" />
+          <AccountFoot
+            name={me.nickname ?? me.githubLogin ?? "管理员"}
+            onSettings={() => {
+              navigate("/settings/general");
+              setDrawer(false);
+            }}
+            onSignedOut={onSignedOut}
+          />
+        </aside>
+        {/* 遮罩一直在，开关时淡入淡出；收起时不挡点击，也不进 Tab 顺序 */}
+        <button
+          type="button"
+          className={`scrim${drawer ? " open" : ""}`}
+          aria-label="收起会话列表"
+          aria-hidden={!drawer}
+          tabIndex={drawer ? 0 : -1}
+          onClick={() => setDrawer(false)}
         />
-      </aside>
-      {/* 遮罩一直在，开关时淡入淡出；收起时不挡点击，也不进 Tab 顺序 */}
-      <button
-        type="button"
-        className={`scrim${drawer ? " open" : ""}`}
-        aria-label="收起会话列表"
-        aria-hidden={!drawer}
-        tabIndex={drawer ? 0 : -1}
-        onClick={() => setDrawer(false)}
-      />
 
-      <div className="main" inert={settingsOpen}>
-        {/* 会话页有自己的顶栏（会话标题和菜单），这条只在首页用 */}
-        <header className={`mobile-bar${page.page === "session" ? " hidden" : ""}`}>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="会话列表"
-            aria-expanded={drawer}
-            onClick={() => setDrawer(true)}
-          >
-            <MenuIcon />
-          </button>
-          <span className="mobile-title">新会话</span>
-          <button type="button" className="icon-button" aria-label="新会话" onClick={newSession}>
-            <PlusIcon size={20} />
-          </button>
-        </header>
+        <div className="main" inert={overlayRoute}>
+          {/* 会话页有自己的顶栏（会话标题和菜单），这条只在首页用 */}
+          <header className={`mobile-bar${pageEntry?.ownHeader ? " hidden" : ""}`}>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="会话列表"
+              aria-expanded={drawer}
+              onClick={() => setDrawer(true)}
+            >
+              <MenuIcon />
+            </button>
+            <span className="mobile-title">新会话</span>
+            <button type="button" className="icon-button" aria-label="新会话" onClick={newSession}>
+              <PlusIcon size={20} />
+            </button>
+          </header>
 
-        {page.page === "session" ? (
-          <SessionPage key={page.id} id={page.id} listed={current} onMenu={() => setDrawer(true)} />
-        ) : (
-          <main className="home">
-            <div className="home-inner">
-              {notice && route.page !== "settings" && (
-                <p className="alert" role="alert">
-                  {notice}
-                </p>
-              )}
-              <NewSession nickname={me.nickname} onCreated={upsert} />
-            </div>
-          </main>
+          {Page && <Page key={pathOf(page)} params={page.params} />}
+        </div>
+        {overlay.mounted && Overlay && (
+          <Overlay
+            params={lastOverlay.current.params}
+            closing={overlay.closing}
+            onClose={closeOverlay}
+          />
         )}
       </div>
-      {settings.mounted && (
-        <SettingsDialog
-          section={lastSection.current}
-          closing={settings.closing}
-          notice={notice}
-          onClose={closeSettings}
-          onSignedOut={onSignedOut}
-          onGitHubChanged={onGitHubChanged}
-          onProfileChanged={onGitHubChanged}
-        />
-      )}
-    </div>
+    </ShellProvider>
   );
 }
 

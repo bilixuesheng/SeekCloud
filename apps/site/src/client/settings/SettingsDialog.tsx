@@ -1,17 +1,17 @@
 import { THINKING_EFFORTS, type ThinkingEffort } from "@seekcloud/protocol";
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { type ApiError, api } from "../api";
 import { prefetch, setCached, useCached } from "../cached";
 import type { GitHubStatus } from "../GitHubConnectCard";
 import { GitHubMark } from "../GitHubMark";
-import { CloseIcon, MoonIcon, SettingsIcon, SparkIcon, UserIcon } from "../Icons";
+import { CloseIcon, MoonIcon, SparkIcon } from "../Icons";
 import { LegalLink } from "../legal/LegalPage";
-import { navigate, type SettingsSection } from "../router";
+import { type SettingsSectionEntry, type SettingsSectionProps, useRegistry } from "../registry";
+import { navigate } from "../router";
 import { effortLabels } from "../session/ModelPicker";
 import { reloadModels } from "../session/useModels";
 import { currentTheme, setTheme, type Theme } from "../theme";
-import { ExportData } from "./DataSettings";
 
 /** 设置窗口里各分类用到的接口。 */
 const AI_LABELS = "/api/settings/ai-labels";
@@ -20,11 +20,15 @@ const DEFAULT_EFFORT = "/api/settings/default-effort";
 const ME = "/api/me";
 const EXPORTS = "/api/account/export";
 
-const sections: Array<{ id: SettingsSection; name: string; icon: ReactNode }> = [
-  { id: "general", name: "通用", icon: <SettingsIcon /> },
-  { id: "github", name: "GitHub", icon: <GitHubMark size={15} /> },
-  { id: "account", name: "账户", icon: <UserIcon /> },
-];
+/** 地址里的分类不认识（或者没写）时打开哪一类：账户；下游拿掉了账户时打开排在最前面的。 */
+export function resolveSection(
+  sections: readonly SettingsSectionEntry[],
+  id: string | undefined,
+): SettingsSectionEntry | undefined {
+  return (
+    sections.find((s) => s.id === id) ?? sections.find((s) => s.id === "account") ?? sections[0]
+  );
+}
 
 /**
  * 设置是一个弹窗，左边分类，右边内容；底下还是原来的页面。手机上占满整个屏幕。
@@ -39,7 +43,8 @@ export function SettingsDialog({
   onProfileChanged,
   closing = false,
 }: {
-  section: SettingsSection;
+  /** 地址里的分类，比如 /settings/github 的 github。分类都从注册表来（trunk.tsx 登记主干的几类）。 */
+  section: string | undefined;
   /** 关联 GitHub 跳回来时出的问题。 */
   notice?: string;
   onClose: () => void;
@@ -51,6 +56,9 @@ export function SettingsDialog({
   closing?: boolean;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
+  const sections = useRegistry().settingsSections;
+  const current = resolveSection(sections, section);
+  const Content = current?.component;
 
   // 各分类要的数据一打开就一起拉好，切过去直接有，不会等数据回来再冒出来
   useEffect(() => {
@@ -95,8 +103,8 @@ export function SettingsDialog({
               <a
                 key={item.id}
                 href={`/settings/${item.id}`}
-                className={`settings-nav-item${item.id === section ? " current" : ""}`}
-                aria-current={item.id === section ? "page" : undefined}
+                className={`settings-nav-item${item === current ? " current" : ""}`}
+                aria-current={item === current ? "page" : undefined}
                 onClick={(e) => {
                   e.preventDefault();
                   navigate(`/settings/${item.id}`);
@@ -107,15 +115,12 @@ export function SettingsDialog({
               </a>
             ))}
           </nav>
-          <div className="settings-content" key={section}>
-            {section === "general" ? (
-              <GeneralSettings />
-            ) : section === "github" ? (
-              <GitHubSettings notice={notice} onGitHubChanged={onGitHubChanged} />
-            ) : (
-              <AccountSettings
+          <div className="settings-content" key={current?.id}>
+            {Content && (
+              <Content
                 notice={notice}
                 onSignedOut={onSignedOut}
+                onGitHubChanged={onGitHubChanged}
                 onProfileChanged={onProfileChanged}
               />
             )}
@@ -133,7 +138,7 @@ const themes: Array<{ id: Theme; name: string }> = [
 ];
 
 /** 通用：外观和默认思考强度。 */
-function GeneralSettings() {
+export function GeneralSettings() {
   return (
     <>
       <ThemeSettings />
@@ -245,13 +250,7 @@ interface AiLabels {
  * GitHub：关联的账号，和 Agent 在 GitHub 上留的 AI 标识。
  * 两个开关各管各的，点了当场保存；没存上就拨回去，并说明原因。
  */
-function GitHubSettings({
-  notice,
-  onGitHubChanged,
-}: {
-  notice?: string;
-  onGitHubChanged: () => void;
-}) {
+export function GitHubSettings({ notice, onGitHubChanged }: SettingsSectionProps) {
   const [failed, setError] = useState(notice);
   const loaded = useCached<AiLabels>(AI_LABELS);
   const labels = loaded.data;
@@ -348,15 +347,7 @@ function SwitchRow({
 }
 
 /** 账户：密码、导出数据、登录状态、开源声明。 */
-function AccountSettings({
-  notice,
-  onSignedOut,
-  onProfileChanged,
-}: {
-  notice?: string;
-  onSignedOut: () => void;
-  onProfileChanged: () => void;
-}) {
+export function AccountSettings({ notice, onSignedOut, onProfileChanged }: SettingsSectionProps) {
   const error = notice;
   const [confirmLogout, setConfirmLogout] = useState(false);
 
@@ -376,11 +367,6 @@ function AccountSettings({
       <section className="settings-section">
         <h2>密码</h2>
         <PasswordRow />
-      </section>
-
-      <section className="settings-section">
-        <h2>导出数据</h2>
-        <ExportData />
       </section>
 
       <section className="settings-section">

@@ -1,7 +1,11 @@
 import { useEffect } from "react";
 import { Brand } from "../Logo";
-import { type LegalDoc, navigate } from "../router";
+import { navigate } from "../router";
 import { LICENSE_NAMES, LICENSE_URLS, MIT_TEXT, OPEN_SOURCE } from "./licenses";
+
+/** 不用登录也能看的页面：开源声明。 */
+export const LEGAL_DOCS = ["licenses"] as const;
+export type LegalDoc = (typeof LEGAL_DOCS)[number];
 
 export const LEGAL_TITLES: Record<LegalDoc, string> = { licenses: "开源声明" };
 

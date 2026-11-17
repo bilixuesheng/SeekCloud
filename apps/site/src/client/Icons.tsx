@@ -140,6 +140,17 @@ export const UserIcon = () => (
   </svg>
 );
 
+/** 设置里的"数据"：一摞圆柱（数据库）。 */
+export const DatabaseIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <ellipse cx="8" cy="3.8" rx="5" ry="1.8" {...line} />
+    <path
+      d="M3 3.8v8.4c0 1 2.2 1.8 5 1.8s5-.8 5-1.8V3.8M3 8c0 1 2.2 1.8 5 1.8S13 9 13 8"
+      {...line}
+    />
+  </svg>
+);
+
 /** PR 打开着（和 GitHub 的图标同一个意思）。 */
 export const PullRequestIcon = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">

@@ -27,6 +27,7 @@ import {
   UndoIcon,
 } from "../Icons";
 import { BlurText, Collapse, usePresence } from "../Motion";
+import { Slot } from "../registry";
 import { Whale } from "../Whale";
 import { catchUpBubble } from "./bubble-in";
 import { Composer } from "./Composer";
@@ -195,6 +196,8 @@ export function SessionPage({
   return (
     <div className="session-page">
       <SessionHeader id={id} session={session} onMenu={onMenu} />
+      {/* 会话顶部的提示条（插槽，registry.tsx）：没有登记的组件时不占位置 */}
+      <Slot name="session-banner" />
       {pins.length > 0 && <PinNav pins={pins} scroller={scroller} />}
 
       <div className="timeline" ref={scroller} {...follow.handlers}>
@@ -339,6 +342,7 @@ export function SessionPage({
                 defaultEffort={models.defaultEffort}
                 onChange={(model, effort) => setChoice({ model, effort })}
               />
+              <Slot name="composer-below" />
             </div>
           )}
         </div>

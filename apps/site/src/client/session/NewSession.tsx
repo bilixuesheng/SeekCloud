@@ -9,6 +9,7 @@ import { GitHubMark } from "../GitHubMark";
 import { BoxIcon, BranchIcon, ChevronDownIcon } from "../Icons";
 import { Logo } from "../Logo";
 import { usePresence } from "../Motion";
+import { Slot } from "../registry";
 import { navigate } from "../router";
 import { Composer, handOffFocus } from "./Composer";
 import { handOffFirstMessage } from "./first-message";
@@ -174,6 +175,8 @@ export function NewSession({
         <Logo size={64} transitionName="seekcloud-whale" />
         <h1 className={`serif-text${greetingReady ? "" : " pending"}`}>{greeting}</h1>
       </div>
+      {/* 问候语下方（插槽，registry.tsx）："有会话在等你输入"的提示放这里 */}
+      <Slot name="home-below-greeting" />
       {github && !connected && <GitHubConnectCard status={github} />}
       <div className="new-session-composer">
         <Composer
@@ -238,6 +241,7 @@ export function NewSession({
               }}
             />
           )}
+          <Slot name="composer-below" />
           {github && connected && repoPicker.mounted && (
             <RepoPicker
               status={github}

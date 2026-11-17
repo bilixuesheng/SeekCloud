@@ -3296,6 +3296,9 @@ details > summary::-webkit-details-marker {
   padding: 12px 10px;
   border-right: 1px solid var(--border);
   background: var(--sidebar);
+  /* 分类多了以后左栏自己滚动（手机上是横着滚，见下面的断点） */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .settings-nav-item {
@@ -3664,6 +3667,7 @@ details > summary::-webkit-details-marker {
     border-right: 0;
     border-bottom: 1px solid var(--border);
     overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .settings-nav-item {
