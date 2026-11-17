@@ -24,7 +24,7 @@
 - AI 标识两个开关的规格和工单也拆了：规格 [#57](https://github.com/bilixuesheng/SeekCloud/issues/57)，工单 #58（已完成）、#59。八项新功能里只有这一项没有待定的事，所以先写了。
 - 2026-11-11 做了一次复查，记在 `docs/roadmap/2026-11-11-review.md`：界面上查出来并改掉的问题、路线图没覆盖到的地方（待定的每条都有建议）、安全排查的结论。写新功能的规格之前先读它。文档里待定的几条 2026-11-14 都定了，结论写在每条后面，写规格时照着做。
 - 2026-11-15 做了一次项目审查，记在 `docs/roadmap/2026-11-15-review.md`：查出来并改掉的问题、决定之间对不上的地方、工单阻塞关系的调整、设计上的坑、要用户定的 14 条（每条先写 Claude Code 网页版怎么做，再给建议）。实现工单之前先读它；工单的正文和 2026-11-15 的评论一起读。
-- 下游版本怎么接进主干定了：ADR 0010（主干不分叉，下游只在扩展点上接入；主干里不放下游的实现和版本开关）。写模型网关、调度、设置、登录相关的代码时照它做。
+- 下游版本怎么接进主干定了：ADR 0010（主干不分叉，下游只在扩展点上接入；主干里不放下游的实现和版本开关）。写模型网关、调度、设置、登录相关的代码时照它做。扩展点的第一步做完了：#89（服务端的身份来源、设置规则，PR #145）和 #90（浏览器端的注册表）。设置里多了"数据"一类，导出数据从"账户"挪了过去。
 - 新功能的规格和工单都拆了（2026-11-15）：
 
   | 规格 | 工单 |
@@ -42,7 +42,7 @@
 
 - **接下来**：
   1. 请用户定审查文档第六节的 14 条。没定之前，相关的工单照各自评论里写的保守做法做。
-  2. 实现不等测试机、也不等别的工单的：#17 剩下的部分（基线配置已做）、#91（宿主机连接和协议）、#90（浏览器端的扩展点；服务端的 #89 已做）、#94（发布包和安装脚本）、#100（两步验证）、#135（文案目录）、#139（等你输入的规则版），以及 #59 里 git 钩子的那一项。#91 做完接 #26（模型网关），#17 加 #91 做完接 #25（适配接口）。宿主机的 Sysbox 部分（#18）等 #14 的测试机。
+  2. 实现不等测试机、也不等别的工单的：#17 剩下的部分（基线配置已做）、#91（宿主机连接和协议）、#94（发布包和安装脚本）、#100（两步验证）、#135（文案目录）、#139（等你输入的规则版），以及 #59 里 git 钩子的那一项。#91 做完接 #26（模型网关），#17 加 #91 做完接 #25（适配接口）。宿主机的 Sysbox 部分（#18）等 #14 的测试机。
   3. 下面是各项新功能定过的要点，规格里都写了，留在这里备查：
   - 网页图形化部署：Linux 一条命令、Windows 一条 PowerShell 命令，其余在网页向导里完成；
   - 多渠道通知：SMTP 邮件、PWA 推送、飞书/钉钉/企业微信机器人、通用 Webhook；
@@ -67,6 +67,7 @@
 - GitHub 的调用全部经过 `apps/site/src/server/github/port.ts` 的接口；测试里是 `t.github`（`src/testing/fake-github.ts`，内存里的假 GitHub）。
 - 登录：只有一个管理员账户，只用密码登录（ADR 0008）。设置、登录、改密码、重置在 `apps/site/src/server/auth/admin.ts`，登录的接口在 `auth/admin-routes.ts`，密码只存 scrypt 哈希（`auth/password.ts`）；同一个 IP 一小时输错 10 次就暂停。GitHub 不是登录方式，只在设置里关联（`src/server/github/link.ts`）。
 - 扩展点（ADR 0010）：`AppDeps` 里的 `identity`（身份来源）和 `settingsPolicy`（设置的读写规则），接口在 `apps/site/src/server/ports.ts`，主干的实现是 `auth/admin-identity.ts` 的 `adminIdentity` 和 `settings.ts` 的 `adminSettings`，在 `main.ts` 里组装。接口里判断是谁一律用 `deps.identity.currentUser(c)`，不直接用 `auth/login-sessions.ts`；设置一律用 `settings.ts` 的 `readSetting`、`writeSetting`，加一项设置就在 `SETTINGS` 里加一行。`extension-rules.test.ts` 读源码守住这几条。下游只从包的出口拿东西：`@seekcloud/site/server`（`src/server/index.ts`）和 `@seekcloud/site/testing`（`src/testing/index.ts`）；下游的表放自己的迁移目录，用 `runMigrations(db, [{ folder, table }])`。
+- 浏览器端的扩展点（ADR 0010）在 `apps/site/src/client/registry.tsx`：页面（地址样式、组件、要不要登录、是不是盖在页面上的弹窗）、设置分类（加一类只登记一项，`order` 排顺序）、四个插槽（`sidebar-foot`、`composer-below`、`session-banner`、`home-below-greeting`，页面上用 `<Slot name="..." />`）。主干自己的在 `client/trunk.tsx` 登记，`main.tsx` 只做登记和挂载（`mountApp`）；登录后的页面从 `useShell()`（`client/shell.tsx`）拿管理员、会话列表这些。路由（`router.ts`）查这张表，找不到的地址回首页。下游从 `@seekcloud/site/client`（`src/client/index.ts`）拿。
 - 加了路径里带某个人的数据 ID 的接口（`/api/sessions/{shortId}/...` 这类），要在 `server/isolation.test.ts` 的清单里加一行，漏了测试就失败：它用测试替身 `FakeIdentity`（`src/testing/fake-identity.ts`）放进第二个人，拿对方的 ID 调每个接口。身份来源的契约测试在 `src/testing/identity-contract.ts`，最小下游样例在 `src/testing/downstream-example/`（起一个真的 HTTP 服务）。
 - 主站和宿主机之间的消息定义在 `packages/protocol`。主站通过 `apps/site/src/server/sessions/host.ts` 的 `HostLink` 和宿主机通信；测试里是 `t.host`（`src/testing/fake-host.ts`，按脚本回放 Agent 事件，`manual = true` 时由测试自己 `emit`）。会话编排在 `src/server/sessions/sessions.ts`。
 - 宿主机（`apps/host`）：GitHub 工具服务（MCP，`/mcp`）在 `src/github-tools/`，测试接假的 GitHub API；dsh 怎么接见 `apps/host/sandbox/README.md`。Git 代理在 `src/git-proxy/`，提交签名在 `src/signing/`，沙箱里要装的签名助手和 git 配置在 `apps/host/sandbox/`。测试用真的 `git`（`git http-backend` 当假 GitHub）、`openssl` 和 `ssh-keygen`，云端会话里先运行 `apt-get install -y openssh-client`。生成签名密钥：`pnpm --filter @seekcloud/host signing-key <私钥路径>`，打印出来的公钥加到 SeekCloud 账号的 GitHub 签名密钥里。dsh 的基线配置（`apps/host/sandbox/dsh/baseline.patch.yml`）的测试在普通 CI 里只查文件；要用真的 dsh 验，在一个临时目录里用 Node 24.9 以上运行 `npm i @deepseek-ai/dsh@0.2.2-rc.3`，再设 `SEEKCLOUD_DSH_BIN=<临时目录>/node_modules/.bin/dsh` 跑宿主机的测试（PATH 里的 node 也要是 24.9 以上）。宿主机的环境变量：`SEEKCLOUD_SIGNING_KEY`（签名私钥路径）、`SEEKCLOUD_SIGNER_EMAIL`（SeekCloud 账号的邮箱）、`SEEKCLOUD_GIT_PROXY_HOST`、`SEEKCLOUD_GIT_PROXY_PORT`、`SEEKCLOUD_HOST_DATA`。

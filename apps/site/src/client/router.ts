@@ -1,37 +1,90 @@
 import { useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 
-export const SETTINGS_SECTIONS = ["general", "github", "account"] as const;
-export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+import type { PageEntry, RouteParams } from "./registry";
 
-/** 不用登录也能看的页面：开源声明。 */
-export const LEGAL_DOCS = ["licenses"] as const;
-export type LegalDoc = (typeof LEGAL_DOCS)[number];
-
-export type Route =
-  | { page: "home" }
-  | { page: "legal"; doc: LegalDoc }
-  | { page: "settings"; section: SettingsSection }
-  | { page: "session"; id: string };
-
-/** 一个页面的地址。 */
-export function pathOf(route: Route): string {
-  if (route.page === "session") return `/s/${route.id}`;
-  if (route.page === "settings") return `/settings/${route.section}`;
-  if (route.page === "legal") return `/${route.doc}`;
-  return "/";
+/** 当前的页面：注册表里一个页面的标识，加上地址里的参数。 */
+export interface Route {
+  page: string;
+  params: RouteParams;
 }
 
-function parse(path: string): Route {
-  const legal = LEGAL_DOCS.find((doc) => path.replace(/\/$/, "") === `/${doc}`);
-  if (legal) return { page: "legal", doc: legal };
-  const settings = path.match(/^\/settings(?:\/([a-z]+))?\/?$/);
-  if (settings) {
-    const section = SETTINGS_SECTIONS.find((s) => s === settings[1]) ?? "account";
-    return { page: "settings", section };
+interface CompiledPage {
+  entry: PageEntry;
+  pattern: RegExp;
+  names: string[];
+}
+
+/** 把 "/s/:id"、"/settings/:section?" 这样的样式换成正则；参数是一段不带斜杠的文字。 */
+function compile(entry: PageEntry): CompiledPage {
+  const names: string[] = [];
+  const source = entry.path
+    .split("/")
+    .filter(Boolean)
+    .map((part) => {
+      const param = part.match(/^:([A-Za-z]\w*)(\?)?$/);
+      if (!param) return `/${part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`;
+      names.push(param[1] as string);
+      return param[2] ? "(?:/([^/]+))?" : "/([^/]+)";
+    })
+    .join("");
+  return { entry, pattern: new RegExp(`^${source}/?$`), names };
+}
+
+let table: CompiledPage[] = [];
+
+/** 找不到的地址回首页：主干登记的首页标识是 home。 */
+const HOME: Route = { page: "home", params: {} };
+
+/** 地址里写坏了的 % 转义原样保留，不让整页报错。 */
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
   }
-  const match = path.match(/^\/s\/([0-9a-z]+)\/?$/);
-  return match ? { page: "session", id: match[1] as string } : { page: "home" };
+}
+
+/** 在页面表里找这个地址对应的页面；找不到时回首页。 */
+export function matchPath(pages: readonly PageEntry[], path: string): Route {
+  for (const page of pages.map(compile)) {
+    const match = path.match(page.pattern);
+    if (!match) continue;
+    const params: RouteParams = {};
+    page.names.forEach((name, i) => {
+      const value = match[i + 1];
+      if (value !== undefined) params[name] = safeDecode(value);
+    });
+    return { page: page.entry.id, params };
+  }
+  return HOME;
+}
+
+/** 一个页面的地址。可以没有的参数没给时，那一段不写。 */
+export function pathOf(route: Route): string {
+  const page = table.find((p) => p.entry.id === route.page);
+  if (!page) return "/";
+  const path = page.entry.path
+    .split("/")
+    .filter(Boolean)
+    .flatMap((part) => {
+      const param = part.match(/^:([A-Za-z]\w*)(\?)?$/);
+      if (!param) return [part];
+      const value = route.params[param[1] as string];
+      return value === undefined ? [] : [encodeURIComponent(value)];
+    })
+    .join("/");
+  return `/${path}`;
+}
+
+/** 这个页面是不是盖在原来页面上的弹窗（设置）。 */
+export const isOverlay = (route: Route): boolean =>
+  table.find((p) => p.entry.id === route.page)?.entry.overlay === true;
+
+/** 挂载应用时把注册表里的页面交给路由，按当前地址算出现在在哪一页。 */
+export function setPages(pages: readonly PageEntry[]): void {
+  table = pages.map(compile);
+  if (browser) current = matchPath(pages, window.location.pathname);
 }
 
 // 应用里点链接换页时淡入淡出；浏览器的前进后退不加，手机上的返回手势本身就有动画，叠在一起反而乱。
@@ -66,18 +119,18 @@ const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)"
 // 后听到的就直接换了页，浏览器拍"换页前"那张画面时新页面已经画出来，过渡等于没做。
 // （测试在 Node 里跑，没有 window。）
 const browser = typeof window !== "undefined";
-let current: Route = browser ? parse(window.location.pathname) : { page: "home" };
+let current: Route = HOME;
 const subscribers = new Set<() => void>();
 
 function onPopState(): void {
-  const next = parse(window.location.pathname);
+  const next = matchPath(
+    table.map((p) => p.entry),
+    window.location.pathname,
+  );
   // 设置是盖在页面上的弹窗，开、关、切换分类都由弹窗自己的动画管。
   // 这时要是做换页的过渡，主区域会单独画在最上面，底下的页面就透过弹窗露出来。
   const animate =
-    animateNext &&
-    !(overlayOpen && sidebarOverlays()) &&
-    next.page !== "settings" &&
-    current.page !== "settings";
+    animateNext && !(overlayOpen && sidebarOverlays()) && !isOverlay(next) && !isOverlay(current);
   animateNext = false;
   const show = () => {
     current = next;

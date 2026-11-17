@@ -100,3 +100,13 @@ export function ExportData() {
     </div>
   );
 }
+
+/** 设置里的"数据"一类：导出数据。以后的备份和恢复也放这里。 */
+export function DataSettings() {
+  return (
+    <section className="settings-section">
+      <h2>导出数据</h2>
+      <ExportData />
+    </section>
+  );
+}
