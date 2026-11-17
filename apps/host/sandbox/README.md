@@ -79,3 +79,20 @@ Generated-by: SeekCloud (AI)
 - 工具建的提交（`create_or_update_file`、`delete_file`、`push_files`）说明末尾带 `Generated-by: SeekCloud (AI)`，和沙箱里的 git 钩子一样；关掉"提交尾注"以后不加。这些提交以用户本人的账号提交（照官方），不是 SeekCloud 账号。分支和沙箱里的 git 一样任何分支都能写，删分支、建标签不放行。
 - 组织级的工具（团队、issue 类型和字段）只查挂载了仓库的所有者。
 - 代码在 `apps/host/src/github-tools/`，测试接一个假的 GitHub API（`github-tools.test.ts`），在普通 CI 上跑。
+
+## dsh 的基线配置
+
+`dsh/baseline.patch.yml` 装进通用镜像的 `/usr/local/share/seekcloud/dsh/`，宿主机启动 dsh 时作为最后一个 `--patch` 叠上去，同时设 `DSH_TELEMETRY_MODE=DISABLED`：
+
+```
+dsh --profile sdk [--patch <Agent 模式的叠加配置>] --patch /usr/local/share/seekcloud/dsh/baseline.patch.yml
+```
+
+命令行的 `--patch` 排在 profile 和 `$DSH_HOME/cordis.patch.yml` 后面，后面的盖过前面的，所以沙箱里的配置文件打不开基线关掉的东西。基线做了这几件事（ADR 0004、issue #17）：
+
+- 关掉会话日志上传（`session-log-deepseek`）、插件清单上报（`plugin-package-inventory-deepseek`）和反馈遥测（`session-telemetry-otel`）。匿名 ID 请求头 dsh 没有开关，由模型网关剥掉。
+- 关掉 dsh 自带的定时提醒（`tool-schedule`），定时任务和会话提醒由平台做。插件管理工具保持打开。
+- 前台命令的超时：默认 2 分钟，最长 10 分钟。
+- 工具输出太长时写出来的文件放在 `$DSH_HOME/spill` 下面，沙箱休眠再启动以后还在。
+
+`src/dsh-baseline.test.ts` 检查这些。普通 CI 里没有 dsh，只查文件本身；设了 `SEEKCLOUD_DSH_BIN`（指向 dsh 的可执行文件，要 Node 24.9 以上）时，还用 `dsh --profile sdk --dump-config` 合成真的配置，并在 `$DSH_HOME/cordis.patch.yml` 里试着把关掉的重新打开，确认打不开。构建通用镜像时设上它跑一遍。
