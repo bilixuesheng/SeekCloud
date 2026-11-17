@@ -1,0 +1,37 @@
+# SeekCloud 给 dsh 的基线配置（ADR 0004）。装进通用镜像，启动 dsh 时作为最后一个 --patch 叠上去：
+#
+#   dsh --profile sdk [--patch <模式的叠加配置>] --patch /usr/local/share/seekcloud/dsh/baseline.patch.yml
+#
+# 命令行的 --patch 排在 profile 和 $DSH_HOME/cordis.patch.yml 之后，后面的盖过前面的，
+# 所以这里关掉的东西，沙箱里的配置文件、Agent 模式的叠加配置、管理员的插件设置都打不开。
+# 改这个文件要同时改 apps/host/src/dsh-baseline.test.ts 里的清单。
+
+# 会话日志上传：把完整对话作为 dsh_session_log 字段夹在每次模型请求里传给 DeepSeek。关掉。
+# 模型网关还会再剥一遍 dsh_* 字段，这是第一道。
+- id: session-log-deepseek
+  disabled: true
+
+# 插件清单上报：把装了哪些插件夹在模型请求里。关掉。
+- id: plugin-package-inventory-deepseek
+  disabled: true
+
+# 反馈遥测（OpenTelemetry）。整行关掉；启动时另外设 DSH_TELEMETRY_MODE=DISABLED。
+- id: session-telemetry-otel
+  disabled: true
+
+# dsh 自带的定时提醒：只在进程活着时触发，只能投回原会话。定时任务和会话提醒由平台做。
+- id: tool-schedule
+  disabled: true
+
+# 工具输出太长时写到文件里的那些文件，放在 $DSH_HOME 下面，不放系统的临时目录：
+# 沙箱休眠再启动以后还在，回收时跟着 $DSH_HOME 一起清掉。
+- id: spill-local
+  config:
+    root: !!js dshHomePath('spill')
+
+# 前台命令的超时：没指定时 2 分钟，Agent 自己指定也最多 10 分钟，和 Claude Code 的 Bash 工具一样。
+# 到点后 dsh 把命令转到后台接着跑，不杀掉。sdk profile 把默认改成了 1 分钟，这里改回 dsh 自己的默认值。
+- id: bash-sandbox
+  config:
+    timeoutMs: 120000
+    maxTimeoutMs: 600000
