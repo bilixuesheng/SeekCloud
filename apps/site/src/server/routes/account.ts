@@ -9,7 +9,6 @@ import {
   requestExport,
 } from "../account/exports";
 import type { AppDeps } from "../app";
-import { currentUser } from "../auth/login-sessions";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
 import { jsonBody as json, newRouter } from "./router";
 
@@ -82,12 +81,12 @@ export function accountRoutes(deps: AppDeps) {
   };
   return newRouter()
     .openapi(exportStatusRoute, async (c) => {
-      const me = await currentUser(deps, c);
+      const me = await deps.identity.currentUser(c);
       if (!me) return c.json(notLoggedIn, 401);
       return c.json(await overview(me.id), 200);
     })
     .openapi(exportRequestRoute, async (c) => {
-      const me = await currentUser(deps, c);
+      const me = await deps.identity.currentUser(c);
       if (!me) return c.json(notLoggedIn, 401);
       const result = await requestExport(deps, me.id);
       if (!result.ok) {
@@ -104,7 +103,7 @@ export function accountRoutes(deps: AppDeps) {
       return c.json(await overview(me.id), 202);
     })
     .openapi(exportDownloadRoute, async (c) => {
-      const me = await currentUser(deps, c);
+      const me = await deps.identity.currentUser(c);
       if (!me) return c.json(notLoggedIn, 401);
       const file = await downloadableExport(deps, me.id, c.req.valid("param").id);
       if (!file) return c.json(apiError("export_not_found", "导出不存在或已过期"), 404);

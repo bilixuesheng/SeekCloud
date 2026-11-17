@@ -9,10 +9,17 @@ import { loginSessions, users } from "../db/schema";
 const COOKIE = "sc_login";
 const LOGIN_TTL_MS = 30 * 24 * 60 * 60_000;
 
+/** 管理员登录用到的几样依赖。 */
+export type LoginDeps = Pick<AppDeps, "db" | "clock" | "secureCookies">;
+
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 /** 登录（首次设置密码也算登录一次），同时记下这次的 IP。 */
-export async function startLoginSession(deps: AppDeps, c: Context, userId: string): Promise<void> {
+export async function startLoginSession(
+  deps: LoginDeps,
+  c: Context,
+  userId: string,
+): Promise<void> {
   const token = randomBytes(32).toString("base64url");
   const now = deps.clock.now();
   await deps.db.insert(loginSessions).values({
@@ -37,7 +44,7 @@ export function loginTokenHash(c: Context): string | undefined {
   return token ? hashToken(token) : undefined;
 }
 
-export async function currentUser(deps: AppDeps, c: Context) {
+export async function currentUser(deps: LoginDeps, c: Context) {
   const tokenHash = loginTokenHash(c);
   if (!tokenHash) return undefined;
   const [row] = await deps.db
@@ -52,7 +59,7 @@ export async function currentUser(deps: AppDeps, c: Context) {
 
 /** 在所有设备上退出：删掉这个用户的全部登录状态（包括当前这个）。 */
 export async function endAllLoginSessions(
-  deps: AppDeps,
+  deps: LoginDeps,
   c: Context,
   userId: string,
 ): Promise<void> {
@@ -60,7 +67,7 @@ export async function endAllLoginSessions(
   deleteCookie(c, COOKIE, { path: "/" });
 }
 
-export async function endLoginSession(deps: AppDeps, c: Context): Promise<void> {
+export async function endLoginSession(deps: LoginDeps, c: Context): Promise<void> {
   const tokenHash = loginTokenHash(c);
   if (tokenHash) {
     await deps.db.delete(loginSessions).where(eq(loginSessions.tokenHash, tokenHash));

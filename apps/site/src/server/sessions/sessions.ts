@@ -30,7 +30,7 @@ import {
 } from "../db/schema";
 import { githubNotConnected } from "../errors";
 import { withGitHubToken } from "../github/tokens";
-import { getAiLabels, getDefaultEffort } from "../settings";
+import { readSetting } from "../settings";
 import { DEFAULT_MODEL, findModel } from "./models";
 import { pinTitle } from "./pin-title";
 import { toSafeError } from "./safe-error";
@@ -141,7 +141,9 @@ export class Sessions {
     const model = findModel(input.model ?? DEFAULT_MODEL);
     if (!model) return { ok: false, error: "model_not_found" };
     // 没指定思考强度就用设置里的默认值；模型不支持那一档时换成最近的一档
-    const effort = input.effort ?? fitEffort(model.efforts, await getDefaultEffort(this.#deps));
+    const effort =
+      input.effort ??
+      fitEffort(model.efforts, await readSetting(this.#deps, "default_effort", { userId }));
     if (!effort || !model.efforts.includes(effort)) return { ok: false, error: "model_not_found" };
 
     // 装了 App 的仓库可以推送；没装的公开仓库只读挂载。
@@ -937,7 +939,7 @@ export class Sessions {
       environmentId: session.environmentId as string,
       model: session.model,
       effort: session.effort,
-      aiLabels: await getAiLabels(this.#deps),
+      aiLabels: await readSetting(this.#deps, "ai_labels", { userId: session.userId }),
     });
   }
 

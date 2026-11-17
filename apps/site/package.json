@@ -2,6 +2,10 @@
   "name": "@seekcloud/site",
   "private": true,
   "type": "module",
+  "exports": {
+    "./server": "./src/server/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
   "scripts": {
     "dev": "vite",
     "dev:server": "tsx watch src/server/main.ts",

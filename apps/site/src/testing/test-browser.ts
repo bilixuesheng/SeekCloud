@@ -27,6 +27,13 @@ export class TestBrowser {
     return res;
   }
 
+  /** 同一台设备的另一个副本：带着现在的 Cookie，之后各记各的。用来验证退出以后旧的登录状态在服务器上也失效了。 */
+  clone(): TestBrowser {
+    const copy = new TestBrowser(this.#app);
+    for (const [name, value] of this.#cookies) copy.#cookies.set(name, value);
+    return copy;
+  }
+
   get(path: string): Promise<Response> {
     return this.request(path);
   }

@@ -8,45 +8,62 @@ import {
 import { eq } from "drizzle-orm";
 import type { AppDeps } from "./app";
 import { settings } from "./db/schema";
+import type { SettingsActor, SettingsPolicy } from "./ports";
 import { DEFAULT_EFFORT } from "./sessions/models";
 
 /**
  * 全站设置。每一项有固定的键、形状和默认值；库里没有这一行，或者存的值不符合现在的形状
- * （比如旧版本写的），都按默认值算。
+ * （比如旧版本写的），都按默认值算。默认值和能不能改由扩展点 SettingsPolicy 定（ports.ts）。
  */
 export const AiLabelsValue = z.object({ signature: z.boolean(), commitTrailer: z.boolean() });
 
 export const EffortValue = z.enum(THINKING_EFFORTS);
 
-const AI_LABELS = "ai_labels";
-const DEFAULT_EFFORT_KEY = "default_effort";
+/** 所有的设置项：键、形状、主干的默认值。加一项设置就在这里加一行。 */
+export const SETTINGS = {
+  /** AI 标识的两个开关，默认都开。 */
+  ai_labels: { shape: AiLabelsValue, fallback: DEFAULT_AI_LABELS as AiLabels },
+  /** 新会话默认的思考强度，默认是高档。已有的会话不跟着变。 */
+  default_effort: { shape: EffortValue, fallback: DEFAULT_EFFORT as ThinkingEffort },
+} as const;
 
-type Deps = Pick<AppDeps, "db" | "clock">;
+export type SettingKey = keyof typeof SETTINGS;
+export type SettingValue<K extends SettingKey> = z.infer<(typeof SETTINGS)[K]["shape"]>;
 
-async function read<T>(deps: Pick<AppDeps, "db">, key: string, shape: z.ZodType<T>, fallback: T) {
+/** 主干的规则：默认值照上面写的，管理员都能改。 */
+export const adminSettings: SettingsPolicy = {
+  defaultValue: <K extends SettingKey>(key: K) => SETTINGS[key].fallback as SettingValue<K>,
+  canWrite: () => true,
+};
+
+type ReadDeps = Pick<AppDeps, "db" | "settingsPolicy">;
+type WriteDeps = Pick<AppDeps, "db" | "clock" | "settingsPolicy">;
+
+/** 读一项设置。actor 是在读的人：后台替某个会话读时，是会话的主人。 */
+export async function readSetting<K extends SettingKey>(
+  deps: ReadDeps,
+  key: K,
+  actor: SettingsActor,
+): Promise<SettingValue<K>> {
   const [row] = await deps.db.select().from(settings).where(eq(settings.key, key));
-  const parsed = shape.safeParse(row?.value);
-  return parsed.success ? parsed.data : fallback;
+  const parsed = (SETTINGS[key].shape as unknown as z.ZodType<SettingValue<K>>).safeParse(
+    row?.value,
+  );
+  return parsed.success ? parsed.data : await deps.settingsPolicy.defaultValue(key, actor);
 }
 
-async function write(deps: Deps, key: string, value: unknown): Promise<void> {
+/** 改一项设置。这个人不能改时什么都不做，返回 false。 */
+export async function writeSetting<K extends SettingKey>(
+  deps: WriteDeps,
+  key: K,
+  actor: SettingsActor,
+  value: SettingValue<K>,
+): Promise<boolean> {
+  if (!(await deps.settingsPolicy.canWrite(key, actor))) return false;
   const updatedAt = deps.clock.now();
   await deps.db
     .insert(settings)
     .values({ key, value, updatedAt })
     .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt } });
+  return true;
 }
-
-/** AI 标识的两个开关，默认都开。 */
-export const getAiLabels = (deps: Pick<AppDeps, "db">): Promise<AiLabels> =>
-  read(deps, AI_LABELS, AiLabelsValue, DEFAULT_AI_LABELS);
-
-export const setAiLabels = (deps: Deps, value: AiLabels): Promise<void> =>
-  write(deps, AI_LABELS, value);
-
-/** 新会话默认的思考强度，默认是高档。已有的会话不跟着变。 */
-export const getDefaultEffort = (deps: Pick<AppDeps, "db">): Promise<ThinkingEffort> =>
-  read(deps, DEFAULT_EFFORT_KEY, EffortValue, DEFAULT_EFFORT);
-
-export const setDefaultEffort = (deps: Deps, value: ThinkingEffort): Promise<void> =>
-  write(deps, DEFAULT_EFFORT_KEY, value);

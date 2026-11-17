@@ -1,7 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import type { AppDeps } from "../app";
-import { currentUser } from "../auth/login-sessions";
 import { apiError, errorResponse, githubNotConnected, notLoggedIn } from "../errors";
 import { finishGitHubLink, startGitHubLink } from "../github/link";
 import { disconnectGitHub, githubConnection, withGitHubToken } from "../github/tokens";
@@ -78,7 +77,7 @@ async function withGitHub<T>(
   c: Context,
   call: (token: string) => Promise<T>,
 ): Promise<T | 401 | 409> {
-  const user = await currentUser(deps, c);
+  const user = await deps.identity.currentUser(c);
   if (!user) return 401;
   const result = await withGitHubToken(deps, user.id, call);
   return result === "not_connected" ? 409 : result;
@@ -103,7 +102,7 @@ const PullRequestPayload = z.object({
 export function githubRoutes(deps: AppDeps, sessions: Sessions) {
   return newRouter()
     .openapi(statusRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const connection = await githubConnection(deps, user.id);
       return c.json(
@@ -114,7 +113,7 @@ export function githubRoutes(deps: AppDeps, sessions: Sessions) {
       );
     })
     .openapi(unlinkRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       if (!(await disconnectGitHub(deps, user.id))) {
         return c.json(apiError("not_linked", "尚未关联 GitHub"), 404);
