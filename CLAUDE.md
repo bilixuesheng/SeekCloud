@@ -42,7 +42,7 @@
 
 - **接下来**：
   1. 请用户定审查文档第六节的 14 条。没定之前，相关的工单照各自评论里写的保守做法做。
-  2. 实现不等测试机、也不等别的工单的：#17 剩下的部分（基线配置已做）、#91（宿主机连接和协议）、#89 和 #90（扩展点）、#94（发布包和安装脚本）、#100（两步验证）、#135（文案目录）、#139（等你输入的规则版），以及 #59 里 git 钩子的那一项。#91 做完接 #26（模型网关），#17 加 #91 做完接 #25（适配接口）。宿主机的 Sysbox 部分（#18）等 #14 的测试机。
+  2. 实现不等测试机、也不等别的工单的：#17 剩下的部分（基线配置已做）、#91（宿主机连接和协议）、#90（浏览器端的扩展点；服务端的 #89 已做）、#94（发布包和安装脚本）、#100（两步验证）、#135（文案目录）、#139（等你输入的规则版），以及 #59 里 git 钩子的那一项。#91 做完接 #26（模型网关），#17 加 #91 做完接 #25（适配接口）。宿主机的 Sysbox 部分（#18）等 #14 的测试机。
   3. 下面是各项新功能定过的要点，规格里都写了，留在这里备查：
   - 网页图形化部署：Linux 一条命令、Windows 一条 PowerShell 命令，其余在网页向导里完成；
   - 多渠道通知：SMTP 邮件、PWA 推送、飞书/钉钉/企业微信机器人、通用 Webhook；
@@ -65,11 +65,13 @@
 - 在仓库根目录运行：`pnpm typecheck`、`pnpm lint`（Biome；`pnpm format` 自动修）、`pnpm test`、`pnpm build`。CI 跑的就是这四个。
 - 测试要一个 PostgreSQL，默认连 `postgres://postgres:postgres@localhost:5432/postgres`，可以用 `TEST_DATABASE_URL` 改。云端会话里先运行 `service postgresql start`，再用 `runuser -u postgres -- psql -c "ALTER USER postgres PASSWORD 'postgres';"` 设好密码。
 - GitHub 的调用全部经过 `apps/site/src/server/github/port.ts` 的接口；测试里是 `t.github`（`src/testing/fake-github.ts`，内存里的假 GitHub）。
-- 登录：只有一个管理员账户，只用密码登录（ADR 0008）。设置、登录、改密码、重置在 `apps/site/src/server/auth/admin.ts`，密码只存 scrypt 哈希（`auth/password.ts`）；同一个 IP 一小时输错 10 次就暂停。GitHub 不是登录方式，只在设置里关联（`src/server/github/link.ts`）。
+- 登录：只有一个管理员账户，只用密码登录（ADR 0008）。设置、登录、改密码、重置在 `apps/site/src/server/auth/admin.ts`，登录的接口在 `auth/admin-routes.ts`，密码只存 scrypt 哈希（`auth/password.ts`）；同一个 IP 一小时输错 10 次就暂停。GitHub 不是登录方式，只在设置里关联（`src/server/github/link.ts`）。
+- 扩展点（ADR 0010）：`AppDeps` 里的 `identity`（身份来源）和 `settingsPolicy`（设置的读写规则），接口在 `apps/site/src/server/ports.ts`，主干的实现是 `auth/admin-identity.ts` 的 `adminIdentity` 和 `settings.ts` 的 `adminSettings`，在 `main.ts` 里组装。接口里判断是谁一律用 `deps.identity.currentUser(c)`，不直接用 `auth/login-sessions.ts`；设置一律用 `settings.ts` 的 `readSetting`、`writeSetting`，加一项设置就在 `SETTINGS` 里加一行。`extension-rules.test.ts` 读源码守住这几条。下游只从包的出口拿东西：`@seekcloud/site/server`（`src/server/index.ts`）和 `@seekcloud/site/testing`（`src/testing/index.ts`）；下游的表放自己的迁移目录，用 `runMigrations(db, [{ folder, table }])`。
+- 加了路径里带某个人的数据 ID 的接口（`/api/sessions/{shortId}/...` 这类），要在 `server/isolation.test.ts` 的清单里加一行，漏了测试就失败：它用测试替身 `FakeIdentity`（`src/testing/fake-identity.ts`）放进第二个人，拿对方的 ID 调每个接口。身份来源的契约测试在 `src/testing/identity-contract.ts`，最小下游样例在 `src/testing/downstream-example/`（起一个真的 HTTP 服务）。
 - 主站和宿主机之间的消息定义在 `packages/protocol`。主站通过 `apps/site/src/server/sessions/host.ts` 的 `HostLink` 和宿主机通信；测试里是 `t.host`（`src/testing/fake-host.ts`，按脚本回放 Agent 事件，`manual = true` 时由测试自己 `emit`）。会话编排在 `src/server/sessions/sessions.ts`。
 - 宿主机（`apps/host`）：GitHub 工具服务（MCP，`/mcp`）在 `src/github-tools/`，测试接假的 GitHub API；dsh 怎么接见 `apps/host/sandbox/README.md`。Git 代理在 `src/git-proxy/`，提交签名在 `src/signing/`，沙箱里要装的签名助手和 git 配置在 `apps/host/sandbox/`。测试用真的 `git`（`git http-backend` 当假 GitHub）、`openssl` 和 `ssh-keygen`，云端会话里先运行 `apt-get install -y openssh-client`。生成签名密钥：`pnpm --filter @seekcloud/host signing-key <私钥路径>`，打印出来的公钥加到 SeekCloud 账号的 GitHub 签名密钥里。dsh 的基线配置（`apps/host/sandbox/dsh/baseline.patch.yml`）的测试在普通 CI 里只查文件；要用真的 dsh 验，在一个临时目录里用 Node 24.9 以上运行 `npm i @deepseek-ai/dsh@0.2.2-rc.3`，再设 `SEEKCLOUD_DSH_BIN=<临时目录>/node_modules/.bin/dsh` 跑宿主机的测试（PATH 里的 node 也要是 24.9 以上）。宿主机的环境变量：`SEEKCLOUD_SIGNING_KEY`（签名私钥路径）、`SEEKCLOUD_SIGNER_EMAIL`（SeekCloud 账号的邮箱）、`SEEKCLOUD_GIT_PROXY_HOST`、`SEEKCLOUD_GIT_PROXY_PORT`、`SEEKCLOUD_HOST_DATA`。
 - SSE 接口用 `browser.stream(path)` 测（`src/testing/event-stream.ts`），用完要 `close()`。`t.admin()` 得到一个已登录的管理员浏览器（第一次调用时用 `t.adminPassword` 设置密码，每次调用都是一台新设备）；`t.adminWithGitHub(login, ...仓库)` 再关联 GitHub、装好 App，再调用一次会换成新的 GitHub 账号。
-- 主站的测试用 `apps/site/src/testing/test-app.ts` 的 `createTestApp()`：进程内调用接口，每调用一次建一个独立的库（一般一个测试文件一次），时钟是假的。`t.browser()` 模拟一个有自己 Cookie 和 IP 的浏览器。
+- 主站的测试用 `apps/site/src/testing/test-app.ts` 的 `createTestApp()`：进程内调用接口，每调用一次建一个独立的库（一般一个测试文件一次），时钟是假的。`t.browser()` 模拟一个有自己 Cookie 和 IP 的浏览器，`browser.clone()` 复制一份带着同样 Cookie 的。`createTestApp({ identity, settingsPolicy })` 换掉扩展点；换了身份来源以后用 `t.linkGitHub(浏览器, login, ...仓库)` 给已登录的浏览器关联 GitHub。
 - 主站的每个响应都带内容安全策略（`apps/site/src/server/app.ts`）：脚本只能来自本站，页面里不能写内联脚本，要在页面画出来之前跑的放进 `apps/site/public/` 下单独的文件（比如 `theme-boot.js`）。接口的请求体最多 1 MB（webhook 25 MB）。
 - Agent 回复里的图片只有 GitHub 和主站自己的直接显示，别的来源点了才加载（`session/Markdown.tsx` 的 `trustedImageHost`）：图片地址是 Agent 写的，直接加载等于给了它一条往外送数据的路。
 - 要看界面时，可以用假 GitHub、假宿主机起一个真主站来截图：照 `apps/site/src/testing/test-app.ts` 的写法建 `createApp()`，再挂上 `dist/client` 的静态文件。

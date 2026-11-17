@@ -1,10 +1,9 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { AppDeps } from "../app";
-import { getNickname, hasAdmin, setNickname } from "../auth/admin";
-import { currentUser } from "../auth/login-sessions";
+import { getNickname, setNickname } from "../auth/admin";
 import { networkAccess } from "../db/schema";
 import { listEnvironments } from "../environments";
-import { apiError, errorResponse, notLoggedIn } from "../errors";
+import { errorResponse, notLoggedIn } from "../errors";
 import { githubConnection } from "../github/tokens";
 import { jsonBody as json, newRouter } from "./router";
 
@@ -86,24 +85,21 @@ const environmentsRoute = createRoute({
 export function meRoutes(deps: AppDeps) {
   return newRouter()
     .openapi(meRoute, async (c) => {
-      const user = await currentUser(deps, c);
-      if (!user) {
-        if (await hasAdmin(deps.db)) return c.json(notLoggedIn, 401);
-        return c.json(apiError("setup_required", "请先设置管理员密码"), 401);
-      }
+      const user = await deps.identity.currentUser(c);
+      if (!user) return c.json(await deps.identity.loggedOut(c), 401);
       const github = await githubConnection(deps, user.id);
       const nickname = await getNickname(deps.db, user.id);
       return c.json({ id: user.id, githubLogin: github?.login ?? null, nickname }, 200);
     })
     .openapi(nicknameRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const { nickname } = c.req.valid("json");
       await setNickname(deps.db, user.id, nickname);
       return c.json({ nickname }, 200);
     })
     .openapi(environmentsRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       return c.json({ environments: await listEnvironments(deps.db, user.id) }, 200);
     });

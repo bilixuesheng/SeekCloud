@@ -9,12 +9,11 @@ import type { Context } from "hono";
 import { type SSEStreamingApi, streamSSE } from "hono/streaming";
 import { recordAccess } from "../access-log";
 import type { AppDeps } from "../app";
-import { currentUser } from "../auth/login-sessions";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
 import { DEFAULT_MODEL, MODELS } from "../sessions/models";
 import { EVENT_PAGE, type SessionError, type Sessions, sessionErrors } from "../sessions/sessions";
 import { serial } from "../sessions/topic";
-import { getDefaultEffort } from "../settings";
+import { readSetting } from "../settings";
 import { jsonBody as json, newRouter } from "./router";
 
 const Repo = z.object({
@@ -399,7 +398,7 @@ function guarded(stream: SSEStreamingApi, push: () => Promise<void>) {
 export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
   return newRouter()
     .openapi(createSessionRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const result = await sessions.create(user.id, c.req.valid("json"));
       if (!result.ok) {
@@ -410,24 +409,24 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       return c.json(result.value, 201);
     })
     .openapi(listModelsRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       return c.json(
         {
           models: MODELS.map((m) => ({ ...m, efforts: [...m.efforts] })),
           defaultModel: DEFAULT_MODEL,
-          defaultEffort: await getDefaultEffort(deps),
+          defaultEffort: await readSetting(deps, "default_effort", { userId: user.id }),
         },
         200,
       );
     })
     .openapi(listSessionsRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       return c.json({ sessions: await sessions.list(user.id) }, 200);
     })
     .openapi(sessionListStreamRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       return eventStream(c, async (stream) => {
         let snapshotSent = false;
@@ -456,14 +455,14 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       });
     })
     .openapi(getSessionRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const session = await sessions.get(user.id, c.req.valid("param").shortId);
       if (!session) return c.json(fail("session_not_found").body, 404);
       return c.json(session, 200);
     })
     .openapi(sessionEventsRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const handle = await sessions.open(user.id, c.req.valid("param").shortId);
       if (!handle) return c.json(fail("session_not_found").body, 404);
@@ -499,7 +498,7 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       });
     })
     .openapi(sendMessageRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const result = await sessions.sendMessage(
         user.id,
@@ -516,7 +515,7 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       return c.json(result.value.started, 201);
     })
     .openapi(stopRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const result = await sessions.stopTurn(user.id, c.req.valid("param").shortId);
       if (!result.ok) {
@@ -526,7 +525,7 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       return c.json({ stopped: true as const }, 200);
     })
     .openapi(withdrawRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const { shortId, queueId } = c.req.valid("param");
       const result = await sessions.withdrawQueued(user.id, shortId, queueId);
@@ -537,7 +536,7 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       return c.json({ text: result.value }, 200);
     })
     .openapi(sendNowRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const { shortId, queueId } = c.req.valid("param");
       const result = await sessions.sendQueuedNow(user.id, shortId, queueId);
@@ -548,7 +547,7 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       return c.json({ sent: true as const }, 200);
     })
     .openapi(renameRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const result = await sessions.rename(
         user.id,
@@ -559,14 +558,14 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       return c.json(result.value, 200);
     })
     .openapi(listPinsRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const result = await sessions.listPins(user.id, c.req.valid("param").shortId);
       if (!result.ok) return c.json(fail(result.error).body, 404);
       return c.json({ pins: result.value }, 200);
     })
     .openapi(setPinRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const { seq, pinned } = c.req.valid("json");
       const result = await sessions.setMessagePin(
@@ -579,7 +578,7 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       return c.json({ pins: result.value }, 200);
     })
     .openapi(readRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const result = await sessions.setUnread(
         user.id,
@@ -590,7 +589,7 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       return c.json(result.value, 200);
     })
     .openapi(pinRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const result = await sessions.setPinned(
         user.id,
@@ -604,21 +603,21 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       return c.json(result.value, 200);
     })
     .openapi(archiveRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const result = await sessions.archive(user.id, c.req.valid("param").shortId);
       if (!result.ok) return c.json(fail(result.error).body, 404);
       return c.json(result.value, 200);
     })
     .openapi(unarchiveRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const result = await sessions.unarchive(user.id, c.req.valid("param").shortId);
       if (!result.ok) return c.json(fail(result.error).body, 404);
       return c.json(result.value, 200);
     })
     .openapi(deleteRoute, async (c) => {
-      const user = await currentUser(deps, c);
+      const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
       const result = await sessions.remove(user.id, c.req.valid("param").shortId);
       if (!result.ok) return c.json(fail(result.error).body, 404);

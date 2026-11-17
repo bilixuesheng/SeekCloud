@@ -1,16 +1,8 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { AppDeps } from "../app";
-import { currentUser } from "../auth/login-sessions";
-import { errorResponse, notLoggedIn } from "../errors";
+import { apiError, errorResponse, notLoggedIn } from "../errors";
 import type { Sessions } from "../sessions/sessions";
-import {
-  AiLabelsValue,
-  EffortValue,
-  getAiLabels,
-  getDefaultEffort,
-  setAiLabels,
-  setDefaultEffort,
-} from "../settings";
+import { AiLabelsValue, EffortValue, readSetting, writeSetting } from "../settings";
 import { jsonBody as json, newRouter } from "./router";
 
 const AiLabels = AiLabelsValue.openapi("AiLabels", {
@@ -38,6 +30,7 @@ const putAiLabelsRoute = createRoute({
     200: { description: "改好以后的值", ...json(AiLabels) },
     400: errorResponse("请求格式不对"),
     401: errorResponse("没有登录"),
+    403: errorResponse("这项设置不能修改（主干里不会出现）"),
   },
 });
 
@@ -65,31 +58,42 @@ const putDefaultEffortRoute = createRoute({
     200: { description: "改好以后的值", ...json(DefaultEffort) },
     400: errorResponse("请求格式不对"),
     401: errorResponse("没有登录"),
+    403: errorResponse("这项设置不能修改（主干里不会出现）"),
   },
 });
+
+const locked = apiError("setting_locked", "这项设置不能修改");
 
 /** 设置窗口里的全站设置。 */
 export function settingsRoutes(deps: AppDeps, sessions: Sessions) {
   return newRouter()
     .openapi(getAiLabelsRoute, async (c) => {
-      if (!(await currentUser(deps, c))) return c.json(notLoggedIn, 401);
-      return c.json(await getAiLabels(deps), 200);
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      return c.json(await readSetting(deps, "ai_labels", { userId: me.id }), 200);
     })
     .openapi(putAiLabelsRoute, async (c) => {
-      if (!(await currentUser(deps, c))) return c.json(notLoggedIn, 401);
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
       const value = c.req.valid("json");
-      await setAiLabels(deps, value);
+      if (!(await writeSetting(deps, "ai_labels", { userId: me.id }, value))) {
+        return c.json(locked, 403);
+      }
       await sessions.aiLabelsChanged(value);
       return c.json(value, 200);
     })
     .openapi(getDefaultEffortRoute, async (c) => {
-      if (!(await currentUser(deps, c))) return c.json(notLoggedIn, 401);
-      return c.json({ effort: await getDefaultEffort(deps) }, 200);
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      return c.json({ effort: await readSetting(deps, "default_effort", { userId: me.id }) }, 200);
     })
     .openapi(putDefaultEffortRoute, async (c) => {
-      if (!(await currentUser(deps, c))) return c.json(notLoggedIn, 401);
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
       const { effort } = c.req.valid("json");
-      await setDefaultEffort(deps, effort);
+      if (!(await writeSetting(deps, "default_effort", { userId: me.id }, effort))) {
+        return c.json(locked, 403);
+      }
       return c.json({ effort }, 200);
     });
 }

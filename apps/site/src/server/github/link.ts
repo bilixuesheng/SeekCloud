@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AppDeps } from "../app";
-import { currentUser } from "../auth/login-sessions";
 import type { GitHubTokens } from "./port";
 import { connectGitHub } from "./tokens";
 
@@ -35,7 +34,7 @@ export async function finishGitHubLink(deps: AppDeps, c: Context): Promise<strin
   const code = c.req.query("code");
   if (!state || !code || c.req.query("state") !== state) return "/?github=failed";
   // GitHub 不是登录方式：授权途中登录状态过期了，就不关联。
-  const me = await currentUser(deps, c);
+  const me = await deps.identity.currentUser(c);
   if (!me) return "/?github=failed";
 
   let tokens: GitHubTokens;

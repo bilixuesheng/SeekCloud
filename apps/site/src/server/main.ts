@@ -1,12 +1,14 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { type AppDeps, createApp } from "./app";
+import { adminIdentity } from "./auth/admin-identity";
 import { connectDatabase } from "./db/client";
 import { runMigrations } from "./db/migrate";
 import { githubApi, unconfiguredGitHub } from "./github/api";
 import { startMaintenance } from "./maintenance";
 import { systemClock } from "./ports";
 import { SecretBox } from "./secrets";
+import { adminSettings } from "./settings";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -21,7 +23,7 @@ const secrets = new SecretBox(Buffer.from(required("SEEKCLOUD_SECRET_KEY"), "bas
 const { db } = connectDatabase(databaseUrl);
 await runMigrations(db);
 
-const deps: AppDeps = {
+const base = {
   version: process.env.SEEKCLOUD_VERSION ?? "dev",
   // 导出数据的压缩包放在这里；部署时放到会备份的磁盘上，不要放进代码目录。
   dataDir: process.env.SEEKCLOUD_DATA_DIR ?? "./data",
@@ -39,6 +41,8 @@ const deps: AppDeps = {
     : unconfiguredGitHub,
   secureCookies: process.env.NODE_ENV === "production",
 };
+// 扩展点（ADR 0010）：主干用单管理员的实现。
+const deps: AppDeps = { ...base, identity: adminIdentity(base), settingsPolicy: adminSettings };
 const app = createApp(deps);
 // 打包数据导出、清理过期的导出和访问记录，每分钟一次。
 startMaintenance(deps);

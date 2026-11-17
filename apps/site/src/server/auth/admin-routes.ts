@@ -1,20 +1,20 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { networkOf } from "../access-log";
-import type { AppDeps } from "../app";
-import { checkPassword, setPassword, setUpAdmin } from "../auth/admin";
+import { apiError, errorResponse, notLoggedIn } from "../errors";
+import { clientIp, HOUR, type RateLimiter, tooFrequent } from "../rate-limit";
+import { Nickname } from "../routes/me";
+import { jsonBody as json, newRouter } from "../routes/router";
+import { checkPassword, setPassword, setUpAdmin } from "./admin";
 import {
   currentUser,
   endAllLoginSessions,
   endLoginSession,
+  type LoginDeps,
   loginTokenHash,
   startLoginSession,
-} from "../auth/login-sessions";
-import { MAX_PASSWORD_LENGTH } from "../auth/password";
-import { apiError, errorResponse, notLoggedIn } from "../errors";
-import { clientIp, HOUR, type RateLimiter, tooFrequent } from "../rate-limit";
-import { Nickname } from "./me";
-import { jsonBody as json, newRouter } from "./router";
+} from "./login-sessions";
+import { MAX_PASSWORD_LENGTH } from "./password";
 
 const NewPassword = z
   .string()
@@ -80,7 +80,7 @@ const logoutRoute = createRoute({
  * 先占一次再比对：同时到达的请求加起来也只能试 10 次。wait 是被限制时还要等的秒数。
  */
 async function checkLimited(
-  deps: AppDeps,
+  deps: LoginDeps,
   limiter: RateLimiter,
   c: Context,
   password: string,
@@ -94,7 +94,7 @@ async function checkLimited(
   return { wait: 0, userId };
 }
 
-export function authRoutes(deps: AppDeps, limiter: RateLimiter) {
+export function authRoutes(deps: LoginDeps, limiter: RateLimiter) {
   return newRouter()
     .openapi(setupRoute, async (c) => {
       const { nickname, password } = c.req.valid("json");

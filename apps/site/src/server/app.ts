@@ -7,10 +7,8 @@ import { secureHeaders } from "hono/secure-headers";
 import type { Database } from "./db/client";
 import { apiError, handleError } from "./errors";
 import type { GitHub } from "./github/port";
-import type { Clock } from "./ports";
-import { RateLimiter } from "./rate-limit";
+import type { Clock, Identity, SettingsPolicy } from "./ports";
 import { accountRoutes } from "./routes/account";
-import { authRoutes } from "./routes/auth";
 import { githubAuthRoutes, githubRoutes } from "./routes/github";
 import { meRoutes } from "./routes/me";
 import { newRouter } from "./routes/router";
@@ -33,6 +31,10 @@ export interface AppDeps {
   host?: HostLink;
   /** 主站自己的数据目录：导出数据的压缩包放在这里的 exports 下面。 */
   dataDir: string;
+  /** 扩展点：这个请求是谁的，以及登录相关的接口。主干是 auth/admin-identity.ts 的 adminIdentity。 */
+  identity: Identity;
+  /** 扩展点：设置的默认值和能不能改。主干是 settings.ts 的 adminSettings。 */
+  settingsPolicy: SettingsPolicy;
 }
 
 const CheckResult = z.enum(["ok", "error"]);
@@ -116,11 +118,10 @@ export function createApp(deps: AppDeps) {
     return database === "ok" ? c.json(body, 200) : c.json(body, 503);
   });
 
-  const limiter = new RateLimiter(deps.clock);
   app.route("/api/auth/github", githubAuthRoutes(deps));
   const sessions = new Sessions(deps);
   app.route("/api/account", accountRoutes(deps));
-  app.route("/api/auth", authRoutes(deps, limiter));
+  app.route("/api/auth", deps.identity.routes);
   app.route("/api/github", githubRoutes(deps, sessions));
   app.route("/api/settings", settingsRoutes(deps, sessions));
   app.route("/api", sessionRoutes(deps, sessions));
