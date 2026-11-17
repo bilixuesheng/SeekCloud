@@ -17,8 +17,9 @@
 - 路线图 2026-11-08 定了，见交接文档 `docs/roadmap/2026-11-08-handoff.md`。
 - 核心功能的规格和工单拆完了（2026-11-11）：规格是 issue [#13](https://github.com/bilixuesheng/SeekCloud/issues/13)，工单 #14–#56 都是它的子 issue，正文第一行写着被哪些工单阻塞。读工单时正文和评论一起读。
   - #14（测试机）要用户本人做。等它的只有 #18（Sysbox 沙箱）和要真沙箱的验收；连接和协议拆到了 #91，模型网关（#26）、适配接口（#25）不用等测试机（2026-11-15 改的）。#15 已完成：用户 2026-11-13 重建了公开仓库 `bilixuesheng/seekcloud-dsh`（只有一个 README），云端会话能推送。
-  - 已完成：#16（会话页动效核对）、#19（顶栏、标题菜单和会话信息）、#20（模型和思考强度的弹层）。
-  - 现在就能开工的：#17（通用镜像和 dsh 修改版基线）、#91（宿主机连接和协议）。
+  - 已完成：#16（会话页动效核对）、#19（顶栏、标题菜单和会话信息）、#20（模型和思考强度的弹层）。#31 的主站这一半也做了：逐字输出（宿主机发来的 `delta`、`progress` 只推送不落库，界面按舒服的速度一个个字显示）；Agent 工作时输入框空着是停止键、有字是 ↵（插进当前回合），⌄ 里有稍后排队和停止；接口是 `POST /api/sessions/{id}/messages` 的 `mode`（`now` 插进当前回合）和 `POST /api/sessions/{id}/stop`（回合马上记成已停止，再给宿主机发 `stop_turn`）。#31 还没做的：幂等 ID、Playwright 冒烟测试，以及宿主机那一半（把消息送进正在跑的 dsh 回合、停下回合，等 #91 和 #25）。
+  - #17 的基线配置做了（PR #143，`apps/host/sandbox/dsh/baseline.patch.yml`，用 dsh 0.2.2-rc.3 验过）。#17 剩下的：`seekcloud-dsh` 子模块、技能和 Claude Code 兼容、通用镜像、开源声明、ADR 0004。
+  - 现在就能开工的：#17 剩下的部分、#91（宿主机连接和协议）。
   - 要人做的工单打 `ready-for-human` 标签：#14、#121、#126。
 - AI 标识两个开关的规格和工单也拆了：规格 [#57](https://github.com/bilixuesheng/SeekCloud/issues/57)，工单 #58（已完成）、#59。八项新功能里只有这一项没有待定的事，所以先写了。
 - 2026-11-11 做了一次复查，记在 `docs/roadmap/2026-11-11-review.md`：界面上查出来并改掉的问题、路线图没覆盖到的地方（待定的每条都有建议）、安全排查的结论。写新功能的规格之前先读它。文档里待定的几条 2026-11-14 都定了，结论写在每条后面，写规格时照着做。
@@ -41,7 +42,7 @@
 
 - **接下来**：
   1. 请用户定审查文档第六节的 14 条。没定之前，相关的工单照各自评论里写的保守做法做。
-  2. 实现不等测试机、也不等别的工单的：#17（dsh 基线）、#91（宿主机连接和协议）、#89 和 #90（扩展点）、#94（发布包和安装脚本）、#100（两步验证）、#135（文案目录）、#139（等你输入的规则版），以及 #59 里 git 钩子的那一项。#91 做完接 #26（模型网关），#17 加 #91 做完接 #25（适配接口）。宿主机的 Sysbox 部分（#18）等 #14 的测试机。
+  2. 实现不等测试机、也不等别的工单的：#17 剩下的部分（基线配置已做）、#91（宿主机连接和协议）、#89 和 #90（扩展点）、#94（发布包和安装脚本）、#100（两步验证）、#135（文案目录）、#139（等你输入的规则版），以及 #59 里 git 钩子的那一项。#91 做完接 #26（模型网关），#17 加 #91 做完接 #25（适配接口）。宿主机的 Sysbox 部分（#18）等 #14 的测试机。
   3. 下面是各项新功能定过的要点，规格里都写了，留在这里备查：
   - 网页图形化部署：Linux 一条命令、Windows 一条 PowerShell 命令，其余在网页向导里完成；
   - 多渠道通知：SMTP 邮件、PWA 推送、飞书/钉钉/企业微信机器人、通用 Webhook；
@@ -52,7 +53,7 @@
   - 在 SeekCloud 界面里重做 dsh 网页版才有的功能：四种 Agent 模式（标准、PTC、极简、创造）、轨迹视图和插件市场（插件中心打开，开源版可以自己添加插件市场，2026-11-14 定的）；
   - Agent 在 GitHub 上的 AI 标识（issue、PR 和评论的署名，以及提交尾注）默认加上，可以在设置里分别关掉；
   - 英文界面（2026-11-14 定的）：界面文案分中英两份，按浏览器语言选，设置里能改；
-  - 侧栏照 Claude 的 App（2026-11-14 用户看预览时提的）：会话"⋯"菜单里的置顶、标为未读、移到分组，长按会话拖动排序。"⋯"菜单和**置顶**已经做了（置顶的在侧栏最上面一组，后置顶的在前，归档时自动取消，PR #79），其余几项要先定细节：拖动后的顺序和"最近有动静排前面"怎么共存、分组怎么建和删；
+  - 侧栏照 Claude 的 App（2026-11-14 用户看预览时提的）：会话"⋯"菜单里的置顶、标为未读、移到分组，长按会话拖动排序。"⋯"菜单、**置顶**和**标为未读**已经做了（置顶的在侧栏最上面一组，后置顶的在前，归档时自动取消，PR #79；回合在你没看着时结束或失败，侧栏亮蓝点，打开就消掉，`sessions.unread`），其余几项要先定细节：拖动后的顺序和"最近有动静排前面"怎么共存、分组怎么建和删；
   - 消息置顶（照 Claude，2026-11-15 用户录的视频）：**已经做了**（`message_pins` 表、`/api/sessions/{id}/pins`）。回合最后那条回复下面有图钉，点了这条回复上方展开一行加粗的短标题（生成时先显示占位的闪烁条，不照搬 Claude 闪一下上一条回复的毛病），对话左上角出现几道短横，点开是"会话开头"和每条置顶的标题，点哪个就滚到哪条。短标题现在按规则取（`server/sessions/pin-title.ts`：第一个小标题，没有就用第一句够长的话），**模型网关接上以后换成调一次便宜的模型生成**，用量照常记；
   - 会话状态照 Claude 细分（2026-11-14 用户定的，照下面的建议做）：回合结束以后分"等你输入"和"已完成"，侧栏每个会话右边用图标区分（运行中、等你输入、有新内容、失败）。Claude Code 的会话分进行中、等待输入、可查看结果、已完成、失败五类，怎么判断的没有公开。建议：回合停在选择题、批准、计划这类卡片上时一定算"等你输入"；只有文字时，回合结束后用一次很便宜的模型调用（不思考）判断最后一条消息是不是在等你回答。这次调用和标题生成这类平台自己发起的模型调用一样，都记进用量。另外照 Claude：首页（新会话页）中间、输入框上面的空白处，有等你输入的会话时显示提示，点了跳到那个会话（2026-11-14 用户截图）。
 
@@ -66,7 +67,7 @@
 - GitHub 的调用全部经过 `apps/site/src/server/github/port.ts` 的接口；测试里是 `t.github`（`src/testing/fake-github.ts`，内存里的假 GitHub）。
 - 登录：只有一个管理员账户，只用密码登录（ADR 0008）。设置、登录、改密码、重置在 `apps/site/src/server/auth/admin.ts`，密码只存 scrypt 哈希（`auth/password.ts`）；同一个 IP 一小时输错 10 次就暂停。GitHub 不是登录方式，只在设置里关联（`src/server/github/link.ts`）。
 - 主站和宿主机之间的消息定义在 `packages/protocol`。主站通过 `apps/site/src/server/sessions/host.ts` 的 `HostLink` 和宿主机通信；测试里是 `t.host`（`src/testing/fake-host.ts`，按脚本回放 Agent 事件，`manual = true` 时由测试自己 `emit`）。会话编排在 `src/server/sessions/sessions.ts`。
-- 宿主机（`apps/host`）：GitHub 工具服务（MCP，`/mcp`）在 `src/github-tools/`，测试接假的 GitHub API；dsh 怎么接见 `apps/host/sandbox/README.md`。Git 代理在 `src/git-proxy/`，提交签名在 `src/signing/`，沙箱里要装的签名助手和 git 配置在 `apps/host/sandbox/`。测试用真的 `git`（`git http-backend` 当假 GitHub）、`openssl` 和 `ssh-keygen`，云端会话里先运行 `apt-get install -y openssh-client`。生成签名密钥：`pnpm --filter @seekcloud/host signing-key <私钥路径>`，打印出来的公钥加到 SeekCloud 账号的 GitHub 签名密钥里。宿主机的环境变量：`SEEKCLOUD_SIGNING_KEY`（签名私钥路径）、`SEEKCLOUD_SIGNER_EMAIL`（SeekCloud 账号的邮箱）、`SEEKCLOUD_GIT_PROXY_HOST`、`SEEKCLOUD_GIT_PROXY_PORT`、`SEEKCLOUD_HOST_DATA`。
+- 宿主机（`apps/host`）：GitHub 工具服务（MCP，`/mcp`）在 `src/github-tools/`，测试接假的 GitHub API；dsh 怎么接见 `apps/host/sandbox/README.md`。Git 代理在 `src/git-proxy/`，提交签名在 `src/signing/`，沙箱里要装的签名助手和 git 配置在 `apps/host/sandbox/`。测试用真的 `git`（`git http-backend` 当假 GitHub）、`openssl` 和 `ssh-keygen`，云端会话里先运行 `apt-get install -y openssh-client`。生成签名密钥：`pnpm --filter @seekcloud/host signing-key <私钥路径>`，打印出来的公钥加到 SeekCloud 账号的 GitHub 签名密钥里。dsh 的基线配置（`apps/host/sandbox/dsh/baseline.patch.yml`）的测试在普通 CI 里只查文件；要用真的 dsh 验，在一个临时目录里用 Node 24.9 以上运行 `npm i @deepseek-ai/dsh@0.2.2-rc.3`，再设 `SEEKCLOUD_DSH_BIN=<临时目录>/node_modules/.bin/dsh` 跑宿主机的测试（PATH 里的 node 也要是 24.9 以上）。宿主机的环境变量：`SEEKCLOUD_SIGNING_KEY`（签名私钥路径）、`SEEKCLOUD_SIGNER_EMAIL`（SeekCloud 账号的邮箱）、`SEEKCLOUD_GIT_PROXY_HOST`、`SEEKCLOUD_GIT_PROXY_PORT`、`SEEKCLOUD_HOST_DATA`。
 - SSE 接口用 `browser.stream(path)` 测（`src/testing/event-stream.ts`），用完要 `close()`。`t.admin()` 得到一个已登录的管理员浏览器（第一次调用时用 `t.adminPassword` 设置密码，每次调用都是一台新设备）；`t.adminWithGitHub(login, ...仓库)` 再关联 GitHub、装好 App，再调用一次会换成新的 GitHub 账号。
 - 主站的测试用 `apps/site/src/testing/test-app.ts` 的 `createTestApp()`：进程内调用接口，每调用一次建一个独立的库（一般一个测试文件一次），时钟是假的。`t.browser()` 模拟一个有自己 Cookie 和 IP 的浏览器。
 - 主站的每个响应都带内容安全策略（`apps/site/src/server/app.ts`）：脚本只能来自本站，页面里不能写内联脚本，要在页面画出来之前跑的放进 `apps/site/public/` 下单独的文件（比如 `theme-boot.js`）。接口的请求体最多 1 MB（webhook 25 MB）。
