@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -11,11 +11,14 @@ const TRAILER = "Generated-by: SeekCloud (AI)";
 /** 一个按沙箱的方式配好钩子的仓库。 */
 function sandboxRepo() {
   const dir = mkdtempSync(join(tmpdir(), "hooks-"));
+  // 宿主机写"提交尾注"开关的那个文件。放在仓库外面，一开始不存在（按开着处理）。
+  const switchFile = join(mkdtempSync(join(tmpdir(), "hooks-switch-")), "commit-trailer");
   const env = cleanGitEnv(dir, {
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_KEY_0: "core.hooksPath",
     GIT_CONFIG_VALUE_0: HOOKS,
     GIT_EDITOR: "true",
+    SEEKCLOUD_COMMIT_TRAILER_FILE: switchFile,
   });
   const run = (...args: string[]) => spawnSync("git", args, { cwd: dir, env, encoding: "utf8" });
   const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, env, encoding: "utf8" });
@@ -30,8 +33,13 @@ function sandboxRepo() {
     git("add", file);
     return run("commit", "-q", ...args);
   };
+  /** 宿主机写开关：传 null 删掉文件。 */
+  const trailerSwitch = (content: string | null) => {
+    if (content === null) rmSync(switchFile, { force: true, recursive: true });
+    else writeFileSync(switchFile, content);
+  };
   git("init", "-q", "-b", "main");
-  return { dir, git, run, message, hook, commit };
+  return { dir, git, run, message, hook, commit, trailerSwitch, switchFile };
 }
 
 describe("沙箱的 git 钩子", () => {
@@ -51,6 +59,49 @@ describe("沙箱的 git 钩子", () => {
     // 已有的尾注留着，接在后面
     r.commit("c", "-m", "加上 c\n\nSigned-off-by: 测试 <test@example.com>");
     expect(r.message()).toBe(`加上 c\n\nSigned-off-by: 测试 <test@example.com>\n${TRAILER}`);
+  });
+
+  it("管理员关掉“提交尾注”以后不加，已有的尾注不删；运行中改开关，下一个提交就照新的来", () => {
+    const r = sandboxRepo();
+    r.commit("a", "-m", "开着时的提交");
+    expect(r.message()).toBe(`开着时的提交\n\n${TRAILER}`);
+
+    r.trailerSwitch("off\n");
+    r.commit("b", "-m", "关着时的提交");
+    expect(r.message()).toBe("关着时的提交");
+    r.commit("c", "--no-verify", "-m", "跳过检查也不加");
+    expect(r.message()).toBe("跳过检查也不加");
+    // 改之前那个带尾注的提交：尾注留着
+    r.git("reset", "-q", "--hard", "HEAD~2");
+    r.git("commit", "-q", "--amend", "--no-edit");
+    expect(r.message()).toBe(`开着时的提交\n\n${TRAILER}`);
+
+    r.trailerSwitch("on\n");
+    r.commit("d", "-m", "又开了");
+    expect(r.message()).toBe(`又开了\n\n${TRAILER}`);
+  });
+
+  it("关着时压缩提交，各自的尾注原样留着", () => {
+    const r = sandboxRepo();
+    r.commit("base", "-m", "base");
+    r.commit("a", "-m", "a");
+    r.commit("b", "-m", "b");
+    r.trailerSwitch("off");
+    r.git("-c", "sequence.editor=sed -i 2s/^pick/squash/", "rebase", "-q", "-i", "HEAD~2");
+    expect(r.message()).toBe(`a\n\n${TRAILER}\n\nb\n\n${TRAILER}`);
+  });
+
+  it("开关文件不在、读不懂、不是普通文件时，都按开着处理", () => {
+    const r = sandboxRepo();
+    for (const content of [null, "", "maybe", "OFF?", "关"]) {
+      r.trailerSwitch(content);
+      r.commit(`f${content}`, "-m", "提交");
+      expect(r.message(), String(content)).toBe(`提交\n\n${TRAILER}`);
+    }
+    r.trailerSwitch(null);
+    mkdirSync(r.switchFile);
+    r.commit("dir", "-m", "提交");
+    expect(r.message()).toBe(`提交\n\n${TRAILER}`);
   });
 
   it("合并、拣选、撤销、压缩出来的提交也加", () => {

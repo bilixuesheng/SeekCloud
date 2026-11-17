@@ -14,10 +14,17 @@ if [ -n "$own" ] && [ "$(cd "$own" 2>/dev/null && pwd)" != "$here" ] && [ -x "$o
 fi
 
 # 提交说明加上 AI 生成的尾注。默认加上，Agent 在会话里被要求去掉也照加；
-# 管理员可以在设置里关掉（是否关闭由部署者自行负责），这里接上开关的工作见 issue #59。
+# 管理员可以在"设置 → GitHub"里关掉"提交尾注"（是否关闭由部署者自行负责）：宿主机在下面这个文件里写 off，
+# 每次提交都重新读，运行中改了开关，下一个提交就照新的来。文件不在、不是普通文件、写的不是 off，都按开着处理：
+# Agent 在沙箱里是 root，改得了这个文件，所以它不是安全边界，只是默认行为（宿主机每个回合开始时重写一次）。
+# 关着时不加，也不去掉说明里已有的尾注。
 # --no-verify 会跳过 commit-msg，所以 prepare-commit-msg 先加一次（只打编辑器的提交这时还没有说明，留给 commit-msg）。
 # commit-msg 在仓库的钩子改过说明之后再确认一次；说明是空的不加，否则空说明不再中止提交。
 trailer="Generated-by: SeekCloud (AI)"
+switch=${SEEKCLOUD_COMMIT_TRAILER_FILE:-/etc/seekcloud/commit-trailer}
+trailer_off() {
+  [ -f "$switch" ] && [ -r "$switch" ] && [ "$(tr -d ' \t\r\n' < "$switch")" = off ]
+}
 add_trailer() {
   # 压缩几个提交时，各自的尾注会留在说明中间：先全部去掉，再在末尾加一次。
   # stripspace 顺带补上末尾的换行（git merge -m 写的没有，interpret-trailers 会把尾注接进正文那一段）。
@@ -25,6 +32,7 @@ add_trailer() {
   mv "$1.seekcloud" "$1"
   git interpret-trailers --in-place --trailer "$trailer" "$1"
 }
+if trailer_off; then exit 0; fi
 case "$name" in
   prepare-commit-msg) if [ -n "${2:-}" ] && [ "$2" != template ]; then add_trailer "$1"; fi ;;
   commit-msg) if [ -n "$(git stripspace --strip-comments < "$1")" ]; then add_trailer "$1"; fi ;;

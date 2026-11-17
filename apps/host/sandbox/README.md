@@ -48,7 +48,11 @@ Agent 的每个提交，说明末尾都有一行尾注：
 Generated-by: SeekCloud (AI)
 ```
 
-这是 AI 标识的一种，默认加上：Agent 在会话里被要求去掉也照加。管理员可以在"设置 → GitHub"里关掉"提交尾注"，是否关闭由部署者自行负责。GitHub 工具建的提交已经跟着这个开关；沙箱里的 git 钩子现在还是一律加，接上开关的工作见 issue #59。
+这是 AI 标识的一种，默认加上：Agent 在会话里被要求去掉也照加。管理员可以在"设置 → GitHub"里关掉"提交尾注"，是否关闭由部署者自行负责。GitHub 工具建的提交和沙箱里的 git 钩子都跟着这个开关。
+
+- 钩子从沙箱里的 `/etc/seekcloud/commit-trailer` 读开关（测试里用环境变量 `SEEKCLOUD_COMMIT_TRAILER_FILE` 换成别的路径）：内容是 `off` 时不加，`on` 时加。宿主机在准备沙箱时、收到 `set_ai_labels` 时、每个回合开始时都按 `prepare_sandbox`、`set_ai_labels` 里的 `aiLabels.commitTrailer` 写一遍。
+- 钩子每次提交都重新读，运行中改了开关，下一个提交就照新的来。文件不在、不是普通文件、内容不是 `off` 时都按开着处理：Agent 在沙箱里是 root，改得了这个文件，所以它不是安全边界，只是默认行为。
+- 关着时不加，也不去掉说明里已有的尾注（压缩提交时各自的尾注原样留着）。
 
 - 本目录的 `git-hooks/` 整个装进通用镜像的 `/usr/local/share/seekcloud/git-hooks`，保留里面的符号链接（每个钩子都链接到 `_dispatch`）。
 - `core.hooksPath` 用上面的环境变量设，不写进 `git config --system`：环境变量里的配置盖过仓库自己的，用 husky 这类工具设了 `core.hooksPath` 的仓库也跑我们的钩子。`_dispatch` 先跑仓库原本会跑的同名钩子（`.git/hooks` 或仓库设的 `core.hooksPath`），所以仓库的检查照常生效。
