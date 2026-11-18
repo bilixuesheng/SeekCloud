@@ -64,7 +64,10 @@ const CheckResult = z.enum(["ok", "error"]);
 
 const Health = z.object({
   status: CheckResult,
-  version: z.string(),
+  /** 固定是 seekcloud：安卓 App 连接服务器时靠它认出这是一台 SeekCloud。 */
+  product: z.literal("seekcloud"),
+  /** 登录以后才给：没登录的人按版本号去找已知的漏洞。 */
+  version: z.string().optional(),
   database: CheckResult,
   time: z.string().openapi({ format: "date-time" }),
 });
@@ -143,9 +146,16 @@ export function createApp(deps: AppDeps) {
       () => "ok" as const,
       () => "error" as const,
     );
+    const signedIn =
+      database === "ok" &&
+      (await deps.identity.currentUser(c).then(
+        (user) => Boolean(user),
+        () => false,
+      ));
     const body = {
       status: database,
-      version: deps.version,
+      product: "seekcloud" as const,
+      ...(signedIn ? { version: deps.version } : {}),
       database,
       time: deps.clock.now().toISOString(),
     };
