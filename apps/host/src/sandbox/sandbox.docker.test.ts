@@ -47,7 +47,7 @@ describe.skipIf(!enabled)("沙箱（真的 Docker）", { timeout: 120_000 }, () 
   beforeAll(async () => {
     await docker.ensureImage(IMAGE);
     net = await ensureSandboxNetwork({ name: spec.network, bridge: `sc${pool}` }, docker);
-    sandboxes = new Sandboxes(spec, docker);
+    sandboxes = new Sandboxes(spec, docker, root);
   });
   afterAll(async () => {
     for (const s of servers) s.close();
@@ -192,6 +192,54 @@ describe.skipIf(!enabled)("沙箱（真的 Docker）", { timeout: 120_000 }, () 
     await sandboxes.remove(id);
   });
 
+  it("内存用满时先杀占内存多的构建进程；受保护的进程（Agent）不杀，没保护时它会被杀", async (ctx) => {
+    const id = randomUUID();
+    await sandboxes.ensure(id);
+    expect((await sh(id, "cat /proc/self/oom_score_adj")).out).toBe("300");
+    // 占着 150 MB 不放的进程：dd 读满一块再往管道里写，sleep 不读，dd 就一直卡着（256 MB 的上限）
+    // （busybox 在分出来的 shell 里直接跑 dd，命令行认不出来，所以按占的内存找：沙箱里最大的那个）
+    const holder = async () => {
+      await sh(id, "(dd if=/dev/zero bs=150M count=1 | sleep 600) >/dev/null 2>&1 &");
+      let biggest = { rss: 0, pid: 0 };
+      await expect
+        .poll(async () => {
+          const out = (
+            await sh(
+              id,
+              'for f in /proc/[0-9]*/status; do awk \'/^Pid:/ { p = $2 } /^VmRSS:/ { print $2, p }\' "$f"; done 2>/dev/null | sort -n | tail -n 1',
+            )
+          ).out;
+          const [rss = 0, pid = 0] = out.split(" ").map(Number);
+          biggest = { rss, pid };
+          return rss > 140 * 1024;
+        })
+        .toBe(true);
+      return biggest.pid;
+    };
+    const hog = () => sh(id, "dd if=/dev/zero of=/dev/null bs=200M count=1");
+    const alive = async (pid: number) => (await sh(id, 'kill -0 "$1"', String(pid))).exitCode === 0;
+
+    // 没保护：内核杀占得多的那个，也就是它
+    const unprotected = await holder();
+    await hog();
+    await expect.poll(() => alive(unprotected), { timeout: 10_000 }).toBe(false);
+
+    // 保护起来：被杀的是后来的构建进程。调低 oom_score_adj 要宿主机上真的 root（CAP_SYS_RESOURCE），
+    // 有的云端开发环境里的 root 没有这个权限：那里只测到上面为止。
+    if ((await root("sh", ["-c", "echo -1 > /proc/self/oom_score_adj"])).code !== 0) {
+      await sandboxes.remove(id);
+      ctx.skip();
+    }
+    const agent = await holder();
+    await sandboxes.protect(id, agent);
+    expect((await sh(id, 'cat "/proc/$1/oom_score_adj"', String(agent))).out).toBe("-500");
+    const killed = await hog();
+    expect(killed.exitCode).toBe(137);
+    expect(await alive(agent)).toBe(true);
+    await expect(sandboxes.protect(id, 999_999)).rejects.toThrow("找不到这个进程");
+    await sandboxes.remove(id);
+  });
+
   it("AI 标识的开关写进沙箱：准备时写，运行中改了再写；沙箱停着时不写", async () => {
     const id = randomUUID();
     await sandboxes.prepare(id, { signature: true, commitTrailer: false });
@@ -204,8 +252,10 @@ describe.skipIf(!enabled)("沙箱（真的 Docker）", { timeout: 120_000 }, () 
     expect((await sandboxes.find(id))?.state).toBe("stopped");
     await sandboxes.prepare(id, { signature: true, commitTrailer: false });
     expect(await trailer()).toBe("off");
+    const before = await sandboxes.count();
     await sandboxes.destroy(id);
-    expect(await sandboxes.count()).toBe(0);
+    expect(await sandboxes.find(id)).toBeUndefined();
+    expect(await sandboxes.count()).toBe(before - 1);
   });
 
   it("网络：沙箱之间连不通；只连得上网桥地址上放行的端口，宿主机别的端口连不上", async () => {

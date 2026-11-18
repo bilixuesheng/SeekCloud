@@ -1,12 +1,20 @@
 import { randomUUID } from "node:crypto";
 import type { AiLabels } from "@seekcloud/protocol";
-import { Docker, DockerError, isNotFound } from "./docker";
+import { Docker, DockerError, isNotFound, type Runner, runProgram } from "./docker";
 
 /** 容器上的标签：守护进程重启以后按它认出自己建的沙箱（#18 的边界情况），不靠进程里记的东西。 */
 export const SANDBOX_LABEL = "cn.seekcloud.sandbox";
 export const SESSION_LABEL = "cn.seekcloud.session";
 /** 宿主机在沙箱里跑的命令都带着这个环境变量，超时时按它找到这个命令起的所有进程。 */
 const EXEC_MARK = "SEEKCLOUD_EXEC_ID";
+
+/**
+ * 内存用满时先杀谁（ADR 0005）：沙箱里的进程默认 300，比宿主机自己的进程先被杀；
+ * Agent（dsh）由宿主机调到 -500（protect），沙箱的内存用满时内核先杀占内存多的构建进程，不杀 Agent。
+ * 沙箱里的 root 调不低自己的值（要宿主机上的权限），所以由宿主机来调。
+ */
+export const SANDBOX_OOM_SCORE_ADJ = 300;
+export const PROTECTED_OOM_SCORE_ADJ = -500;
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -66,7 +74,7 @@ export interface SandboxHost {
   setAiLabels(sessionId: string, aiLabels: AiLabels): Promise<void>;
   /** 停掉并删除沙箱和它的文件。沙箱不在时什么也不做。 */
   destroy(sessionId: string): Promise<void>;
-  /** 宿主机上现在有几个沙箱（开着的和停着的），上报负载用。 */
+  /** 宿主机上现在开着几个沙箱（停着的不算），上报负载用。 */
   count(): Promise<number>;
 }
 
@@ -78,11 +86,14 @@ export interface SandboxHost {
  */
 export class Sandboxes implements SandboxHost {
   readonly #docker: Docker;
+  readonly #root: Runner;
   readonly #spec: SandboxSpec;
   readonly #pool: string;
   readonly #queues = new Map<string, Promise<unknown>>();
 
-  constructor(spec: SandboxSpec, docker = new Docker()) {
+  /** root：要宿主机 root 的操作（调 OOM 的优先级）怎么跑；测试机上借特权容器（network.ts 的 rootViaDocker）。 */
+  constructor(spec: SandboxSpec, docker = new Docker(), root: Runner = runProgram) {
+    this.#root = root;
     this.#spec = spec;
     this.#docker = docker;
     this.#pool = spec.pool ?? "default";
@@ -117,7 +128,7 @@ export class Sandboxes implements SandboxHost {
   }
 
   async count(): Promise<number> {
-    return (await this.list()).length;
+    return (await this.list()).filter((s) => s.state === "running").length;
   }
 
   /** 这个会话的沙箱，不在时为 undefined。 */
@@ -220,6 +231,41 @@ export class Sandboxes implements SandboxHost {
     }
   }
 
+  /**
+   * 沙箱的内存用满时不杀这个进程（给 Agent 用，#25 启动 dsh 以后调）：按沙箱里的进程号找到宿主机上的进程，
+   * 把它的 oom_score_adj 调到 PROTECTED_OOM_SCORE_ADJ。它起的子进程照样从 300 起（runc 给每个进程设的），
+   * 不跟着受保护。要宿主机的 root。
+   */
+  async protect(sessionId: string, pidInSandbox: number): Promise<void> {
+    if (!Number.isInteger(pidInSandbox) || pidInSandbox <= 0) throw new Error("进程号不对");
+    const name = this.containerName(sessionId);
+    const initPid = Number(
+      (await this.#docker.ok(["container", "inspect", "--format", "{{.State.Pid}}", name])).trim(),
+    );
+    if (!initPid) throw new Error(`沙箱 ${name} 没有开着`);
+    // 和沙箱的第一个进程在同一个进程命名空间里、NSpid 的最后一个是这个进程号的，就是它。
+    const script = [
+      'ns=$(readlink "/proc/$1/ns/pid") || exit 3',
+      "for d in /proc/[0-9]*; do",
+      '  [ "$(readlink "$d/ns/pid" 2>/dev/null)" = "$ns" ] || continue',
+      '  [ "$(awk \'/^NSpid:/ { print $NF }\' "$d/status" 2>/dev/null)" = "$2" ] || continue',
+      '  echo "$3" > "$d/oom_score_adj" && exit 0',
+      "  exit 5",
+      "done",
+      "exit 4",
+    ].join("\n");
+    const result = await this.#root(
+      "sh",
+      ["-c", script, "sh", String(initPid), String(pidInSandbox), String(PROTECTED_OOM_SCORE_ADJ)],
+      { timeoutMs: 30_000 },
+    );
+    if (result.code !== 0) {
+      throw new Error(
+        `调不了沙箱 ${name} 里进程 ${pidInSandbox} 的 OOM 优先级（${result.code === 4 ? "找不到这个进程" : result.code === 5 ? "没有权限，要宿主机的 root" : result.stderr.trim()}）`,
+      );
+    }
+  }
+
   // ---- SandboxHost ----
 
   async prepare(sessionId: string, aiLabels: AiLabels): Promise<void> {
@@ -269,6 +315,8 @@ export class Sandboxes implements SandboxHost {
       `${spec.memoryMb}m`,
       "--memory-swap",
       `${spec.memoryMb}m`,
+      "--oom-score-adj",
+      String(SANDBOX_OOM_SCORE_ADJ),
       spec.image,
       ...(spec.command ?? []),
     ];
