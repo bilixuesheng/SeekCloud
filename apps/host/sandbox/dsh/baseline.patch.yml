@@ -41,3 +41,9 @@
 - insert:
     - id: seekcloud-claude-code-skills
       name: ./claude-code-skills.js
+
+# 逐字输出：模型正在输出的增量和 token 数写到运行器给的文件描述符（#25）。
+# 没有运行器（环境变量 SEEKCLOUD_LIVE_FD 没设）时什么也不做。
+- insert:
+    - id: seekcloud-live-output
+      name: ./live-output.js

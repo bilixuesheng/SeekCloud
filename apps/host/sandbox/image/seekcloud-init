@@ -1,5 +1,5 @@
 #!/bin/sh
-# 沙箱的第一个进程（在 tini 下面，tini 负责收拾僵尸进程）：起沙箱里的 Docker，然后一直待着。
+# 沙箱的第一个进程（在 tini 下面，tini 负责收拾僵尸进程）：起沙箱里的 Docker 和运行器，然后一直待着。
 # Agent 和宿主机要跑的命令都用 docker exec 进来，不经过这里。
 mkdir -p /var/log/seekcloud
 if command -v dockerd >/dev/null 2>&1; then
@@ -11,4 +11,12 @@ if command -v dockerd >/dev/null 2>&1; then
     done
   ) &
 fi
+# 运行器托管这个沙箱的 dsh（#25），用 dsh 自己的那份 Node 跑；退出了就再起一个
+(
+  while :; do
+    /opt/seekcloud/node/bin/node /usr/local/lib/seekcloud/seekcloud-runner.mjs serve \
+      >>/var/log/seekcloud/runner.log 2>&1
+    sleep 1
+  done
+) &
 exec sleep infinity
