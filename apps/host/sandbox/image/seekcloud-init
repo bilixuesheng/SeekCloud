@@ -1,0 +1,14 @@
+#!/bin/sh
+# 沙箱的第一个进程（在 tini 下面，tini 负责收拾僵尸进程）：起沙箱里的 Docker，然后一直待着。
+# Agent 和宿主机要跑的命令都用 docker exec 进来，不经过这里。
+mkdir -p /var/log/seekcloud
+if command -v dockerd >/dev/null 2>&1; then
+  # dockerd 退出了（比如被内存上限杀掉）就再起一个
+  (
+    while :; do
+      dockerd >>/var/log/seekcloud/dockerd.log 2>&1
+      sleep 2
+    done
+  ) &
+fi
+exec sleep infinity

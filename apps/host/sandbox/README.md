@@ -116,3 +116,26 @@ dsh --profile sdk [--patch <Agent 模式的叠加配置>] --patch /usr/local/sha
 - 工具输出太长时写出来的文件放在 `$DSH_HOME/spill` 下面，沙箱休眠再启动以后还在。
 
 `src/dsh-baseline.test.ts` 检查这些。普通 CI 里没有 dsh，只查文件本身；设了 `SEEKCLOUD_DSH_BIN`（指向 dsh 的可执行文件，要 Node 24.9 以上）时，还用 `dsh --profile sdk --dump-config` 合成真的配置，并在 `$DSH_HOME/cordis.patch.yml` 里试着把关掉的重新打开，确认打不开。构建通用镜像时设上它跑一遍。
+
+## 通用镜像
+
+每个沙箱都从通用镜像起（#17），Dockerfile 在 `image/` 里，构建上下文是整个 `apps/host/sandbox` 目录：
+
+```
+cd apps/host/sandbox
+docker build -f image/Dockerfile --build-arg SEEKCLOUD_IMAGE_VERSION=$(cat image/VERSION) -t seekcloud-sandbox:$(cat image/VERSION) .
+```
+
+宿主机用环境变量 `SEEKCLOUD_SANDBOX_IMAGE` 指定用哪个镜像。
+
+- **基础系统**：Ubuntu 24.04。
+- **工具链**：Node（系统的一份，默认 22，装在 `/usr/local`，带 corepack 和 pnpm）、Python 3.12（pip、venv、uv）、Go、Rust（rustfmt、clippy）、Java 21（Maven）。
+- **其他**：Docker 引擎（compose、buildx）、git 和 Git LFS、`gh`、常用命令行工具、Chromium 和 Playwright。浏览器在 `/opt/pw-browsers`，任何目录里都能 `require('playwright')`。
+- **版本**：各工具链装的是构建当时的最新稳定版，下载的东西都按官方给的 SHA-256 核对。装了哪个版本记在镜像的 `/etc/seekcloud/versions` 里；镜像自己的版本号在 `image/VERSION`，也写在镜像的标签 `cn.seekcloud.image.version` 上。
+- **dsh**：用镜像里单独的一份 Node（≥ 24.9，在 `/opt/seekcloud/node`），`/usr/local/bin/dsh` 按绝对路径用它启动。管理员改 PATH、换系统 Node 的版本都不影响 dsh。遥测在镜像里就关了（`DSH_TELEMETRY_MODE=DISABLED`）。
+- **本目录的文件**：签名助手、git 钩子、dsh 的基线配置装在上面几节说的位置；`/etc/seekcloud/commit-trailer` 默认是 `on`，宿主机准备沙箱时按设置重写。
+- **第一个进程**：`tini` 下面跑 `seekcloud-init`，它起沙箱里的 Docker（退出了就再起），然后一直待着。宿主机和 Agent 的命令都用 `docker exec` 进来。
+
+`image/check.sh` 是镜像的自检：在用这个镜像建的沙箱里跑，检查各工具链能编译运行、沙箱里的 Docker、Chromium、dsh 和系统 Node 互不影响、git 钩子。`.github/workflows/sandbox-image.yml` 在测试机上构建镜像，再用 Sysbox 建一个沙箱跑它。
+
+发布镜像（推到镜像仓库）跟着发布包一起做（#94）。镜像里有 GPL 许可证的系统软件（git、bash 等，来自 Ubuntu 的软件包），发布时要附上取得源代码的方式。
