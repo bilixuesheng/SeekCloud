@@ -45,18 +45,3 @@ jobs:
           read -r inside outside _ < <(docker exec "$name" head -n1 /proc/self/uid_map)
           echo "用户映射：容器里的 $inside → 宿主机的 $outside"
           [[ "$inside" == 0 && "$outside" != 0 ]]
-      # 探查测试机（#18 开工前）：只读，跑完就删掉这一步。
-      - name: 探查
-        run: |
-          set +e
-          echo "== 系统"; uname -r; nproc; free -m | head -2
-          echo "== 文件系统"; df -hT / /var/lib/docker 2>&1; findmnt -no SOURCE,FSTYPE,OPTIONS /
-          echo "== Docker"; docker info --format 'driver={{.Driver}} cgroup={{.CgroupVersion}}/{{.CgroupDriver}} root={{.DockerRootDir}}'
-          docker info --format '{{json .Runtimes}}'; cat /etc/docker/daemon.json 2>&1
-          echo "== Sysbox 加磁盘上限"; docker run --rm --runtime=sysbox-runc --storage-opt size=1G alpine df -h / 2>&1 | tail -3
-          echo "== Sysbox 加内存和 CPU 上限"; docker run --rm --runtime=sysbox-runc --memory 256m --memory-swap 256m --cpus 1 alpine sh -c 'cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/cpu.max' 2>&1
-          echo "== 网络"; ip -br addr; docker network ls
-          gw=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
-          docker run --rm --runtime=sysbox-runc alpine sh -c "nc -z -w 3 $gw 22 && echo 宿主机22端口=通 || echo 宿主机22端口=不通" 2>&1
-          echo "== Sysbox 的数据目录"; ls /var/lib/sysbox 2>&1 | head; du -sh /var/lib/sysbox 2>/dev/null
-
