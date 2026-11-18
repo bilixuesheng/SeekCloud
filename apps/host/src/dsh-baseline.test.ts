@@ -77,9 +77,8 @@ describe("dsh 的基线配置", () => {
           /timeoutMs: 120000\n\s+maxTimeoutMs: 600000/,
         );
         // Claude Code 技能的插件：按基线文件旁边的路径插进去（dsh-real.test.ts 测它真的生效）
-        expect(stdout).toMatch(
-          /id: seekcloud-claude-code-skills\n\s+name: .*claude-code-skills\.js/,
-        );
+        // （路径长的时候 dsh 会把 name 折到下一行，所以只看这一行里有没有插件的文件名）
+        expect(configOf(stdout, "seekcloud-claude-code-skills")).toContain("claude-code-skills.js");
       } finally {
         await rm(home, { recursive: true, force: true });
       }
