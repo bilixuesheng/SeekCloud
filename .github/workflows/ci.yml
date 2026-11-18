@@ -35,7 +35,7 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-  # 用真的 dsh 测基线配置和 Claude Code 技能的插件（apps/host/src/dsh-*.test.ts）：
+  # 用真的 dsh 测基线配置、SeekCloud 的 dsh 插件和 Agent 适配接口的契约测试（apps/host/src/dsh-*.test.ts、src/agent/）：
   # dsh 要 Node 24.9 以上，版本按 apps/host/sandbox/dsh/VERSION 装，模型服务是假的，不需要任何密钥。
   dsh:
     runs-on: ubuntu-24.04
@@ -56,4 +56,4 @@ jobs:
       - name: 测试
         env:
           SEEKCLOUD_DSH_BIN: ${{ runner.temp }}/dsh/node_modules/.bin/dsh
-        run: pnpm --filter @seekcloud/host exec vitest run src/dsh-
+        run: pnpm --filter @seekcloud/host exec vitest run src/dsh- src/agent/

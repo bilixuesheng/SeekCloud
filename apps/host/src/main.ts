@@ -1,4 +1,5 @@
 import { PROTOCOL_VERSION } from "@seekcloud/protocol";
+import { SandboxAgents } from "./agent/sandbox-agents";
 import { GitSessions } from "./git-proxy/sessions";
 import { startGitProxy } from "./git-proxy/start";
 import type { ModelGatewayLink } from "./model-gateway/forward";
@@ -80,11 +81,12 @@ async function main() {
       }
     : undefined;
 
+  // 只监听沙箱网桥上的地址，不监听对外的网卡（#18 评论第 4 条）。
+  const gitProxyHost = process.env.SEEKCLOUD_GIT_PROXY_HOST ?? sandbox?.gateway ?? "127.0.0.1";
   const signingKeyPath = process.env.SEEKCLOUD_SIGNING_KEY;
   const signerEmail = process.env.SEEKCLOUD_SIGNER_EMAIL;
   if (signingKeyPath && signerEmail) {
-    // 只监听沙箱网桥上的地址，不监听对外的网卡（#18 评论第 4 条）。
-    const host = process.env.SEEKCLOUD_GIT_PROXY_HOST ?? sandbox?.gateway ?? "127.0.0.1";
+    const host = gitProxyHost;
     startGitProxy(
       { dataDir, signingKeyPath, signerEmail, host, port: gitProxyPort },
       sessions,
@@ -105,9 +107,19 @@ async function main() {
     onCommand: (command) => commands(command),
   });
   link = site;
+  // 沙箱里的 dsh（#25）：调模型经 Git 代理端口上的模型网关转发
+  const agents = sandbox
+    ? new SandboxAgents({
+        sandboxes: sandbox.sandboxes,
+        sessions,
+        gateway: { host: gitProxyHost, port: gitProxyPort },
+        emit: (event) => site.send(event),
+      })
+    : undefined;
   const commands = handleCommands({
     sessions,
     sandboxes: sandbox?.sandboxes,
+    agents,
     send: (event) => site.send(event),
   });
   site.start();

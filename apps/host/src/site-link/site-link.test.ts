@@ -8,6 +8,7 @@ import {
 } from "@seekcloud/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
+import type { AgentHost } from "../agent/sandbox-agents";
 import { GitSessions } from "../git-proxy/sessions";
 import type { SandboxHost } from "../sandbox/sandboxes";
 import { handleCommands } from "./commands";
@@ -108,7 +109,7 @@ describe("宿主机到主站的连接", () => {
   });
 
   /** 一个假主站，加一个连上它的守护进程。 */
-  const setup = async (sandboxes?: SandboxHost) => {
+  const setup = async (sandboxes?: SandboxHost, agents?: AgentHost) => {
     const site = new FakeSite();
     await new Promise((resolve) => site.server.once("listening", resolve));
     const sessions = new GitSessions();
@@ -129,6 +130,7 @@ describe("宿主机到主站的连接", () => {
       sessions,
       send: (e) => link.send(e),
       sandboxes,
+      agents,
       log: (m) => logs.push(m),
     });
     cleanup.push(async () => {
@@ -296,6 +298,62 @@ describe("宿主机到主站的连接", () => {
       type: "agent",
       event: { type: "turn.ended", reason: "failed", error: { code: "internal" } },
     });
+  });
+
+  it("有 Agent 时：开始回合交给它（带上是不是第一个回合），插话、停止也转过去；删除沙箱时先断开它", async () => {
+    const calls: unknown[] = [];
+    const agents: AgentHost = {
+      async startTurn(sessionId, input) {
+        calls.push(["start", sessionId, input]);
+      },
+      async inject(sessionId, turnId, text) {
+        calls.push(["inject", sessionId, turnId, text]);
+      },
+      async stopTurn(sessionId, turnId) {
+        calls.push(["stop", sessionId, turnId]);
+      },
+      close(sessionId) {
+        calls.push(["close", sessionId]);
+      },
+    };
+    const { site } = await setup(undefined, agents);
+    site.command({
+      type: "start_turn",
+      sessionId: "s1",
+      turnId: "t1",
+      text: "hi",
+      model: "deepseek-flash",
+      effort: "high",
+      firstTurn: true,
+    });
+    site.command({ type: "inject_message", sessionId: "s1", turnId: "t1", text: "插话" });
+    site.command({ type: "stop_turn", sessionId: "s1", turnId: "t1" });
+    // 旧版本的主站不填 firstTurn：按不是第一个回合处理
+    site.command({
+      type: "start_turn",
+      sessionId: "s1",
+      turnId: "t2",
+      text: "again",
+      model: "deepseek-flash",
+      effort: "low",
+    });
+    site.command({ type: "destroy_sandbox", sessionId: "s1" });
+    await site.until(() => calls.length === 5);
+    expect(calls).toContainEqual([
+      "start",
+      "s1",
+      { turnId: "t1", text: "hi", model: "deepseek-flash", effort: "high", firstTurn: true },
+    ]);
+    expect(calls).toContainEqual(["inject", "s1", "t1", "插话"]);
+    expect(calls).toContainEqual(["stop", "s1", "t1"]);
+    expect(calls).toContainEqual([
+      "start",
+      "s1",
+      { turnId: "t2", text: "again", model: "deepseek-flash", effort: "low", firstTurn: false },
+    ]);
+    expect(calls).toContainEqual(["close", "s1"]);
+    // 回合交给 Agent 以后，不再替它回失败
+    expect(site.events()).toEqual([]);
   });
 
   it("不认识的命令（主站比宿主机新）记一笔、照样确认", async () => {

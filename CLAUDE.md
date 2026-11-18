@@ -79,7 +79,23 @@
 - 宿主机（`apps/host`）：GitHub 工具服务（MCP，`/mcp`）在 `src/github-tools/`，测试接假的 GitHub API；dsh 怎么接见 `apps/host/sandbox/README.md`。Git 代理在 `src/git-proxy/`，提交签名在 `src/signing/`，沙箱里要装的签名助手和 git 配置在 `apps/host/sandbox/`。测试用真的 `git`（`git http-backend` 当假 GitHub）、`openssl` 和 `ssh-keygen`，云端会话里先运行 `apt-get install -y openssh-client`。生成签名密钥：`pnpm --filter @seekcloud/host signing-key <私钥路径>`，打印出来的公钥加到 SeekCloud 账号的 GitHub 签名密钥里。dsh 的基线配置（`apps/host/sandbox/dsh/baseline.patch.yml`）和 Claude Code 技能的插件（同目录的 `claude-code-skills.js`）的测试在普通 CI 里只查文件、用假的 dsh 上下文；要用真的 dsh 验（`src/dsh-real.test.ts`：真的 dsh 跑一个回合，模型服务是假的 `src/testing/fake-model-server.ts`，用 `DEEPSEEK_BASE_URL` 指过去），在一个临时目录里用 Node 24.9 以上运行 `npm i @deepseek-ai/dsh@$(cat apps/host/sandbox/dsh/VERSION)`，再设 `SEEKCLOUD_DSH_BIN=<临时目录>/node_modules/.bin/dsh` 跑宿主机的测试（PATH 里的 node 也要是 24.9 以上）。CI 的 dsh 那一项就是这么跑的。宿主机的环境变量：`SEEKCLOUD_SITE_URL`（主站对外的地址）、`SEEKCLOUD_HOST_KEY`（宿主机密钥）、`SEEKCLOUD_VERSION`、`SEEKCLOUD_SIGNING_KEY`（签名私钥路径）、`SEEKCLOUD_SIGNER_EMAIL`（SeekCloud 账号的邮箱）、`SEEKCLOUD_GIT_PROXY_HOST`、`SEEKCLOUD_GIT_PROXY_PORT`、`SEEKCLOUD_HOST_DATA`。
 - 沙箱（#18、ADR 0005）在 `apps/host/src/sandbox/`：`sandboxes.ts` 的 `Sandboxes`（按会话 ID 建、启、停、删 Sysbox 容器，守护进程重启后按容器标签认回；`exec` 在沙箱里跑命令，超时杀掉它起的所有进程；`protect` 把 Agent 的进程设成内存用满时不杀）、`network.ts`（专用网络 `seekcloud-sandbox`，网桥 `seekcloud0`，沙箱之间不通；`applyFirewall` 只放行网桥地址上给沙箱的端口）、`docker.ts`（调 docker 命令行，参数只用数组）。守护进程要用 root 跑（防火墙、OOM 优先级）。宿主机的环境变量：`SEEKCLOUD_SANDBOX_IMAGE`（不配就不建沙箱）、`SEEKCLOUD_SANDBOX_RUNTIME`（默认 `sysbox-runc`）、`SEEKCLOUD_SANDBOX_CPUS`（默认 4）、`SEEKCLOUD_SANDBOX_MEMORY_MB`（默认 4096）、`SEEKCLOUD_SANDBOX_SUBNET`（不配由 Docker 挑）；Git 代理默认监听网桥的地址。单个沙箱的磁盘配额做不到（ADR 0005），上报 `diskQuota: false`。
 - 沙箱的测试（缝 ②）：`src/sandbox/*.docker.test.ts` 设 `SEEKCLOUD_DOCKER_TESTS=1` 才跑，本机有 Docker 就行（运行时默认 `runc`）。云端会话里先在后台起 `dockerd`，再 `SEEKCLOUD_DOCKER_TESTS=1 pnpm --filter @seekcloud/host exec vitest run src/sandbox`。云端会话的 root 调不低 OOM 优先级，那一半会跳过。`*.sysbox.test.ts`（沙箱里跑 Docker、用户映射、Sysbox 的数据目录）只在测试机上跑。测试机上 Runner 不是 root，防火墙和 OOM 优先级借特权容器做（`SEEKCLOUD_TEST_ROOT=docker`）。Docker Hub 不登录拉镜像有次数限制，测试只在本机没有镜像时才拉。
-- Agent 适配接口（#25）在做：dsh 由沙箱里常驻的运行器托管（`apps/host/sandbox/runner/seekcloud-runner.mjs`，守护进程断开重连不丢、不重复），守护进程这边连它的是 `apps/host/src/agent/runner-link.ts`（测试 `runner.test.ts` 用本机进程起运行器）。逐字输出靠基线配置插进的 `apps/host/sandbox/dsh/live-output.js`（写到 dsh 的第 4 个文件描述符）。dsh 0.2.2-rc.3 的 SDK 实测结果和实现方案见 #25 的 2026-11-18 评论。
+- Agent 适配接口（#25）在 `apps/host/src/agent/`：
+  - **运行器**：dsh 由沙箱里常驻的运行器托管（`apps/host/sandbox/runner/seekcloud-runner.mjs`，守护进程断开重连不丢、不重复），守护进程这边连它的是 `runner-link.ts`。
+  - **适配接口**：`dsh-agent.ts` 的 `DshAgent` 用 SDK（JSON-RPC）驱动 dsh。开始回合先 initialize，不是会话的第一个回合就先 `session/resume`（被拒就失败），再 `session/prompt`。插话再发一次 prompt；停止就停掉 dsh 进程；换模型、思考强度就重启 dsh。
+  - **事件转换**：`dsh-events.ts` 把 dsh 的事件转成协议包的事件；平台的回合到整个 Agent 闲下来才结束。
+  - **沙箱里的接法**：`sandbox-agents.ts`。dsh 经 Git 代理端口上的模型网关调模型，API key 是会话临时令牌，权限是 `danger-full-access`（沙箱就是边界）。`start_turn` 的 `firstTurn` 由主站按"这个会话以前有没有回合到过 Agent"填。
+  - **逐字输出**：靠基线配置插进的 `apps/host/sandbox/dsh/live-output.js`，写到 dsh 的第 4 个文件描述符。
+  - **系统提示词**：是基线配置里 `system-prompt` 的 `personaSuffix`。
+  - **测试**：
+    - 契约测试（缝 ③）`dsh-agent.real.test.ts`：真的 dsh、本机的运行器、按脚本回复的假模型（`src/testing/fake-model-server.ts` 的 `script`），设 `SEEKCLOUD_DSH_BIN` 才跑；
+    - `runner.test.ts` 用假的 dsh；
+    - `dsh-events.test.ts` 不用 dsh。
+  - dsh 0.2.2-rc.3 的 SDK 实测结果见 #25 的 2026-11-18 评论。
+  - **还没做的**：
+    - 选择题和批准的卡片：现在不开批准；dsh 问选择题时回不支持；
+    - 命令时长；
+    - 克隆仓库以后把工作目录指到主仓库；
+    - 守护进程重启时不打断正在跑的回合（#111）。
 - 通用镜像（#17）在 `apps/host/sandbox/image/`：`Dockerfile`（构建上下文是 `apps/host/sandbox`，构建命令见 `apps/host/sandbox/README.md` 的"通用镜像"）、`check.sh`（镜像的自检，在沙箱里跑）、`VERSION`（镜像的版本号）。改了 `apps/host/sandbox/` 下的东西，推送以后看测试机上 Sandbox image 工作流的结果（构建要十来分钟）。云端会话里的容器上不了网，镜像只在测试机上构建。
 - 测试机（#14，用户买的一台香港 KVM 云服务器，装 Docker Engine 和 Sysbox）：注册成本仓库的 GitHub 自托管 Runner，标签 `sysbox`，测试机上不装、不登录 Claude 的任何东西（用户 2026-11-18 定的）。引导脚本是 `scripts/test-machine.sh`（检查是不是完整的虚拟机、装 Docker 和 Sysbox、自检、注册 Runner），用户在测试机上 `curl -fsSLo test-machine.sh https://raw.githubusercontent.com/bilixuesheng/SeekCloud/main/scripts/test-machine.sh && sudo bash test-machine.sh`。要真沙箱的测试单独一个工作流，`runs-on: [self-hosted, sysbox]`，只在本仓库分支的推送和手动触发时跑，不用 `pull_request` 触发；会话推送以后看这个工作流的结果和日志，上不了机器调试。测试机的地址、密码不写进仓库和工单；工作流的日志是公开的，测试和脚本里也不打印网卡地址（2026-11-18 探查时打印过一次公网地址，那次的日志已经删了）。
 - SSE 接口用 `browser.stream(path)` 测（`src/testing/event-stream.ts`），用完要 `close()`。`t.admin()` 得到一个已登录的管理员浏览器（第一次调用时用 `t.adminPassword` 设置密码，每次调用都是一台新设备）；`t.adminWithGitHub(login, ...仓库)` 再关联 GitHub、装好 App，再调用一次会换成新的 GitHub 账号。

@@ -760,7 +760,23 @@ export class Sessions {
       text: input.text,
       model,
       effort,
+      firstTurn: !(await this.#reachedAgent(tx, session.id)),
     };
+  }
+
+  /** 这个会话以前有没有哪个回合到过 Agent（有过 turn.started）：没有的话，Agent 那边还没有这个会话。 */
+  async #reachedAgent(tx: Tx, sessionId: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ seq: sessionEvents.seq })
+      .from(sessionEvents)
+      .where(
+        and(
+          eq(sessionEvents.sessionId, sessionId),
+          sql`${sessionEvents.body}->>'type' = 'turn.started'`,
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
   }
 
   /** 回合结束后，排队的消息合成下一回合的开头。没有排队的消息时返回 undefined。 */
@@ -855,6 +871,7 @@ export class Sessions {
       text: turn.input,
       model: session.model,
       effort: session.effort,
+      firstTurn: !(await this.#reachedAgent(tx, session.id)),
     };
   }
 
