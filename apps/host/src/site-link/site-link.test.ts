@@ -9,6 +9,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { GitSessions } from "../git-proxy/sessions";
+import type { SandboxHost } from "../sandbox/sandboxes";
 import { handleCommands } from "./commands";
 import { connectUrl, SiteLink } from "./connection";
 
@@ -107,7 +108,7 @@ describe("宿主机到主站的连接", () => {
   });
 
   /** 一个假主站，加一个连上它的守护进程。 */
-  const setup = async () => {
+  const setup = async (sandboxes?: SandboxHost) => {
     const site = new FakeSite();
     await new Promise((resolve) => site.server.once("listening", resolve));
     const sessions = new GitSessions();
@@ -127,6 +128,7 @@ describe("宿主机到主站的连接", () => {
     const commands = handleCommands({
       sessions,
       send: (e) => link.send(e),
+      sandboxes,
       log: (m) => logs.push(m),
     });
     cleanup.push(async () => {
@@ -159,7 +161,7 @@ describe("宿主机到主站的连接", () => {
     expect(link.protocol).toBe(PROTOCOL_VERSION);
   });
 
-  it("主站的命令进 Git 代理的会话表；准备沙箱先回建不了（沙箱在 #18 里做），回合照失败结束", async () => {
+  it("主站的命令进 Git 代理的会话表；没配沙箱时准备沙箱回建不了，回合照失败结束", async () => {
     const { site, sessions } = await setup();
     const repos = [
       {
@@ -213,6 +215,87 @@ describe("宿主机到主站的连接", () => {
     site.command({ type: "destroy_sandbox", sessionId: "s1" });
     await site.until(() => site.lastAck() === 5);
     expect(sessions.get("s1")).toBeUndefined();
+  });
+
+  it("有沙箱时：建好回沙箱好了，建不了回建不了并带参考号（原始报错只进日志）；同一个会话的操作按顺序做，慢的不挡别的会话", async () => {
+    const calls: string[] = [];
+    let release: () => void = () => {};
+    const slow = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sandboxes: SandboxHost = {
+      async prepare(sessionId, aiLabels) {
+        calls.push(`prepare ${sessionId} ${aiLabels.commitTrailer}`);
+        if (sessionId === "slow") await slow;
+        if (sessionId === "broken") throw new Error("docker 说：镜像拉不下来（内部地址 10.0.0.1）");
+      },
+      async setAiLabels(sessionId, aiLabels) {
+        calls.push(`labels ${sessionId} ${aiLabels.commitTrailer}`);
+      },
+      async destroy(sessionId) {
+        calls.push(`destroy ${sessionId}`);
+      },
+      async count() {
+        return 0;
+      },
+    };
+    const { site, logs } = await setup(sandboxes);
+    const prepare = (sessionId: string) =>
+      site.command({
+        type: "prepare_sandbox",
+        sessionId,
+        repos: [],
+        environmentId: "e1",
+        model: "m",
+        effort: "high",
+        aiLabels: { signature: true, commitTrailer: true },
+      });
+    prepare("slow");
+    site.command({
+      type: "set_ai_labels",
+      sessionId: "slow",
+      aiLabels: { signature: true, commitTrailer: false },
+    });
+    site.command({ type: "destroy_sandbox", sessionId: "slow" });
+    prepare("broken");
+    prepare("ok");
+    // slow 还没建好，别的会话照样处理完
+    await site.until(() => site.events().length === 2);
+    const events = site.events().map((e) => e.event);
+    expect(events).toContainEqual({ type: "sandbox.ready", sessionId: "ok" });
+    const failed = events.find((e) => e.type === "sandbox.failed") as {
+      error: { code: string; ref: string };
+    };
+    expect(failed).toMatchObject({ sessionId: "broken", error: { code: "sandbox_unavailable" } });
+    expect(failed.error.ref).toMatch(/^[0-9a-f]{8}$/);
+    expect(JSON.stringify(failed)).not.toContain("10.0.0.1");
+    expect(logs.some((l) => l.includes(failed.error.ref) && l.includes("镜像拉不下来"))).toBe(true);
+    expect(calls.filter((c) => c.includes("slow"))).toEqual(["prepare slow true"]);
+
+    release();
+    await site.until(() => site.events().length === 3);
+    expect(site.events()[2]?.event).toEqual({ type: "sandbox.ready", sessionId: "slow" });
+    await site.until(() => calls.includes("destroy slow"));
+    expect(calls.filter((c) => c.includes("slow"))).toEqual([
+      "prepare slow true",
+      "labels slow false",
+      "destroy slow",
+    ]);
+
+    // Agent 还没接上（#25）：回合照失败结束
+    site.command({
+      type: "start_turn",
+      sessionId: "ok",
+      turnId: "t1",
+      text: "hi",
+      model: "m",
+      effort: "high",
+    });
+    await site.until(() => site.events().length === 4);
+    expect(site.events()[3]?.event).toMatchObject({
+      type: "agent",
+      event: { type: "turn.ended", reason: "failed", error: { code: "internal" } },
+    });
   });
 
   it("不认识的命令（主站比宿主机新）记一笔、照样确认", async () => {
