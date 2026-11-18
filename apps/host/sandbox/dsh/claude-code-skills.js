@@ -40,13 +40,21 @@ export function apply(ctx, config = {}) {
   ctx.skills.registerProvider((control) => {
     /** 列过的目录和当时的样子，变了就让 dsh 重新列。 */
     const seen = new Map();
+    // 一轮没看完时不开下一轮：不然几轮同时看到同一处变化，会让 dsh 重新列好几次
+    let polling = false;
     const timer = setInterval(async () => {
-      for (const [dir, before] of seen) {
-        const now = await signature(dir);
-        if (now !== before) {
-          seen.set(dir, now);
-          control.invalidate();
+      if (polling) return;
+      polling = true;
+      try {
+        for (const [dir, before] of seen) {
+          const now = await signature(dir);
+          if (now !== before) {
+            seen.set(dir, now);
+            control.invalidate();
+          }
         }
+      } finally {
+        polling = false;
       }
     }, config.pollMs ?? POLL_MS);
     timer.unref?.();
