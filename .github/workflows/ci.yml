@@ -34,3 +34,26 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+
+  # 用真的 dsh 测基线配置和 Claude Code 技能的插件（apps/host/src/dsh-*.test.ts）：
+  # dsh 要 Node 24.9 以上，版本按 apps/host/sandbox/dsh/VERSION 装，模型服务是假的，不需要任何密钥。
+  dsh:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 装真的 dsh
+        run: |
+          mkdir -p "$RUNNER_TEMP/dsh"
+          cd "$RUNNER_TEMP/dsh"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund "@deepseek-ai/dsh@$(cat "$GITHUB_WORKSPACE/apps/host/sandbox/dsh/VERSION")"
+      - name: 测试
+        env:
+          SEEKCLOUD_DSH_BIN: ${{ runner.temp }}/dsh/node_modules/.bin/dsh
+        run: pnpm --filter @seekcloud/host exec vitest run src/dsh-

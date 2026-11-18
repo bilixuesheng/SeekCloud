@@ -71,6 +71,44 @@ check "dsh 叠上基线配置能合成配置" sh -c \
   'dsh --profile sdk --patch /usr/local/share/seekcloud/dsh/baseline.patch.yml --dump-config >/dev/null'
 check "dsh 的遥测关着" test "${DSH_TELEMETRY_MODE:-}" = DISABLED
 
+echo "== dsh 叠上基线配置跑一个回合（假的模型服务）"
+cat > fake-model.mjs <<'JS'
+import http from "node:http";
+import { appendFileSync, writeFileSync } from "node:fs";
+const server = http.createServer((req, res) => {
+  let body = "";
+  req.on("data", (c) => (body += c));
+  req.on("end", () => {
+    appendFileSync("requests.log", JSON.stringify({ path: req.url, body }) + "\n");
+    if (req.method !== "POST" || !req.url.endsWith("/v1/messages")) { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    const send = (t, d) => res.write(`event: ${t}\ndata: ${JSON.stringify({ type: t, ...d })}\n\n`);
+    send("message_start", { message: { id: "m", type: "message", role: "assistant", model: "deepseek-chat", content: [], stop_reason: null, usage: { input_tokens: 1, output_tokens: 0 } } });
+    send("content_block_start", { index: 0, content_block: { type: "text", text: "" } });
+    send("content_block_delta", { index: 0, delta: { type: "text_delta", text: "好的" } });
+    send("content_block_stop", { index: 0 });
+    send("message_delta", { delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } });
+    send("message_stop", {});
+    res.end();
+  });
+});
+server.listen(0, "127.0.0.1", () => writeFileSync("port", String(server.address().port)));
+JS
+node fake-model.mjs &
+fake_pid=$!
+for _ in $(seq 1 50); do [ -s port ] && break; sleep 0.1; done
+mkdir -p skills-repo/.claude/skills/deploy-check skills-repo/.claude/commands skills-repo/sub dsh-home
+printf -- '---\nname: deploy-check\ndescription: 发布前检查清单\n---\n先跑测试。\n' > skills-repo/.claude/skills/deploy-check/SKILL.md
+printf -- '---\ndescription: Review the current diff\n---\nReview $ARGUMENTS.\n' > skills-repo/.claude/commands/review.md
+git init -q skills-repo
+check "回合跑完，回复是假模型说的" sh -c "cd skills-repo/sub &&
+  HOME=$work/dsh-home DSH_HOME=$work/dsh-home/.dsh DEEPSEEK_API_KEY=fake DEEPSEEK_BASE_URL=http://127.0.0.1:\$(cat $work/port) \
+  dsh --profile headless --patch /usr/local/share/seekcloud/dsh/baseline.patch.yml 你好 | grep -qx 好的"
+check "请求里没有会话日志和插件清单" sh -c '! grep -q "dsh_session_log\|dsh_plugin_packages" requests.log'
+check "模型看得到 .claude/skills 和 .claude/commands 的技能" sh -c \
+  'grep -q "deploy-check\`: 发布前检查清单" requests.log && grep -q "review\`: Review the current diff" requests.log'
+kill "$fake_pid" 2>/dev/null
+
 echo "== SeekCloud 的文件"
 check "签名助手" test -x /usr/local/bin/seekcloud-sign
 check "git 钩子是链接到 _dispatch 的" sh -c \
