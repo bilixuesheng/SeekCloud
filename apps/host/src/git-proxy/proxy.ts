@@ -4,6 +4,7 @@ import https from "node:https";
 import type { Duplex } from "node:stream";
 import { TLSSocket } from "node:tls";
 import { handleMcpHttp } from "../github-tools/mcp";
+import { forwardToGateway, type ModelGatewayLink } from "../model-gateway/forward";
 import { gitObjectSigner, looksLikeGitObject, type SigningKey, sshSign } from "../signing/sshsig";
 import type { ProxyCa } from "./ca";
 import { parseReceivePack, type ReceivePackCommands, rejectionReport } from "./receive-pack";
@@ -21,6 +22,8 @@ export interface GitProxyOptions {
   signerEmail: string;
   /** 每个 GitHub 域名转发到哪里，默认 https://域名。测试里换成本地的假 GitHub。 */
   upstreams?: Partial<Record<string, string>>;
+  /** 模型网关在主站上的那一半。没连主站时为空，沙箱调模型一律回"连不上主站"。 */
+  modelGateway?: ModelGatewayLink;
 }
 
 interface Target {
@@ -55,7 +58,7 @@ const MAX_INSPECT_BYTES = 1024 * 1024;
  *
  * 沙箱的 HTTPS_PROXY 指向它，代理凭据是会话临时令牌。发往 GitHub 的 HTTPS 请求用自己的 CA 解密，
  * 按规则检查后换上用户的 GitHub 令牌再转发。同一个端口上还有给提交签名的 POST /sign，
- * 以及给 Agent 用的 GitHub 工具服务 POST /mcp。
+ * 给 Agent 用的 GitHub 工具服务 POST /mcp，以及转给主站模型网关的 /v1/…（model-gateway/forward.ts）。
  * 其他域名先一律拒绝；出站网络策略接上以后由它处理。
  */
 export function createGitProxy(options: GitProxyOptions): http.Server {
@@ -80,6 +83,13 @@ export function createGitProxy(options: GitProxyOptions): http.Server {
       if (path === "/mcp") {
         const apiBase = options.upstreams?.["api.github.com"];
         return guard(res, handleMcpHttp(options.sessions, req, res, apiBase));
+      }
+      if (path.startsWith("/v1/")) {
+        const gateway = options.modelGateway ?? {
+          siteUrl: "http://localhost",
+          credential: () => undefined,
+        };
+        return guard(res, forwardToGateway(gateway, options.sessions, req, res));
       }
       return guard(res, handleSign(options, req, res));
     }

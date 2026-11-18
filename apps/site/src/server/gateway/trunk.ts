@@ -1,6 +1,6 @@
 import { eq, lt } from "drizzle-orm";
 import type { AppDeps } from "../app";
-import { modelProviders, modelUsage, upstreamErrors } from "../db/schema";
+import { modelProviders, modelUsage, upstreamErrors, webToolUsage } from "../db/schema";
 import type { ErrorPresentation, ModelAdmission, ProviderRouting, ProviderTarget } from "../ports";
 import { findModel } from "../sessions/models";
 
@@ -88,47 +88,75 @@ export async function markProviderKeyRejected(
     .where(eq(modelProviders.slug, provider));
 }
 
+/** DeepSeek 的联网搜索、抓取接口在接口地址的同一个域名下，路径是 /v1/tools/…（和 dsh 的约定一样）。 */
+const TOOLS_PREFIX = "/v1/tools/";
+
+/**
+ * 用存着的 key 建一个 DeepSeek 官方的上游；没填 key（或者解不开）时为空。
+ * model 是 Messages 请求换成的上游模型名（我们的模型 ID 就是 DeepSeek 的模型名）。
+ */
+async function deepseekTarget(
+  deps: ProviderDeps,
+  model?: string,
+): Promise<ProviderTarget | undefined> {
+  const [row] = await deps.db
+    .select()
+    .from(modelProviders)
+    .where(eq(modelProviders.slug, DEEPSEEK.slug));
+  if (!row?.apiKey) return undefined;
+  const apiKey = deps.secrets.open(row.apiKey);
+  if (apiKey === undefined) {
+    // 换过 SEEKCLOUD_SECRET_KEY，旧的密文解不开：当作没填，管理员重新填一次。
+    console.warn(
+      "模型服务的 API key 无法解密（SEEKCLOUD_SECRET_KEY 可能换过），请在设置里重新填写",
+    );
+    return undefined;
+  }
+  const base = row.baseUrl.replace(/\/+$/, "");
+  const origin = new URL(base).origin;
+  const headers = (path: string, incoming: Headers) => {
+    const out = new Headers({ "user-agent": `SeekCloud/${deps.version}` });
+    // 联网工具认 Authorization: Bearer，Messages 和 Files 认 x-api-key。
+    if (path.startsWith(TOOLS_PREFIX)) {
+      out.set("authorization", `Bearer ${apiKey}`);
+      return out;
+    }
+    out.set("x-api-key", apiKey);
+    for (const name of FORWARDED_HEADERS) {
+      const value = incoming.get(name);
+      if (value) out.set(name, value);
+    }
+    if (!out.has("anthropic-version")) out.set("anthropic-version", DEFAULT_ANTHROPIC_VERSION);
+    return out;
+  };
+  return {
+    provider: row.slug,
+    url: (path) => (path.startsWith(TOOLS_PREFIX) ? `${origin}${path}` : `${base}${path}`),
+    headers,
+    prepare: ({ headers: incoming, body }) => {
+      const out = headers("/v1/messages", incoming);
+      out.set("content-type", "application/json");
+      const stripped = stripHarnessFields(body);
+      return { headers: out, body: model ? { ...stripped, model } : stripped };
+    },
+  };
+}
+
 /**
  * 主干的提供方路由：只有 DeepSeek 官方一个，没填 key 时没有可用的。
  * 我们的模型 ID 就是 DeepSeek 官方的模型名（和 dsh 的模型目录一致），不用换。
+ * Files 和联网搜索也走 DeepSeek 官方，用同一把 key。
  */
 export function deepseekRouting(deps: ProviderDeps): ProviderRouting {
   return {
     async route(model) {
       if (!findModel(model)) return [];
-      const [row] = await deps.db
-        .select()
-        .from(modelProviders)
-        .where(eq(modelProviders.slug, DEEPSEEK.slug));
-      if (!row?.apiKey) return [];
-      const apiKey = deps.secrets.open(row.apiKey);
-      if (apiKey === undefined) {
-        // 换过 SEEKCLOUD_SECRET_KEY，旧的密文解不开：当作没填，管理员重新填一次。
-        console.warn(
-          "模型服务的 API key 无法解密（SEEKCLOUD_SECRET_KEY 可能换过），请在设置里重新填写",
-        );
-        return [];
-      }
-      const base = row.baseUrl.replace(/\/+$/, "");
-      const target: ProviderTarget = {
-        provider: row.slug,
-        url: (path) => `${base}${path}`,
-        prepare: ({ headers, body }) => {
-          const out = new Headers({
-            "content-type": "application/json",
-            "user-agent": `SeekCloud/${deps.version}`,
-            "x-api-key": apiKey,
-          });
-          for (const name of FORWARDED_HEADERS) {
-            const value = headers.get(name);
-            if (value) out.set(name, value);
-          }
-          if (!out.has("anthropic-version"))
-            out.set("anthropic-version", DEFAULT_ANTHROPIC_VERSION);
-          return { headers: out, body: { ...stripHarnessFields(body), model } };
-        },
-      };
-      return [target];
+      const target = await deepseekTarget(deps, model);
+      return target ? [target] : [];
+    },
+    async service() {
+      const target = await deepseekTarget(deps);
+      return target ? [target] : [];
     },
   };
 }
@@ -137,6 +165,18 @@ export function deepseekRouting(deps: ProviderDeps): ProviderRouting {
 export function usageAdmission(deps: Pick<AppDeps, "db" | "clock">): ModelAdmission {
   return {
     admit: async () => ({ ok: true }),
+    admitWebTool: async () => ({ ok: true }),
+    async recordWebTool(usage) {
+      await deps.db.insert(webToolUsage).values({
+        userId: usage.userId,
+        sessionId: usage.sessionId,
+        turnId: usage.turnId,
+        tool: usage.tool,
+        provider: usage.provider,
+        ok: usage.ok,
+        createdAt: deps.clock.now(),
+      });
+    },
     async record(usage) {
       await deps.db.insert(modelUsage).values({
         userId: usage.userId,

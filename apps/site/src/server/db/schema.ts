@@ -20,6 +20,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { WebTool } from "../ports";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull();
 
@@ -322,6 +323,54 @@ export const modelUsage = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("model_usage_session").on(t.sessionId), index("model_usage_at").on(t.createdAt)],
+);
+
+/**
+ * 联网工具的调用（模型网关，#26）：网关替沙箱做的联网搜索和网页抓取，一次一条，记次数不记 token。
+ * provider 是转给了哪个提供方；主站自己去抓的网页为空。
+ */
+export const webToolUsage = pgTable(
+  "web_tool_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    sessionId: uuid("session_id").references(() => sessions.id, { onDelete: "set null" }),
+    turnId: uuid("turn_id"),
+    tool: text("tool").$type<WebTool>().notNull(),
+    provider: text("provider"),
+    // 出错、被拒绝的为 false。
+    ok: boolean("ok").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("web_tool_usage_session").on(t.sessionId),
+    index("web_tool_usage_at").on(t.createdAt),
+  ],
+);
+
+/**
+ * 沙箱经 Files 接口传给提供方的文件（dsh 把图片传上去，Messages 里按文件 ID 引用）。
+ * 同一把 key 下所有会话的文件都在提供方那里，所以网关自己记每个文件是哪个会话传的：
+ * 列表、查看、删除、在 Messages 里引用，都只认本会话的。文件只在传上去的那个提供方那里有。
+ */
+export const modelFiles = pgTable(
+  "model_files",
+  {
+    // 提供方给的文件 ID。
+    id: text("id").primaryKey(),
+    provider: text("provider").notNull(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    filename: text("filename").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    // 提供方记的上传时间（列表按它排）。
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("model_files_session").on(t.sessionId, t.uploadedAt)],
 );
 
 /**

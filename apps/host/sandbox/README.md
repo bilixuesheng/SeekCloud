@@ -84,6 +84,21 @@ Generated-by: SeekCloud (AI)
 - 组织级的工具（团队、issue 类型和字段）只查挂载了仓库的所有者。
 - 代码在 `apps/host/src/github-tools/`，测试接一个假的 GitHub API（`github-tools.test.ts`），在普通 CI 上跑。
 
+## 模型网关
+
+沙箱里的 dsh 调模型、传图片、联网搜索和抓取网页，都发到宿主机本地、和 Git 代理同一个端口的 `/v1/…`，宿主机核对会话临时令牌以后转给主站的模型网关（`src/model-gateway/forward.ts`，ADR 0003）。dsh 的 DeepSeek 接口地址设成 `http://<宿主机地址>:<代理端口>`（不带路径），API key 设成会话临时令牌：
+
+| 路径 | 用途 | dsh 怎么带令牌 |
+|---|---|---|
+| `POST /v1/messages` | 调模型（流式逐个事件转发） | `x-api-key` |
+| `POST /v1/files`、`GET /v1/files`、`GET`/`DELETE /v1/files/{id}` | 上传给模型看的图片；每个会话只看得到自己传的 | `x-api-key` |
+| `POST /v1/tools/search` | 联网搜索（DeepSeek 搜索接口的格式） | `Authorization: Bearer` |
+
+- 这个地址是沙箱直连宿主机，不经过 `HTTPS_PROXY`，任何网络策略下都通。
+- 宿主机转给主站时去掉会话令牌和 dsh 夹带的请求头，只留 `content-type`、`anthropic-version`、`anthropic-beta` 这几个，换上宿主机凭据和会话 ID；路径里带 `..` 或编码过的斜杠的不转。主站剥字段、换上提供方的 key（`apps/site/src/server/gateway/`）。
+- 宿主机还没连上主站时回 503，dsh 会按它自己的规则重试。
+- dsh 的模型目录（它会去取接口地址那个域名下的 `/models`）宿主机不提供，用 dsh 自带的；接 dsh 的时候（#25）核对一下取不到时的表现。
+
 ## dsh 的基线配置
 
 `dsh/baseline.patch.yml` 装进通用镜像的 `/usr/local/share/seekcloud/dsh/`，宿主机启动 dsh 时作为最后一个 `--patch` 叠上去，同时设 `DSH_TELEMETRY_MODE=DISABLED`：

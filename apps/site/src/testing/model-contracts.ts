@@ -42,6 +42,20 @@ const harnessRequest = () => ({
   } as Record<string, unknown>,
 });
 
+function expectNoLeaks(headers: Headers) {
+  const sent = [...headers].map(([k, v]) => `${k}: ${v}`).join("\n");
+  for (const leak of [
+    "x-deepseek-harness",
+    "host-credential-must-not-leak",
+    "session-token-must-not-leak",
+    "must-not-leak",
+    "x-seekcloud-session",
+    "dsh/",
+  ]) {
+    expect(sent, leak).not.toContain(leak);
+  }
+}
+
 export function describeProviderRoutingContract(
   name: string,
   setup: () => Promise<{ routing: ProviderRouting; close(): Promise<void> }>,
@@ -67,20 +81,28 @@ export function describeProviderRoutingContract(
           expect(Object.keys(body).filter((k) => k.startsWith("dsh_"))).toEqual([]);
           expect(JSON.stringify(body.metadata ?? {})).not.toContain("user_id");
           expect(typeof body.model).toBe("string");
-          const sent = [...headers].map(([k, v]) => `${k}: ${v}`).join("\n");
-          for (const leak of [
-            "x-deepseek-harness",
-            "host-credential-must-not-leak",
-            "session-token-must-not-leak",
-            "must-not-leak",
-            "x-seekcloud-session",
-            "dsh/",
-          ]) {
-            expect(sent, leak).not.toContain(leak);
-          }
+          expectNoLeaks(headers);
           expect(target.url("/v1/messages")).toMatch(/^https?:\/\/.+\/v1\/messages$/);
           // 不改动传进来的对象（网关要拿它去试下一个提供方）
           expect(JSON.stringify(input.body)).toBe(before);
+        }
+      } finally {
+        await close();
+      }
+    });
+
+    it("Files 和联网搜索：有可用的提供方；各个接口的请求头同样不带夹带的东西", async () => {
+      const { routing, close } = await setup();
+      try {
+        for (const service of ["files", "web_search"] as const) {
+          const targets = await routing.service({ service, userId: null, sessionId: null });
+          expect(targets.length, service).toBeGreaterThan(0);
+          for (const target of targets) {
+            for (const path of ["/v1/files", "/v1/files/file_1", "/v1/tools/search"]) {
+              expectNoLeaks(target.headers(path, harnessRequest().headers));
+              expect(target.url(path)).toMatch(new RegExp(`^https?://[^/]+(/.*)?${path}$`));
+            }
+          }
         }
       } finally {
         await close();
@@ -100,6 +122,25 @@ export function describeModelAdmissionContract(
         const answer = await admission.admit(call());
         if (answer.ok) expect(answer).toEqual({ ok: true });
         else expect(typeof answer.message).toBe("string");
+      } finally {
+        await close();
+      }
+    });
+
+    it("联网工具的准入也只有两种答复；成功的、出错的都能记，不抛错", async () => {
+      const { admission, close } = await setup();
+      try {
+        const tool = { userId: null, sessionId: null, turnId: null };
+        const answer = await admission.admitWebTool({ tool: "web_search", ...tool });
+        if (answer.ok) expect(answer).toEqual({ ok: true });
+        else expect(typeof answer.message).toBe("string");
+        await admission.recordWebTool({
+          tool: "web_search",
+          ...tool,
+          provider: "deepseek",
+          ok: true,
+        });
+        await admission.recordWebTool({ tool: "web_fetch", ...tool, provider: null, ok: false });
       } finally {
         await close();
       }

@@ -57,6 +57,13 @@
       "when": 1794977248728,
       "tag": "0007_model_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794987939953,
+      "tag": "0008_gateway_files_and_web_tools",
+      "breakpoints": true
     }
   ]
 }
