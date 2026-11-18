@@ -80,6 +80,12 @@ export interface HostReport {
   diskTotal: number;
   /** 正在运行的沙箱数（休眠的不算）。 */
   sandboxes: number;
+  /**
+   * 单个沙箱的磁盘配额生不生效。现在总是 false（ADR 0005）：Docker 加 Sysbox 在 ext4 上限不住单个容器的磁盘，
+   * 沙箱里 Docker 的镜像和卷也不在配额里。运行状况里写明"磁盘配额不生效"，靠宿主机磁盘超过 80% 时先回收
+   * 休眠最久的沙箱兜着。旧版本的宿主机不报这一项。
+   */
+  diskQuota?: boolean;
 }
 
 /**

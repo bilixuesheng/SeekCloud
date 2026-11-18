@@ -424,6 +424,7 @@ describe("宿主机连接", () => {
       diskAvailable: 1e11,
       diskTotal: 5e11,
       sandboxes: 2,
+      diskQuota: false,
     };
     host.sendReport(report);
     await host.until(() => t.hub.status().find((h) => h.name === name)?.report !== undefined);

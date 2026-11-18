@@ -24,5 +24,6 @@ export function hostReport(dataDir: string, sandboxes: number): HostReport {
     diskAvailable,
     diskTotal,
     sandboxes,
+    diskQuota: false,
   };
 }
