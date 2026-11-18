@@ -261,7 +261,11 @@ describe.skipIf(!enabled)("沙箱（真的 Docker）", { timeout: 120_000 }, () 
   it("网络：沙箱之间连不通；只连得上网桥地址上放行的端口，宿主机别的端口连不上", async () => {
     const listen = (host: string) =>
       new Promise<number>((resolve) => {
-        const server = createServer((socket) => socket.end("hi\n"));
+        // nc -z 连上就断（有时直接回复位）：连接上的错误不管
+        const server = createServer((socket) => {
+          socket.on("error", () => {});
+          socket.end("hi\n");
+        });
         servers.push(server);
         server.listen(0, host, () => resolve((server.address() as { port: number }).port));
       });
