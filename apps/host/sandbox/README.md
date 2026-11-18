@@ -114,8 +114,19 @@ dsh --profile sdk [--patch <Agent 模式的叠加配置>] --patch /usr/local/sha
 - 关掉 dsh 自带的定时提醒（`tool-schedule`），定时任务和会话提醒由平台做。插件管理工具保持打开。
 - 前台命令的超时：默认 2 分钟，最长 10 分钟。
 - 工具输出太长时写出来的文件放在 `$DSH_HOME/spill` 下面，沙箱休眠再启动以后还在。
+- 插进同目录的 `claude-code-skills.js`：照 Claude Code 读仓库里的 `.claude/skills/<名字>/SKILL.md` 和 `.claude/commands/<名字>.md`，以及 `~/.claude` 下的同样两个目录。dsh 自己只读 `.dsh/skills`、`.agents/skills`，而且要求 frontmatter 里 `name`、`description` 都写了。
+  - name 不写就用目录名或文件名（转成小写加连字符），description 不写就用正文第一段。
+  - `disable-model-invocation: true` 的只能由人调用，`user-invocable: false` 的只能由模型调用。
+  - 同名时 dsh 原生的目录优先，仓库里的优先于用户目录，技能优先于命令。
 
-`src/dsh-baseline.test.ts` 检查这些。普通 CI 里没有 dsh，只查文件本身；设了 `SEEKCLOUD_DSH_BIN`（指向 dsh 的可执行文件，要 Node 24.9 以上）时，还用 `dsh --profile sdk --dump-config` 合成真的配置，并在 `$DSH_HOME/cordis.patch.yml` 里试着把关掉的重新打开，确认打不开。构建通用镜像时设上它跑一遍。
+dsh 的版本钉在 `dsh/VERSION`（ADR 0004 的"改 dsh 的方式"），通用镜像按它装。
+
+`src/dsh-baseline.test.ts` 检查这些，`src/dsh-claude-skills.test.ts` 用假的 dsh 上下文测插件的规矩。设了 `SEEKCLOUD_DSH_BIN`（指向 dsh 的可执行文件，要 Node 24.9 以上）时还有两项：
+
+- `dsh --profile sdk --dump-config` 合成真的配置，并在 `$DSH_HOME/cordis.patch.yml` 里试着把关掉的重新打开，确认打不开；
+- `src/dsh-real.test.ts` 用真的 dsh 跑一个回合，模型服务是假的（`src/testing/fake-model-server.ts`，dsh 用 `DEEPSEEK_BASE_URL` 指过去）。检查请求里没有会话日志和插件清单、没有遥测上报，模型看得到 `.claude` 里的技能。
+
+CI 的 dsh 那一项按 `dsh/VERSION` 装好 dsh 跑这几个测试；通用镜像的自检在沙箱里也跑一遍同样的回合。
 
 ## 通用镜像
 

@@ -35,3 +35,9 @@
   config:
     timeoutMs: 120000
     maxTimeoutMs: 600000
+
+# Claude Code 的技能和命令（仓库里的 .claude/skills、.claude/commands）：dsh 自己不读，
+# 由同目录的 claude-code-skills.js 读，规矩照 Claude Code（#17）。
+- insert:
+    - id: seekcloud-claude-code-skills
+      name: ./claude-code-skills.js

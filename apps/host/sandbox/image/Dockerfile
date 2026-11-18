@@ -10,7 +10,6 @@ FROM ubuntu:24.04
 
 ARG NODE_MAJOR=22
 ARG DSH_NODE_MAJOR=24
-ARG DSH_VERSION=0.2.2-rc.3
 ARG SEEKCLOUD_IMAGE_VERSION=dev
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -58,14 +57,6 @@ RUN bash /usr/local/lib/seekcloud/install-node.sh "${NODE_MAJOR}" /usr/local \
  && corepack enable \
  && corepack prepare pnpm@latest --activate
 
-# dsh 自己的一份 Node（≥ 24.9，ADR 0004），和系统的 Node 分开：管理员改 PATH、换系统 Node 的版本都不影响 dsh。
-# /usr/local/bin/dsh 用这份 Node 的绝对路径启动 dsh，不经过 PATH 找 node。
-RUN bash /usr/local/lib/seekcloud/install-node.sh "${DSH_NODE_MAJOR}" /opt/seekcloud/node \
- && /opt/seekcloud/node/bin/npm install --global --prefix /opt/seekcloud/dsh "@deepseek-ai/dsh@${DSH_VERSION}" \
- && printf '#!/bin/sh\nexec /opt/seekcloud/node/bin/node /opt/seekcloud/dsh/bin/dsh "$@"\n' > /usr/local/bin/dsh \
- && chmod 755 /usr/local/bin/dsh \
- && /opt/seekcloud/node/bin/npm cache clean --force
-
 # Go：官方的二进制包
 ENV GOPATH=/root/go
 ENV PATH=/usr/local/go/bin:${GOPATH}/bin:${PATH}
@@ -109,10 +100,21 @@ RUN npm install --global "playwright@$(npm view playwright version)" \
  && npm cache clean --force \
  && rm -rf /var/lib/apt/lists/*
 
-# SeekCloud 自己的文件：签名助手、git 钩子、dsh 的基线配置（apps/host/sandbox/README.md）
+# dsh 自己的一份 Node（≥ 24.9，ADR 0004），和系统的 Node 分开：管理员改 PATH、换系统 Node 的版本都不影响 dsh。
+# /usr/local/bin/dsh 用这份 Node 的绝对路径启动 dsh，不经过 PATH 找 node。
+# 版本号在 dsh/VERSION（CI 里测真的 dsh 也按它装）。这几层放在后面：换 dsh 的版本不用重装上面的工具链。
+COPY dsh/VERSION /usr/local/share/seekcloud/dsh/VERSION
+RUN bash /usr/local/lib/seekcloud/install-node.sh "${DSH_NODE_MAJOR}" /opt/seekcloud/node \
+ && /opt/seekcloud/node/bin/npm install --global --prefix /opt/seekcloud/dsh \
+      "@deepseek-ai/dsh@$(cat /usr/local/share/seekcloud/dsh/VERSION)" \
+ && printf '#!/bin/sh\nexec /opt/seekcloud/node/bin/node /opt/seekcloud/dsh/bin/dsh "$@"\n' > /usr/local/bin/dsh \
+ && chmod 755 /usr/local/bin/dsh \
+ && /opt/seekcloud/node/bin/npm cache clean --force
+
+# SeekCloud 自己的文件：签名助手、git 钩子、dsh 的基线配置和 Claude Code 技能的插件（apps/host/sandbox/README.md）
 COPY seekcloud-sign /usr/local/bin/seekcloud-sign
 COPY git-hooks/ /usr/local/share/seekcloud/git-hooks/
-COPY dsh/baseline.patch.yml /usr/local/share/seekcloud/dsh/baseline.patch.yml
+COPY dsh/ /usr/local/share/seekcloud/dsh/
 COPY image/seekcloud-init /usr/local/bin/seekcloud-init
 COPY image/check.sh /usr/local/lib/seekcloud/check.sh
 
@@ -124,7 +126,7 @@ RUN mkdir -p /etc/seekcloud /workspace \
       echo "image=${SEEKCLOUD_IMAGE_VERSION}"; \
       echo "node=$(node --version)"; \
       echo "dsh_node=$(/opt/seekcloud/node/bin/node --version)"; \
-      echo "dsh=${DSH_VERSION}"; \
+      echo "dsh=$(cat /usr/local/share/seekcloud/dsh/VERSION)"; \
       echo "python=$(python3 --version | cut -d ' ' -f 2)"; \
       echo "go=$(go env GOVERSION)"; \
       echo "rust=$(rustc --version | cut -d ' ' -f 2)"; \
