@@ -15,7 +15,9 @@
     "test": "vitest run",
     "typecheck": "tsc -p .",
     "db:generate": "drizzle-kit generate",
-    "admin:reset-password": "tsx src/server/cli/reset-password.ts"
+    "admin:reset-password": "tsx src/server/cli/reset-password.ts",
+    "host:create": "tsx src/server/cli/host.ts create",
+    "host:revoke": "tsx src/server/cli/host.ts revoke"
   },
   "dependencies": {
     "@fontsource/noto-serif-sc": "^5.3.1",
@@ -30,6 +32,7 @@
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "ws": "^8.23.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -37,6 +40,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.1.2",
     "drizzle-kit": "^0.31.11",
     "tsx": "^4.23.15",

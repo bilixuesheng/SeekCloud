@@ -131,7 +131,10 @@ export class Sessions {
 
   constructor(deps: AppDeps) {
     this.#deps = deps;
-    deps.host?.connect((event) => this.handleHostEvent(event));
+    deps.host?.connect(
+      (event) => this.handleHostEvent(event),
+      () => void this.dispatchQueued(),
+    );
   }
 
   async create(userId: string, input: NewSession): Promise<Result<Session>> {
@@ -911,11 +914,28 @@ export class Sessions {
     return undefined;
   }
 
-  /** 交给宿主机准备沙箱。还没有宿主机连上来时，会话留在排队中。 */
+  /** 有宿主机能接新会话了：把排队中的会话按先来后到派出去。 */
+  async dispatchQueued(): Promise<void> {
+    const queued = await this.#deps.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.status, "queued"))
+      .orderBy(sessions.createdAt);
+    for (const { id } of queued) await this.#dispatch(id);
+  }
+
+  /** 交给宿主机准备沙箱。还没有能接新会话的宿主机时，会话留在排队中，等有了再派（dispatchQueued）。 */
   async #dispatch(sessionId: string): Promise<void> {
     const host = this.#deps.host;
-    if (!host) return;
+    if (!host?.available()) return;
     const session = await this.#deps.db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ status: sessions.status })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId))
+        .for("update");
+      // 同一个会话可能被派两次（发起会话的同时一台宿主机连上来）：只有还在排队中的才派。
+      if (current?.status !== "queued") return undefined;
       // 新会话有一个等着的回合（第 1 个）；唤醒休眠或失败的会话时没有，状态事件不挂在哪个回合上。
       const [turn] = await tx
         .select({ number: turns.number })
@@ -930,6 +950,7 @@ export class Sessions {
       const [row] = await tx.select().from(sessions).where(eq(sessions.id, sessionId));
       return row as SessionRow;
     });
+    if (!session) return;
     this.#notify(session);
     host.send({
       type: "prepare_sandbox",

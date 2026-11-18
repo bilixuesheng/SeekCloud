@@ -9,6 +9,8 @@ export * as schema from "./db/schema";
 export { createDefaultEnvironment } from "./environments";
 export { apiError, errorResponse, notLoggedIn } from "./errors";
 export type { GitHub } from "./github/port";
+export { type HostVariables, hostAuth } from "./hosts/credential";
+export { HostHub, type HostStatus } from "./hosts/hub";
 export type {
   ApiErrorBody,
   Clock,

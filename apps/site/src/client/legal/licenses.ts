@@ -104,6 +104,15 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     url: "https://github.com/brianc/node-postgres",
     usage: "PostgreSQL 连接",
   },
+  {
+    name: "ws",
+    packages: ["ws"],
+    license: "MIT",
+    copyright:
+      "Copyright (c) 2011 Einar Otto Stangvik, Copyright (c) 2013 Arnout Kazemier and contributors, Copyright (c) 2016 Luigi Pinca and contributors",
+    url: "https://github.com/websockets/ws",
+    usage: "主站和宿主机之间的连接（WebSocket）",
+  },
 ];
 
 export const LICENSE_NAMES: Record<OpenSourceItem["license"], string> = {

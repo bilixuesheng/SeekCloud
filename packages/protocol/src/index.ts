@@ -1,6 +1,29 @@
 // 主站和宿主机之间的消息，以及规范化的会话事件。主站、宿主机守护进程和测试都用这里的定义。
 
+/**
+ * 主站和宿主机之间协议的版本。什么时候升（2026-11-17 定的规矩）：
+ *
+ * - 不升：加一种新的命令或事件；给已有的命令、事件加一个可以不填的字段。收到不认识的命令，宿主机记一笔、
+ *   当作不支持；收到不认识的事件，主站记一笔丢掉；不认识的字段两边都忽略。
+ * - 升一个版本：改了已有字段的意思或类型、删掉字段、把可以不填的改成必填、改了握手或帧的格式（link.ts）。
+ * - 相差一个版本要能互通：升版本的那一边同时还会说上一个版本（MIN_PROTOCOL_VERSION = PROTOCOL_VERSION - 1），
+ *   连上时两边取都会说的最新版本（negotiateProtocol）。一键更新先更新主站、再更新宿主机（或者反过来）时，
+ *   中间那段时间靠它接着用。说不到一起的宿主机照样连得上，但主站不往上派新会话。
+ * - 不再需要说旧版本时，把 MIN_PROTOCOL_VERSION 提上来。
+ */
 export const PROTOCOL_VERSION = 1;
+
+/** 这一边还会说的最旧的协议版本。 */
+export const MIN_PROTOCOL_VERSION = 1;
+
+/** 两边都会说的最新版本；说不到一起时为 null。 */
+export function negotiateProtocol(
+  a: { protocol: number; minProtocol: number },
+  b: { protocol: number; minProtocol: number },
+): number | null {
+  const newest = Math.min(a.protocol, b.protocol);
+  return newest >= Math.max(a.minProtocol, b.minProtocol) ? newest : null;
+}
 
 /** 会话状态，只有这六种。界面上的细分提示（正在准备沙箱之类）放在 SessionStatusDetail 里。 */
 export const SESSION_STATUSES = [
@@ -199,14 +222,6 @@ export type HostEvent =
   | ({ type: "progress"; sessionId: string; turnId: string } & ModelProgress)
   | ({ type: "delta"; sessionId: string; turnId: string } & TextDelta);
 
-/**
- * 主站和宿主机之间的一帧（WebSocket，以后接上）。
- * seq 是发送方自己的递增序号；ack 是已经收到的对方的最大序号。断线重连后，双方补发对方没确认的帧。
- */
-export type HostLinkFrame =
-  | { seq: number; ack: number; command: HostCommand }
-  | { seq: number; ack: number; event: HostEvent };
-
 /** 会话分支上的 PR 状态，侧边栏和会话页按它显示图标。 */
 export const PULL_REQUEST_STATES = ["open", "draft", "merged", "closed"] as const;
 export type PullRequestState = (typeof PULL_REQUEST_STATES)[number];
@@ -259,3 +274,5 @@ export type SessionEventBody =
   /** error 只在变成 failed 时有。 */
   | ({ type: "status"; error?: SafeError } & SessionState)
   | AgentEvent;
+
+export * from "./link";

@@ -19,12 +19,26 @@ export const AiLabelsValue = z.object({ signature: z.boolean(), commitTrailer: z
 
 export const EffortValue = z.enum(THINKING_EFFORTS);
 
+/** 宿主机断线多久以后，把它上面运行中的会话标为失败。单位是秒。 */
+export const HOST_OFFLINE_GRACE_CHOICES = [60, 120, 300, 600, 1800] as const;
+export const HostOfflineGraceValue = z
+  .number()
+  .int()
+  .refine((v) => (HOST_OFFLINE_GRACE_CHOICES as readonly number[]).includes(v), {
+    error: "不支持这个时长",
+  });
+
 /** 所有的设置项：键、形状、主干的默认值。加一项设置就在这里加一行。 */
 export const SETTINGS = {
   /** AI 标识的两个开关，默认都开。 */
   ai_labels: { shape: AiLabelsValue, fallback: DEFAULT_AI_LABELS as AiLabels },
   /** 新会话默认的思考强度，默认是高档。已有的会话不跟着变。 */
   default_effort: { shape: EffortValue, fallback: DEFAULT_EFFORT as ThinkingEffort },
+  /**
+   * 宿主机断线多久以后把它上面运行中的会话标为失败，默认 2 分钟（#91 的 2026-11-15 评论）。断线期间沙箱里的
+   * 运行器还在跑，重连以后事件按序号补上，回合可以接着走；网络不稳的部署可以放长一点。
+   */
+  host_offline_grace: { shape: HostOfflineGraceValue, fallback: 120 as number },
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;

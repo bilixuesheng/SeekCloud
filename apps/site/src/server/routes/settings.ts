@@ -2,7 +2,14 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { AppDeps } from "../app";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
 import type { Sessions } from "../sessions/sessions";
-import { AiLabelsValue, EffortValue, readSetting, writeSetting } from "../settings";
+import {
+  AiLabelsValue,
+  EffortValue,
+  HOST_OFFLINE_GRACE_CHOICES,
+  HostOfflineGraceValue,
+  readSetting,
+  writeSetting,
+} from "../settings";
 import { jsonBody as json, newRouter } from "./router";
 
 const AiLabels = AiLabelsValue.openapi("AiLabels", {
@@ -62,6 +69,34 @@ const putDefaultEffortRoute = createRoute({
   },
 });
 
+const HostOfflineGrace = z.object({ seconds: HostOfflineGraceValue }).openapi("HostOfflineGrace", {
+  description: `宿主机断线多久以后，把它上面运行中的会话标为失败。可选：${HOST_OFFLINE_GRACE_CHOICES.join("、")} 秒`,
+});
+
+const getHostOfflineGraceRoute = createRoute({
+  method: "get",
+  path: "/host-offline-grace",
+  summary: "宿主机断线多久以后把会话标为失败",
+  responses: {
+    200: { description: "没改过时是 120 秒", ...json(HostOfflineGrace) },
+    401: errorResponse("没有登录"),
+  },
+});
+
+const putHostOfflineGraceRoute = createRoute({
+  method: "put",
+  path: "/host-offline-grace",
+  summary: "修改宿主机断线多久以后把会话标为失败",
+  description: "已经断线的宿主机也按新的时长算。",
+  request: { body: { ...json(HostOfflineGrace), required: true } },
+  responses: {
+    200: { description: "改好以后的值", ...json(HostOfflineGrace) },
+    400: errorResponse("不支持这个时长"),
+    401: errorResponse("没有登录"),
+    403: errorResponse("这项设置不能修改（主干里不会出现）"),
+  },
+});
+
 const locked = apiError("setting_locked", "这项设置不能修改");
 
 /** 设置窗口里的全站设置。 */
@@ -95,5 +130,20 @@ export function settingsRoutes(deps: AppDeps, sessions: Sessions) {
         return c.json(locked, 403);
       }
       return c.json({ effort }, 200);
+    })
+    .openapi(getHostOfflineGraceRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      const seconds = await readSetting(deps, "host_offline_grace", { userId: me.id });
+      return c.json({ seconds }, 200);
+    })
+    .openapi(putHostOfflineGraceRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      const { seconds } = c.req.valid("json");
+      if (!(await writeSetting(deps, "host_offline_grace", { userId: me.id }, seconds))) {
+        return c.json(locked, 403);
+      }
+      return c.json({ seconds }, 200);
     });
 }

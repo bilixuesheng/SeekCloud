@@ -43,6 +43,13 @@
       "when": 1794738669434,
       "tag": "0005_session_unread",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794967175347,
+      "tag": "0006_hosts",
+      "breakpoints": true
     }
   ]
 }

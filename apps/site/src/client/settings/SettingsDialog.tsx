@@ -12,6 +12,7 @@ import { navigate } from "../router";
 import { effortLabels } from "../session/ModelPicker";
 import { reloadModels } from "../session/useModels";
 import { currentTheme, setTheme, type Theme } from "../theme";
+import { HOST_OFFLINE_GRACE } from "./SessionSettings";
 
 /** 设置窗口里各分类用到的接口。 */
 const AI_LABELS = "/api/settings/ai-labels";
@@ -62,7 +63,7 @@ export function SettingsDialog({
 
   // 各分类要的数据一打开就一起拉好，切过去直接有，不会等数据回来再冒出来
   useEffect(() => {
-    prefetch([AI_LABELS, GITHUB_STATUS, DEFAULT_EFFORT, ME, EXPORTS]);
+    prefetch([AI_LABELS, GITHUB_STATUS, DEFAULT_EFFORT, ME, EXPORTS, HOST_OFFLINE_GRACE]);
   }, []);
 
   useEffect(() => {

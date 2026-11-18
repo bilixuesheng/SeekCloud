@@ -97,9 +97,9 @@ describe("设置分类", () => {
     );
   };
 
-  it("主干登记通用、GitHub、账户、数据四类，按顺序排", () => {
+  it("主干登记通用、会话、GitHub、账户、数据五类，按顺序排", () => {
     const names = registerTrunk(new Registry()).settingsSections.map((s) => s.name);
-    expect(names).toEqual(["通用", "GitHub", "账户", "数据"]);
+    expect(names).toEqual(["通用", "会话", "GitHub", "账户", "数据"]);
   });
 
   it("加一个分类只需要加一项登记：排在登记的位置，能从地址直接打开", () => {
@@ -118,7 +118,7 @@ describe("设置分类", () => {
     const nav = [...html.matchAll(/<a [^>]*class="settings-nav-item([^"]*)"[^>]*>(.*?)<\/a>/g)].map(
       (m) => `${m[2]?.replace(/<[^>]+>/g, "")}${m[1]?.includes("current") ? "（当前）" : ""}`,
     );
-    expect(nav).toEqual(["通用", "GitHub", "账户", "用量（当前）", "数据"]);
+    expect(nav).toEqual(["通用", "会话", "GitHub", "账户", "用量（当前）", "数据"]);
   });
 
   it("地址里的分类不认识或没写时打开账户；下游拿掉了账户时打开排在最前面的", () => {

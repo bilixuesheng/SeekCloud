@@ -18,9 +18,14 @@ export interface GitProxyConfig {
   port: number;
 }
 
-/** 启动 Git 代理，返回会话登记表（宿主机守护进程按主站的命令登记、下发令牌、注销）。 */
-export function startGitProxy(config: GitProxyConfig): { sessions: GitSessions; server: Server } {
-  const sessions = new GitSessions();
+/**
+ * 启动 Git 代理，返回会话登记表（宿主机守护进程按主站的命令登记、下发令牌、注销）。
+ * 登记表可以从外面传进来，和主站连接（site-link/）共用一份。
+ */
+export function startGitProxy(
+  config: GitProxyConfig,
+  sessions: GitSessions = new GitSessions(),
+): { sessions: GitSessions; server: Server } {
   const server = createGitProxy({
     sessions,
     ca: new ProxyCa(join(config.dataDir, "proxy-ca")),

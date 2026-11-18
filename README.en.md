@@ -12,12 +12,12 @@ This repository is the open-source, self-hosted trunk of the paid edition of See
 
 **Early development. Not yet usable for real deployments.**
 
-Agent execution is not implemented yet: the main site is not yet connected to the sandbox host, so new sessions stay queued. The interface is currently available in Chinese only.
+Agent execution is not implemented yet: sandbox hosts can now connect to the main site, but cannot create sandboxes yet. With no host connected, new sessions stay queued; with a host connected, new sessions fail with "sandbox unavailable". The interface is currently available in Chinese only.
 
 What is done:
 
 - Main site: admin password login, linking GitHub and choosing a repository and branch, starting and viewing sessions, and data export. The interface is a PWA that can be added to a phone's home screen.
-- Sandbox host: the Git proxy (which only allows access to the session's own repositories and signs commits) and the GitHub tools service (MCP).
+- Sandbox host: the connection to the main site (authenticated with a host key; reconnects and resends automatically), the Git proxy (which only allows access to the session's own repositories and signs commits) and the GitHub tools service (MCP).
 
 ## Planned features
 
@@ -99,6 +99,20 @@ Main site environment variables:
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_APP_SLUG`, `GITHUB_WEBHOOK_SECRET` | GitHub App settings. Without them, GitHub features are unavailable |
 
 If you forget the admin password, run `DATABASE_URL=... pnpm admin:reset-password` in `apps/site`. It prints a new random password and signs out all devices.
+
+### Connecting a sandbox host
+
+1. In `apps/site`, run `DATABASE_URL=... pnpm host:create <name>` (lowercase letters, digits and hyphens) and note the host key it prints. The key is shown only once; the main site stores only its hash.
+2. On the host, in `apps/host`, run:
+
+   ```sh
+   SEEKCLOUD_SITE_URL=<public URL of the main site> SEEKCLOUD_HOST_KEY=<host key> pnpm start
+   ```
+
+   The host connects to the main site and reconnects automatically after a disconnect.
+3. To retire a host, run `DATABASE_URL=... pnpm host:revoke <name>`. Its existing connection is closed within a few seconds.
+
+When a host has been disconnected for longer than a set time (2 minutes by default, configurable under "Settings → Sessions"), its running sessions are marked as failed.
 
 ## License
 

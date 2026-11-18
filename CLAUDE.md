@@ -13,13 +13,14 @@
 ## 当前进度
 
 - 代码从 SeekCloud 收费版迁移而来，已经去掉计费、改成单管理员（ADR 0008）、改了 Agent 的叫法（ADR 0004）、写好了 README，许可证改成了 AGPL-3.0（ADR 0009）。
-- Agent 执行尚未实现：主站还没接上沙箱宿主机，新会话会停在排队。
+- Agent 执行尚未实现：宿主机连得上主站了（#91），但还不能建沙箱（#18 等测试机）。没有宿主机连着时新会话停在排队；连着时新会话以"无法创建沙箱"失败。
 - 路线图 2026-11-08 定了，见交接文档 `docs/roadmap/2026-11-08-handoff.md`。
 - 核心功能的规格和工单拆完了（2026-11-11）：规格是 issue [#13](https://github.com/bilixuesheng/SeekCloud/issues/13)，工单 #14–#56 都是它的子 issue，正文第一行写着被哪些工单阻塞。读工单时正文和评论一起读。
   - #14（测试机）要用户本人做。等它的只有 #18（Sysbox 沙箱）和要真沙箱的验收；连接和协议拆到了 #91，模型网关（#26）、适配接口（#25）不用等测试机（2026-11-15 改的）。#15 已完成：用户 2026-11-13 重建了公开仓库 `bilixuesheng/seekcloud-dsh`（只有一个 README），云端会话能推送。
   - 已完成：#16（会话页动效核对）、#19（顶栏、标题菜单和会话信息）、#20（模型和思考强度的弹层）。#31 的主站这一半也做了：逐字输出（宿主机发来的 `delta`、`progress` 只推送不落库，界面按舒服的速度一个个字显示）；Agent 工作时输入框空着是停止键、有字是 ↵（插进当前回合），⌄ 里有稍后排队和停止；接口是 `POST /api/sessions/{id}/messages` 的 `mode`（`now` 插进当前回合）和 `POST /api/sessions/{id}/stop`（回合马上记成已停止，再给宿主机发 `stop_turn`）。#31 还没做的：幂等 ID、Playwright 冒烟测试，以及宿主机那一半（把消息送进正在跑的 dsh 回合、停下回合，等 #91 和 #25）。
   - #17 的基线配置做了（PR #143，`apps/host/sandbox/dsh/baseline.patch.yml`，用 dsh 0.2.2-rc.3 验过）。#17 剩下的：`seekcloud-dsh` 子模块、技能和 Claude Code 兼容、通用镜像、开源声明、ADR 0004。
-  - 现在就能开工的：#17 剩下的部分、#91（宿主机连接和协议）。
+  - #91（宿主机连接和协议）做了：WebSocket 连接、宿主机密钥、序号和补发、版本核对、宿主机凭据、断线超时（设置的"会话"一类）。
+  - 现在就能开工的：#17 剩下的部分、#26（模型网关）。
   - 要人做的工单打 `ready-for-human` 标签：#14、#121、#126。
 - AI 标识两个开关的规格和工单也拆了：规格 [#57](https://github.com/bilixuesheng/SeekCloud/issues/57)，工单 #58（已完成）、#59。八项新功能里只有这一项没有待定的事，所以先写了。
 - 2026-11-11 做了一次复查，记在 `docs/roadmap/2026-11-11-review.md`：界面上查出来并改掉的问题、路线图没覆盖到的地方（待定的每条都有建议）、安全排查的结论。写新功能的规格之前先读它。文档里待定的几条 2026-11-14 都定了，结论写在每条后面，写规格时照着做。
@@ -42,7 +43,7 @@
 
 - **接下来**：
   1. 请用户定审查文档第六节的 14 条。没定之前，相关的工单照各自评论里写的保守做法做。
-  2. 实现不等测试机、也不等别的工单的：#17 剩下的部分（基线配置已做）、#91（宿主机连接和协议）、#94（发布包和安装脚本）、#100（两步验证）、#135（文案目录）、#139（等你输入的规则版）。#59 里 git 钩子的那一项做了（钩子读沙箱里的 `/etc/seekcloud/commit-trailer`，宿主机写它的那一半跟着 #91）。#91 做完接 #26（模型网关），#17 加 #91 做完接 #25（适配接口）。宿主机的 Sysbox 部分（#18）等 #14 的测试机。
+  2. 实现不等测试机、也不等别的工单的：#26（模型网关，#91 做完了，现在能开工）、#17 剩下的部分（基线配置已做）、#94（发布包和安装脚本）、#100（两步验证）、#135（文案目录）、#139（等你输入的规则版）。#59 里 git 钩子的那一项做了（钩子读沙箱里的 `/etc/seekcloud/commit-trailer`，宿主机写它的那一半跟着 #18 建沙箱时做）。#17 做完接 #25（适配接口）。宿主机的 Sysbox 部分（#18）等 #14 的测试机。
   3. 下面是各项新功能定过的要点，规格里都写了，留在这里备查：
   - 网页图形化部署：Linux 一条命令、Windows 一条 PowerShell 命令，其余在网页向导里完成；
   - 多渠道通知：SMTP 邮件、PWA 推送、飞书/钉钉/企业微信机器人、通用 Webhook；
@@ -69,8 +70,9 @@
 - 扩展点（ADR 0010）：`AppDeps` 里的 `identity`（身份来源）和 `settingsPolicy`（设置的读写规则），接口在 `apps/site/src/server/ports.ts`，主干的实现是 `auth/admin-identity.ts` 的 `adminIdentity` 和 `settings.ts` 的 `adminSettings`，在 `main.ts` 里组装。接口里判断是谁一律用 `deps.identity.currentUser(c)`，不直接用 `auth/login-sessions.ts`；设置一律用 `settings.ts` 的 `readSetting`、`writeSetting`，加一项设置就在 `SETTINGS` 里加一行。`extension-rules.test.ts` 读源码守住这几条。下游只从包的出口拿东西：`@seekcloud/site/server`（`src/server/index.ts`）和 `@seekcloud/site/testing`（`src/testing/index.ts`）；下游的表放自己的迁移目录，用 `runMigrations(db, [{ folder, table }])`。
 - 浏览器端的扩展点（ADR 0010）在 `apps/site/src/client/registry.tsx`：页面（地址样式、组件、要不要登录、是不是盖在页面上的弹窗）、设置分类（加一类只登记一项，`order` 排顺序）、四个插槽（`sidebar-foot`、`composer-below`、`session-banner`、`home-below-greeting`，页面上用 `<Slot name="..." />`）。主干自己的在 `client/trunk.tsx` 登记，`main.tsx` 只做登记和挂载（`mountApp`）；登录后的页面从 `useShell()`（`client/shell.tsx`）拿管理员、会话列表这些。路由（`router.ts`）查这张表，找不到的地址回首页。下游从 `@seekcloud/site/client`（`src/client/index.ts`）拿。
 - 加了路径里带某个人的数据 ID 的接口（`/api/sessions/{shortId}/...` 这类），要在 `server/isolation.test.ts` 的清单里加一行，漏了测试就失败：它用测试替身 `FakeIdentity`（`src/testing/fake-identity.ts`）放进第二个人，拿对方的 ID 调每个接口。身份来源的契约测试在 `src/testing/identity-contract.ts`，最小下游样例在 `src/testing/downstream-example/`（起一个真的 HTTP 服务）。
+- 宿主机连接（#91）：守护进程用宿主机密钥主动连主站的 WebSocket（`/api/hosts/connect`）。握手、帧、序号和补发、协议版本的规矩在 `packages/protocol/src/link.ts` 和 `index.ts` 的 `PROTOCOL_VERSION` 注释（加命令、事件不升版本；相差一个版本要能互通）。主站这边是 `apps/site/src/server/hosts/`：`hub.ts` 的 `HostHub`（真的 `HostLink`，管多台宿主机，`sessions.host_id` 记会话在哪台，宿主机只能上报自己名下的会话，断线超过设置 `host_offline_grace` 的时长把运行中的会话标为失败）、`keys.ts`（密钥只存哈希）、`credential.ts`（宿主机凭据的中间件 `hostAuth`，模型网关这些路由挂上它）、`frames.ts`（宿主机发来的帧逐个校验）。添加、吊销宿主机：在 `apps/site` 里 `DATABASE_URL=... pnpm host:create <名字>`、`pnpm host:revoke <名字>`。守护进程这边是 `apps/host/src/site-link/`（`SiteLink` 断线自动重连，`commands.ts` 把命令接进 Git 代理的会话表；沙箱相关的先回"建不了沙箱"），环境变量 `SEEKCLOUD_SITE_URL`、`SEEKCLOUD_HOST_KEY`。测试：主站用 `createTestApp({ hosts: true })` 起真的 HTTP 服务，`src/testing/host-client.ts` 的 `TestHostClient` 扮演守护进程（`t.hub.tick()` 跑定时检查）；守护进程的测试里扮演主站（`site-link.test.ts`）。其余测试照旧用假宿主机 `t.host`。
 - 主站和宿主机之间的消息定义在 `packages/protocol`。主站通过 `apps/site/src/server/sessions/host.ts` 的 `HostLink` 和宿主机通信；测试里是 `t.host`（`src/testing/fake-host.ts`，按脚本回放 Agent 事件，`manual = true` 时由测试自己 `emit`）。会话编排在 `src/server/sessions/sessions.ts`。
-- 宿主机（`apps/host`）：GitHub 工具服务（MCP，`/mcp`）在 `src/github-tools/`，测试接假的 GitHub API；dsh 怎么接见 `apps/host/sandbox/README.md`。Git 代理在 `src/git-proxy/`，提交签名在 `src/signing/`，沙箱里要装的签名助手和 git 配置在 `apps/host/sandbox/`。测试用真的 `git`（`git http-backend` 当假 GitHub）、`openssl` 和 `ssh-keygen`，云端会话里先运行 `apt-get install -y openssh-client`。生成签名密钥：`pnpm --filter @seekcloud/host signing-key <私钥路径>`，打印出来的公钥加到 SeekCloud 账号的 GitHub 签名密钥里。dsh 的基线配置（`apps/host/sandbox/dsh/baseline.patch.yml`）的测试在普通 CI 里只查文件；要用真的 dsh 验，在一个临时目录里用 Node 24.9 以上运行 `npm i @deepseek-ai/dsh@0.2.2-rc.3`，再设 `SEEKCLOUD_DSH_BIN=<临时目录>/node_modules/.bin/dsh` 跑宿主机的测试（PATH 里的 node 也要是 24.9 以上）。宿主机的环境变量：`SEEKCLOUD_SIGNING_KEY`（签名私钥路径）、`SEEKCLOUD_SIGNER_EMAIL`（SeekCloud 账号的邮箱）、`SEEKCLOUD_GIT_PROXY_HOST`、`SEEKCLOUD_GIT_PROXY_PORT`、`SEEKCLOUD_HOST_DATA`。
+- 宿主机（`apps/host`）：GitHub 工具服务（MCP，`/mcp`）在 `src/github-tools/`，测试接假的 GitHub API；dsh 怎么接见 `apps/host/sandbox/README.md`。Git 代理在 `src/git-proxy/`，提交签名在 `src/signing/`，沙箱里要装的签名助手和 git 配置在 `apps/host/sandbox/`。测试用真的 `git`（`git http-backend` 当假 GitHub）、`openssl` 和 `ssh-keygen`，云端会话里先运行 `apt-get install -y openssh-client`。生成签名密钥：`pnpm --filter @seekcloud/host signing-key <私钥路径>`，打印出来的公钥加到 SeekCloud 账号的 GitHub 签名密钥里。dsh 的基线配置（`apps/host/sandbox/dsh/baseline.patch.yml`）的测试在普通 CI 里只查文件；要用真的 dsh 验，在一个临时目录里用 Node 24.9 以上运行 `npm i @deepseek-ai/dsh@0.2.2-rc.3`，再设 `SEEKCLOUD_DSH_BIN=<临时目录>/node_modules/.bin/dsh` 跑宿主机的测试（PATH 里的 node 也要是 24.9 以上）。宿主机的环境变量：`SEEKCLOUD_SITE_URL`（主站对外的地址）、`SEEKCLOUD_HOST_KEY`（宿主机密钥）、`SEEKCLOUD_VERSION`、`SEEKCLOUD_SIGNING_KEY`（签名私钥路径）、`SEEKCLOUD_SIGNER_EMAIL`（SeekCloud 账号的邮箱）、`SEEKCLOUD_GIT_PROXY_HOST`、`SEEKCLOUD_GIT_PROXY_PORT`、`SEEKCLOUD_HOST_DATA`。
 - SSE 接口用 `browser.stream(path)` 测（`src/testing/event-stream.ts`），用完要 `close()`。`t.admin()` 得到一个已登录的管理员浏览器（第一次调用时用 `t.adminPassword` 设置密码，每次调用都是一台新设备）；`t.adminWithGitHub(login, ...仓库)` 再关联 GitHub、装好 App，再调用一次会换成新的 GitHub 账号。
 - 主站的测试用 `apps/site/src/testing/test-app.ts` 的 `createTestApp()`：进程内调用接口，每调用一次建一个独立的库（一般一个测试文件一次），时钟是假的。`t.browser()` 模拟一个有自己 Cookie 和 IP 的浏览器，`browser.clone()` 复制一份带着同样 Cookie 的。`createTestApp({ identity, settingsPolicy })` 换掉扩展点；换了身份来源以后用 `t.linkGitHub(浏览器, login, ...仓库)` 给已登录的浏览器关联 GitHub。
 - 主站的每个响应都带内容安全策略（`apps/site/src/server/app.ts`）：脚本只能来自本站，页面里不能写内联脚本，要在页面画出来之前跑的放进 `apps/site/public/` 下单独的文件（比如 `theme-boot.js`）。接口的请求体最多 1 MB（webhook 25 MB）。

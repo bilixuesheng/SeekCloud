@@ -1,3 +1,4 @@
+import type { Server } from "node:http";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { type AppDeps, createApp } from "./app";
@@ -5,6 +6,7 @@ import { adminIdentity } from "./auth/admin-identity";
 import { connectDatabase } from "./db/client";
 import { runMigrations } from "./db/migrate";
 import { githubApi, unconfiguredGitHub } from "./github/api";
+import { HostHub } from "./hosts/hub";
 import { startMaintenance } from "./maintenance";
 import { systemClock } from "./ports";
 import { SecretBox } from "./secrets";
@@ -43,6 +45,9 @@ const base = {
 };
 // 扩展点（ADR 0010）：主干用单管理员的实现。
 const deps: AppDeps = { ...base, identity: adminIdentity(base), settingsPolicy: adminSettings };
+// 沙箱宿主机用宿主机密钥连上来（pnpm host:create 添加）。一台都没连着时，新会话留在排队中。
+const hub = new HostHub(deps);
+deps.host = hub;
 const app = createApp(deps);
 // 打包数据导出、清理过期的导出和访问记录，每分钟一次。
 startMaintenance(deps);
@@ -56,6 +61,8 @@ app.get("*", (c, next) =>
     : serveStatic({ path: `${clientDir}/index.html` })(c, next),
 );
 
-serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 3000) }, (info) => {
+const server = serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 3000) }, (info) => {
   console.log(`SeekCloud 主站已启动：http://localhost:${info.port}`);
 });
+hub.attach(server as Server);
+await hub.start();
