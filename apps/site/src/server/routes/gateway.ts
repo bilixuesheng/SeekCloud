@@ -4,6 +4,7 @@ import { createMiddleware } from "hono/factory";
 import type { AppDeps } from "../app";
 import { sessions, turns } from "../db/schema";
 import { errorResponse } from "../gateway/failures";
+import { sessionNetworkAccess, webFetch } from "../gateway/fetch";
 import { GatewayFiles } from "../gateway/files";
 import type { ModelGateway } from "../gateway/gateway";
 import { webSearch } from "../gateway/web";
@@ -46,7 +47,7 @@ async function jsonObject(req: Request): Promise<Record<string, unknown> | Respo
  * - Authorization: Bearer <宿主机凭据>：哪台宿主机；
  * - X-SeekCloud-Session: <会话 ID>：哪个会话。会话必须在这台宿主机上，而且沙箱开着（运行中、等待回复）。
  *
- * 接口和 Anthropic、DeepSeek 的一样（dsh 照原样调）：/v1/messages、/v1/files…、/v1/tools/search。
+ * 接口和 Anthropic、DeepSeek 的一样（dsh 照原样调）：/v1/messages、/v1/files…、/v1/tools/search、/v1/tools/fetch。
  */
 export function gatewayRoutes(deps: AppDeps, gateway: ModelGateway) {
   const files = new GatewayFiles(deps);
@@ -116,6 +117,16 @@ export function gatewayRoutes(deps: AppDeps, gateway: ModelGateway) {
         deps,
         { tool: "web_search", ...owner(session), turnId: session.turnId },
         { headers: c.req.raw.headers, body, signal: c.req.raw.signal },
+      );
+    })
+    .post("/v1/tools/fetch", async (c) => {
+      const session = c.get("session");
+      const body = await jsonObject(c.req.raw);
+      if (body instanceof Response) return body;
+      return webFetch(
+        deps,
+        { tool: "web_fetch", ...owner(session), turnId: session.turnId },
+        { body, access: await sessionNetworkAccess(deps, session.id), signal: c.req.raw.signal },
       );
     })
     .post("/v1/files", (c) =>

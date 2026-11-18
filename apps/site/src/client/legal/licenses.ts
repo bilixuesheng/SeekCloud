@@ -49,6 +49,19 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     usage: "Markdown 扩展语法（表格、任务列表等）",
   },
   {
+    name: "unified 的 HTML 和 Markdown 工具（hast-util-from-html、hast-util-to-mdast、mdast-util-gfm、mdast-util-to-markdown）",
+    packages: [
+      "hast-util-from-html",
+      "hast-util-to-mdast",
+      "mdast-util-gfm",
+      "mdast-util-to-markdown",
+    ],
+    license: "MIT",
+    copyright: "Copyright (c) Titus Wormer",
+    url: "https://github.com/syntax-tree",
+    usage: "模型网关的网页抓取：把网页转成 Markdown",
+  },
+  {
     name: "Workbox",
     packages: [],
     license: "MIT",

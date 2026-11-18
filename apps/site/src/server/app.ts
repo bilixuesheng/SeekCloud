@@ -8,6 +8,7 @@ import type { Database } from "./db/client";
 import { apiError, handleError } from "./errors";
 import { ModelGateway } from "./gateway/gateway";
 import type { GitHub } from "./github/port";
+import type { OutboundNetwork } from "./network/address";
 import type {
   Clock,
   ErrorPresentation,
@@ -53,6 +54,10 @@ export interface AppDeps {
   errorPresentation: ErrorPresentation;
   /** 模型网关发给上游用的 fetch。测试里换成假的提供方（src/testing/fake-model.ts）；不填就用全局的。 */
   modelFetch?: typeof fetch;
+  /** 主站替沙箱抓网页时怎么解析域名、哪些地址能连（network/address.ts）。测试里换成本地的假网站。 */
+  outboundNetwork?: OutboundNetwork;
+  /** 网页抓取的超时，默认 30 秒。测试里改短。 */
+  webFetchTimeoutMs?: number;
 }
 
 const CheckResult = z.enum(["ok", "error"]);
