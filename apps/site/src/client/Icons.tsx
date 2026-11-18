@@ -140,6 +140,24 @@ export const UserIcon = () => (
   </svg>
 );
 
+/** 对话气泡：设置里的"会话"。 */
+export const ChatIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <path
+      d="M3 4.2c0-.9.7-1.6 1.6-1.6h6.8c.9 0 1.6.7 1.6 1.6v5c0 .9-.7 1.6-1.6 1.6H7l-2.8 2.4v-2.4h0c-.7 0-1.2-.6-1.2-1.3Z"
+      {...line}
+    />
+  </svg>
+);
+
+/** 时钟：设置里跟时长有关的项。 */
+export const ClockIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="5.6" {...line} />
+    <path d="M8 4.8V8l2.2 1.4" {...line} />
+  </svg>
+);
+
 /** 设置里的"数据"：一摞圆柱（数据库）。 */
 export const DatabaseIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">

@@ -1,10 +1,14 @@
 import { mkdtemp, rm } from "node:fs/promises";
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { serve } from "@hono/node-server";
 import { type AppDeps, createApp } from "../server/app";
 import { hasAdmin } from "../server/auth/admin";
 import { adminIdentity } from "../server/auth/admin-identity";
 import { connectDatabase } from "../server/db/client";
+import { HostHub } from "../server/hosts/hub";
 import { runMaintenance } from "../server/maintenance";
 import type { Identity, SettingsPolicy } from "../server/ports";
 import { SecretBox } from "../server/secrets";
@@ -23,6 +27,11 @@ export interface TestAppOptions {
   databaseUrl?: string;
   /** false：没有宿主机连上来。 */
   host?: false;
+  /**
+   * 用真的宿主机连接（HostHub）代替假宿主机：主站起一个真的 HTTP 服务，t.hostUrl 是宿主机连接的地址，
+   * 测试用 src/testing/host-client.ts 扮演宿主机守护进程。定时检查不自己跑，测试调用 t.hub.tick()。
+   */
+  hosts?: true;
   /**
    * 换掉身份来源（扩展点，ADR 0010）。默认是主干的管理员密码登录；换掉以后 t.admin()、t.adminWithGitHub()
    * 不能用，由测试自己登录。
@@ -59,7 +68,21 @@ export async function createTestApp(options: TestAppOptions = {}) {
     identity: (options.identity ?? adminIdentity)(base),
     settingsPolicy: options.settingsPolicy ?? adminSettings,
   };
+  const hub = options.hosts ? new HostHub(deps) : undefined;
+  if (hub) deps.host = hub;
   const app = createApp(deps);
+  let server: Server | undefined;
+  let hostUrl = "";
+  if (hub) {
+    server = await new Promise<Server>((resolve) => {
+      const s = serve({ fetch: app.fetch, hostname: "127.0.0.1", port: 0 }, () =>
+        resolve(s as Server),
+      ) as Server;
+    });
+    hub.attach(server);
+    await hub.start({ tick: false });
+    hostUrl = `ws://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  }
 
   /** 管理员在一个新的浏览器（新设备）上登录；还没设置过密码时先设置。改过密码以后不能再用。 */
   const admin = async () => {
@@ -110,7 +133,13 @@ export async function createTestApp(options: TestAppOptions = {}) {
     dataDir,
     /** 跑一次后台的定期任务（main.ts 里每分钟一次）：打包导出、清理过期导出和访问记录。 */
     runMaintenance: () => runMaintenance(deps),
+    /** 真的宿主机连接（只在 hosts: true 时有）。 */
+    hub: hub as HostHub,
+    /** 宿主机连主站的地址，比如 ws://127.0.0.1:端口（只在 hosts: true 时有）。 */
+    hostUrl,
     close: async () => {
+      await hub?.stop();
+      if (server) await new Promise((resolve) => server?.close(resolve));
       await rm(dataDir, { recursive: true, force: true });
       await close();
       await database?.drop();

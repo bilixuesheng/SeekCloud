@@ -57,6 +57,26 @@ export const environments = pgTable("environments", {
   createdAt: createdAt(),
 });
 
+/**
+ * 沙箱宿主机。宿主机守护进程用宿主机密钥连上主站（hosts/hub.ts）；密钥只存 SHA-256 哈希，
+ * 用 pnpm host:create 生成、pnpm host:revoke 吊销。不属于哪个人：宿主机是整个部署的。
+ */
+export const hosts = pgTable("hosts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  keyHash: text("key_hash").notNull().unique(),
+  createdAt: createdAt(),
+  // 吊销的时间。吊销以后这把密钥连不上，已有的连接立即断开。
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  // 下面几项是最近一次连上时记下的，给运行状况看；也用来在主站重启以后接上序号。
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  protocol: integer("protocol"),
+  version: text("version"),
+  // 守护进程这次启动的标识。同一个进程重连上来时，主站从 lastReceivedSeq 接着收，不重复处理。
+  instance: text("instance"),
+  lastReceivedSeq: integer("last_received_seq").notNull().default(0),
+});
+
 /** 关联的 GitHub 账号和它的授权令牌（加密存放）。刷新令牌只在主站。令牌失效或解除关联时删掉这一行。 */
 export const githubTokens = pgTable("github_tokens", {
   userId: uuid("user_id")
@@ -127,6 +147,8 @@ export const sessions = pgTable(
     pinnedAt: timestamp("pinned_at", { withTimezone: true }),
     // 有新内容（照 Claude）：回合结束或会话失败时没人开着这个会话就标上，打开就消掉；也能在菜单里手动标。
     unread: boolean("unread").notNull().default(false),
+    // 沙箱在哪台宿主机上。派给宿主机时记下；宿主机只能上报自己名下的会话的事件。
+    hostId: uuid("host_id").references(() => hosts.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },

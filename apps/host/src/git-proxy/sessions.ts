@@ -49,6 +49,10 @@ export class GitSessions {
     this.#byToken.delete(session.sessionToken);
   }
 
+  get(sessionId: string): GitSession | undefined {
+    return this.#byId.get(sessionId);
+  }
+
   byToken(token: string): GitSession | undefined {
     return this.#byToken.get(token);
   }

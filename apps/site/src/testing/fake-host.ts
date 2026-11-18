@@ -20,6 +20,11 @@ export class FakeHost implements HostLink {
     this.#onEvent = onEvent;
   }
 
+  /** 假宿主机一直在，随时能接新会话。 */
+  available(): boolean {
+    return true;
+  }
+
   send(command: HostCommand): void {
     this.commands.push(command);
     if (!this.manual) this.#enqueue(() => this.#respond(command));
