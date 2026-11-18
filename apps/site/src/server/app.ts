@@ -6,11 +6,21 @@ import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import type { Database } from "./db/client";
 import { apiError, handleError } from "./errors";
+import { ModelGateway } from "./gateway/gateway";
 import type { GitHub } from "./github/port";
-import type { Clock, Identity, SettingsPolicy } from "./ports";
+import type {
+  Clock,
+  ErrorPresentation,
+  Identity,
+  ModelAdmission,
+  ProviderRouting,
+  SettingsPolicy,
+} from "./ports";
 import { accountRoutes } from "./routes/account";
+import { gatewayRoutes } from "./routes/gateway";
 import { githubAuthRoutes, githubRoutes } from "./routes/github";
 import { meRoutes } from "./routes/me";
+import { modelRoutes } from "./routes/model";
 import { newRouter } from "./routes/router";
 import { sessionRoutes } from "./routes/sessions";
 import { settingsRoutes } from "./routes/settings";
@@ -35,6 +45,14 @@ export interface AppDeps {
   identity: Identity;
   /** 扩展点：设置的默认值和能不能改。主干是 settings.ts 的 adminSettings。 */
   settingsPolicy: SettingsPolicy;
+  /** 扩展点：模型调用的准入和记录。主干是 gateway/trunk.ts 的 usageAdmission。 */
+  modelAdmission: ModelAdmission;
+  /** 扩展点：模型调用发给哪个提供方。主干是 gateway/trunk.ts 的 deepseekRouting。 */
+  providerRouting: ProviderRouting;
+  /** 扩展点：上游出错时浏览器里看到什么。主干是 gateway/trunk.ts 的 transparentErrors。 */
+  errorPresentation: ErrorPresentation;
+  /** 模型网关发给上游用的 fetch。测试里换成假的提供方（src/testing/fake-model.ts）；不填就用全局的。 */
+  modelFetch?: typeof fetch;
 }
 
 const CheckResult = z.enum(["ok", "error"]);
@@ -60,10 +78,13 @@ const healthRoute = createRoute({
 const MAX_BODY_BYTES = 1024 * 1024;
 /** GitHub 的 webhook 最大 25 MB，再大的它自己就不发了。 */
 const MAX_WEBHOOK_BYTES = 25 * 1024 * 1024;
+/** 模型请求每次都带着完整的上下文（加上图片），比别的接口大得多。调用方只有宿主机。 */
+const MAX_GATEWAY_BYTES = 64 * 1024 * 1024;
 
 const tooLarge = (c: Context) => c.json(apiError("body_too_large", "请求内容过大"), 413);
 const apiBodyLimit = bodyLimit({ maxSize: MAX_BODY_BYTES, onError: tooLarge });
 const webhookBodyLimit = bodyLimit({ maxSize: MAX_WEBHOOK_BYTES, onError: tooLarge });
+const gatewayBodyLimit = bodyLimit({ maxSize: MAX_GATEWAY_BYTES, onError: tooLarge });
 
 export function createApp(deps: AppDeps) {
   const app = newRouter();
@@ -98,7 +119,11 @@ export function createApp(deps: AppDeps) {
 
   // 请求体有上限：登录、webhook 这些不用登录就能调的接口，不能让人发一个几 GB 的请求把内存占满。
   app.use("/api/*", (c, next) =>
-    c.req.path === "/api/github/webhook" ? webhookBodyLimit(c, next) : apiBodyLimit(c, next),
+    c.req.path === "/api/github/webhook"
+      ? webhookBodyLimit(c, next)
+      : c.req.path.startsWith("/api/gateway/")
+        ? gatewayBodyLimit(c, next)
+        : apiBodyLimit(c, next),
   );
 
   // 登录状态放在 Cookie 里，所以拒绝别的网站发来的表单请求。接口只收 JSON，跨站的 JSON 请求浏览器本来就拦。
@@ -118,6 +143,8 @@ export function createApp(deps: AppDeps) {
     return database === "ok" ? c.json(body, 200) : c.json(body, 503);
   });
 
+  const gateway = new ModelGateway(deps);
+  app.route("/api/gateway", gatewayRoutes(deps, gateway));
   app.route("/api/auth/github", githubAuthRoutes(deps));
   const sessions = new Sessions(deps);
   app.route("/api/account", accountRoutes(deps));
@@ -126,6 +153,7 @@ export function createApp(deps: AppDeps) {
   app.route("/api/settings", settingsRoutes(deps, sessions));
   app.route("/api", sessionRoutes(deps, sessions));
   app.route("/api", meRoutes(deps));
+  app.route("/api", modelRoutes(deps));
 
   app.onError(handleError);
   app.notFound((c) => c.json(apiError("not_found", "接口不存在"), 404));

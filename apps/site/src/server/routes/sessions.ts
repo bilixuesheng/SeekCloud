@@ -77,7 +77,7 @@ const createSessionRoute = createRoute({
     400: errorResponse("分支不存在或请求格式不对"),
     401: errorResponse("没有登录"),
     404: errorResponse("仓库或环境不存在"),
-    409: errorResponse("还没有关联 GitHub"),
+    409: errorResponse("还没有关联 GitHub，或者还没有填模型服务的 API key"),
   },
 });
 

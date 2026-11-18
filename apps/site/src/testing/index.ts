@@ -5,7 +5,13 @@ export { EventStreamReader, type StreamedEvent } from "./event-stream";
 export { FakeGitHub } from "./fake-github";
 export { FakeHost } from "./fake-host";
 export { FakeIdentity } from "./fake-identity";
+export { FakeModelProvider, type FakeModelReply, streamOf } from "./fake-model";
 export { FakeClock } from "./fakes";
 export { describeIdentityContract, type IdentityDriver } from "./identity-contract";
+export {
+  describeErrorPresentationContract,
+  describeModelAdmissionContract,
+  describeProviderRoutingContract,
+} from "./model-contracts";
 export { createTestApp, type TestApp, type TestAppOptions } from "./test-app";
 export { TestBrowser } from "./test-browser";

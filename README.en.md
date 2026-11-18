@@ -17,6 +17,7 @@ Agent execution is not implemented yet: sandbox hosts can now connect to the mai
 What is done:
 
 - Main site: admin password login, linking GitHub and choosing a repository and branch, starting and viewing sessions, and data export. The interface is a PWA that can be added to a phone's home screen.
+- Model gateway: the only way the sandbox can call a model. It swaps in the DeepSeek API key the admin entered (stored encrypted), strips data the Agent attaches, streams responses through, and records usage for every call. When the upstream fails, the sandbox only sees a description, status code and reference ID; the raw upstream error is shown to the admin only.
 - Sandbox host: the connection to the main site (authenticated with a host key; reconnects and resends automatically), the Git proxy (which only allows access to the session's own repositories and signs commits) and the GitHub tools service (MCP).
 
 ## Planned features
@@ -83,7 +84,7 @@ pnpm dev:server
 pnpm dev
 ```
 
-Then open http://localhost:5173 and set the admin password on the first visit.
+Then open http://localhost:5173, set the admin password on the first visit, and enter a DeepSeek API key under "Settings → Model" (sessions cannot be started without one).
 
 Main site environment variables:
 

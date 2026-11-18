@@ -19,10 +19,14 @@ import {
   apiError,
   connectDatabase,
   createApp,
+  deepseekRouting,
   notLoggedIn,
   runMigrations,
   SecretBox,
   type SettingsPolicy,
+  setProviderKey,
+  transparentErrors,
+  usageAdmission,
 } from "@seekcloud/site/server";
 import {
   createTestDatabase,
@@ -30,6 +34,7 @@ import {
   FakeGitHub,
   FakeHost,
   FakeIdentity,
+  FakeModelProvider,
   type TestBrowser,
 } from "@seekcloud/site/testing";
 import { sql } from "drizzle-orm";
@@ -70,7 +75,13 @@ export async function startDownstreamExample() {
     ...base,
     identity: identity.attach(base),
     settingsPolicy: exampleSettings,
+    // 模型网关的三个扩展点照主干的；假的提供方，填一个假 key
+    modelAdmission: usageAdmission(base),
+    providerRouting: deepseekRouting(base),
+    errorPresentation: transparentErrors,
+    modelFetch: new FakeModelProvider().fetch,
   };
+  await setProviderKey(deps, "sk-example");
   const app = createApp(deps);
 
   // 下游自己的接口：读写自己的表，登录状态问身份来源。

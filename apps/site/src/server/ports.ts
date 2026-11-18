@@ -3,6 +3,7 @@
 // 扩展点：下游版本可以换掉的东西。每个扩展点在 AppDeps 里占一项，主干里只有单管理员的那一份实现，
 // 主干自己在用。主干里不放下游的实现，也不放版本开关。
 
+import type { ErrorCode } from "@seekcloud/protocol";
 import type { Context, Env, Hono } from "hono";
 import type { SettingKey, SettingValue } from "./settings";
 
@@ -61,4 +62,103 @@ export interface SettingsPolicy {
   ): SettingValue<K> | Promise<SettingValue<K>>;
   /** 这个人现在能不能改这一项。不能改时接口回 403 setting_locked。 */
   canWrite(key: SettingKey, actor: SettingsActor): boolean | Promise<boolean>;
+}
+
+// ---- 模型网关（#26）的三个扩展点 ----
+
+/** 模型调用的用途，记进用量。平台自己发起的调用（起标题、判断是否在等输入……）也走网关，用途不同。 */
+export const MODEL_PURPOSES = [
+  /** 沙箱里的 Agent 调用模型。 */
+  "agent",
+  /** 给会话起标题。 */
+  "title",
+  /** 判断回合结束时 Agent 是不是在等管理员回答（#139）。 */
+  "waiting_check",
+  /** 置顶消息的短标题。 */
+  "pin_title",
+  /** 安全审查。 */
+  "safety",
+  /** 看图。 */
+  "vision",
+  /** 生成 PR 标题。 */
+  "pr_title",
+] as const;
+export type ModelPurpose = (typeof MODEL_PURPOSES)[number];
+
+/** 一次模型调用是谁、为了什么发起的。 */
+export interface ModelCall {
+  purpose: ModelPurpose;
+  /** 记在谁名下：会话的主人；平台调用时是触发它的人。 */
+  userId: string | null;
+  sessionId: string | null;
+  /** 沙箱里的调用发生在哪个回合；不在回合里（或平台调用）时为空。 */
+  turnId: string | null;
+  /** 我们的模型 ID（/api/models 里的那些），不是上游的模型名。 */
+  model: string;
+}
+
+/** 一次调用的用量。上游出错、中途断开的也报：已返回的照记，拿不到的是 0，complete 为 false。 */
+export interface ModelUsage extends ModelCall {
+  /** 提供方的标识（ProviderTarget.provider）。 */
+  provider: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  complete: boolean;
+}
+
+/**
+ * 扩展点：模型调用的准入和记录。转发前问一次放不放行，转发后报一次用量。
+ * 主干的实现（gateway/trunk.ts）：一律放行，用量写进 model_usage。用量上限在多提供方的规格里做（#112）。
+ */
+export interface ModelAdmission {
+  /** 不放行时给一句说明，原样回给调用方（沙箱看得到，不能带上游的信息）。 */
+  admit(call: ModelCall): Promise<{ ok: true } | { ok: false; message: string }>;
+  record(usage: ModelUsage): Promise<void>;
+}
+
+/** 一个上游提供方：往哪里发、发之前怎么改写请求。 */
+export interface ProviderTarget {
+  /** 提供方的标识，记进用量和报错。 */
+  provider: string;
+  /** 上游接口的完整地址，path 是 Anthropic 的路径，比如 /v1/messages。 */
+  url(path: string): string;
+  /**
+   * 发出去之前改写请求：只留白名单里的请求头、换上 key 和 SeekCloud 自己的 user-agent；
+   * 剥掉 dsh 夹带的字段（dsh_*）和 user_id；换成上游的模型名。不改动传进来的对象。
+   */
+  prepare(request: { headers: Headers; body: Record<string, unknown> }): {
+    headers: Headers;
+    body: Record<string, unknown>;
+  };
+}
+
+/**
+ * 扩展点：提供方路由。给定模型，返回依次尝试的提供方。网关只在上游还没开始返回内容时出错才试下一个。
+ * 主干的实现（gateway/trunk.ts）只有一项（DeepSeek 官方），所以行为就是"出错时不自动换提供方"。
+ * 返回空数组表示这个模型现在没有可用的提供方（比如还没填 key）。
+ */
+export interface ProviderRouting {
+  route(model: string, call: ModelCall): Promise<ProviderTarget[]>;
+}
+
+/** 一次上游出错，网关记下的全部内容。 */
+export interface UpstreamFailure {
+  ref: string;
+  code: ErrorCode;
+  /** 给沙箱和浏览器的状态码（上游的，400–599 之间才有）。 */
+  status?: number;
+  provider: string;
+  /** 上游的原始报错：状态码（连不上时为空）和响应体。只给管理员看，不进沙箱（ADR 0007）。 */
+  upstream: { status: number | null; body: string };
+  createdAt: string;
+}
+
+/**
+ * 扩展点：报错的呈现。按参考号查一次上游出错时，浏览器里看到哪些内容。
+ * 主干的实现：管理员看到全部，包括上游的原始报错（ADR 0007 的 2026-11-14 修订）。
+ */
+export interface ErrorPresentation {
+  present(failure: UpstreamFailure, viewer: CurrentUser): Record<string, unknown>;
 }

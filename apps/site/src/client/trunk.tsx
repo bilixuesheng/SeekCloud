@@ -1,10 +1,11 @@
 import { GitHubMark } from "./GitHubMark";
-import { ChatIcon, DatabaseIcon, SettingsIcon, UserIcon } from "./Icons";
+import { ChatIcon, ChipIcon, DatabaseIcon, SettingsIcon, UserIcon } from "./Icons";
 import { LegalPage } from "./legal/LegalPage";
 import type { OverlayProps, PageProps, Registry } from "./registry";
 import { NewSession } from "./session/NewSession";
 import { SessionPage } from "./session/SessionPage";
 import { DataSettings } from "./settings/DataSettings";
+import { ModelSettings } from "./settings/ModelSettings";
 import { SessionSettings } from "./settings/SessionSettings";
 import {
   AccountSettings,
@@ -70,6 +71,13 @@ export function registerTrunk(registry: Registry): Registry {
       icon: <SettingsIcon />,
       component: GeneralSettings,
       order: 10,
+    })
+    .settings({
+      id: "model",
+      name: "模型",
+      icon: <ChipIcon />,
+      component: ModelSettings,
+      order: 12,
     })
     .settings({
       id: "sessions",

@@ -13,4 +13,10 @@ export interface HostLink {
   /** 现在有没有能接新会话的宿主机。没有时新会话留在排队中。 */
   available(): boolean;
   send(command: HostCommand): void;
+  /**
+   * 宿主机替沙箱转发到主站的请求（模型网关这些）带的宿主机凭据，是哪台宿主机的。不认得时返回 undefined。
+   */
+  verifyCredential(token: string): { id: string; name: string } | undefined;
+  /** 这个会话是不是在这台宿主机上：宿主机只能替自己名下的会话转发请求。 */
+  owns(hostId: string, sessionId: string): Promise<boolean>;
 }

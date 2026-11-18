@@ -5,6 +5,7 @@ import { type AppDeps, createApp } from "./app";
 import { adminIdentity } from "./auth/admin-identity";
 import { connectDatabase } from "./db/client";
 import { runMigrations } from "./db/migrate";
+import { deepseekRouting, transparentErrors, usageAdmission } from "./gateway/trunk";
 import { githubApi, unconfiguredGitHub } from "./github/api";
 import { HostHub } from "./hosts/hub";
 import { startMaintenance } from "./maintenance";
@@ -44,7 +45,14 @@ const base = {
   secureCookies: process.env.NODE_ENV === "production",
 };
 // 扩展点（ADR 0010）：主干用单管理员的实现。
-const deps: AppDeps = { ...base, identity: adminIdentity(base), settingsPolicy: adminSettings };
+const deps: AppDeps = {
+  ...base,
+  identity: adminIdentity(base),
+  settingsPolicy: adminSettings,
+  modelAdmission: usageAdmission(base),
+  providerRouting: deepseekRouting(base),
+  errorPresentation: transparentErrors,
+};
 // 沙箱宿主机用宿主机密钥连上来（pnpm host:create 添加）。一台都没连着时，新会话留在排队中。
 const hub = new HostHub(deps);
 deps.host = hub;

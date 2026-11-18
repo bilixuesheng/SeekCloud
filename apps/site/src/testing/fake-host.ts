@@ -25,6 +25,24 @@ export class FakeHost implements HostLink {
     return true;
   }
 
+  /** 假宿主机的宿主机凭据：测试里调模型网关时带上它。 */
+  readonly credential = "fake-host-credential";
+  readonly #disowned = new Set<string>();
+
+  verifyCredential(token: string): { id: string; name: string } | undefined {
+    return token === this.credential ? { id: "fake-host", name: "fake-host" } : undefined;
+  }
+
+  /** 会话都在假宿主机上，除非测试用 disown 拿走。 */
+  async owns(_hostId: string, sessionId: string): Promise<boolean> {
+    return !this.#disowned.has(sessionId);
+  }
+
+  /** 让这个会话看起来不在这台宿主机上（测"宿主机只能替自己名下的会话转发"）。 */
+  disown(sessionId: string): void {
+    this.#disowned.add(sessionId);
+  }
+
   send(command: HostCommand): void {
     this.commands.push(command);
     if (!this.manual) this.#enqueue(() => this.#respond(command));

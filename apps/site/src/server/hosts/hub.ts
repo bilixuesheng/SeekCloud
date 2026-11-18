@@ -411,7 +411,7 @@ export class HostHub implements HostLink {
       console.warn(`宿主机 ${state.name} 发来的事件格式不对，已忽略`);
       return;
     }
-    if (!(await this.#owns(state.id, event.sessionId))) {
+    if (!(await this.owns(state.id, event.sessionId))) {
       console.warn(`宿主机 ${state.name} 上报了不在它名下的会话 ${event.sessionId}，已忽略`);
       return;
     }
@@ -419,7 +419,7 @@ export class HostHub implements HostLink {
   }
 
   /** 这个会话是不是在这台宿主机上。 */
-  async #owns(hostId: string, sessionId: string): Promise<boolean> {
+  async owns(hostId: string, sessionId: string): Promise<boolean> {
     return (await this.#hostOf(sessionId)) === hostId;
   }
 
