@@ -1,0 +1,47 @@
+name: Sandbox
+
+# 要真沙箱（Sysbox）的测试，跑在测试机（#14）上：本仓库的 GitHub 自托管 Runner，标签 sysbox。
+# 仓库是公开的，所以只在本仓库分支的推送和手动触发时跑，不用 pull_request 触发：
+# 别人 fork 以后提的 PR 不会派到测试机上。
+on:
+  push:
+    paths:
+      - "apps/host/**"
+      - "packages/protocol/**"
+      - "scripts/test-machine.sh"
+      - ".github/workflows/sandbox.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 测试机只有一台：同一个分支新推送时取消还在跑的那次。
+concurrency:
+  group: sandbox-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sysbox:
+    if: github.repository == 'bilixuesheng/SeekCloud'
+    runs-on: [self-hosted, sysbox]
+    timeout-minutes: 20
+    steps:
+      - name: Sysbox 在运行
+        run: |
+          systemctl is-active sysbox
+          sysbox-runc --version
+      - name: Sysbox 容器里能再跑 Docker，容器里的 root 不是宿主机的 root
+        run: |
+          name="sandbox-smoke-${GITHUB_RUN_ID}"
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+          docker run --runtime=sysbox-runc -d --name "$name" docker:dind
+          for _ in $(seq 1 60); do
+            if docker exec "$name" sh -c 'DOCKER_HOST=unix:///var/run/docker.sock docker info' >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          out=$(docker exec "$name" sh -c 'DOCKER_HOST=unix:///var/run/docker.sock docker run --rm hello-world')
+          echo "$out" | head -n 3
+          [[ "$out" == *"Hello from Docker"* ]]
+          read -r inside outside _ < <(docker exec "$name" head -n1 /proc/self/uid_map)
+          echo "用户映射：容器里的 $inside → 宿主机的 $outside"
+          [[ "$inside" == 0 && "$outside" != 0 ]]
