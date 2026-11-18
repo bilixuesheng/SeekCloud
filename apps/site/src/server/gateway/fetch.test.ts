@@ -124,17 +124,12 @@ describe("模型网关的网页抓取", () => {
     expect(await content(`http://site.test:${port}/gzip`)).toBe("压缩过的");
   });
 
-  it("网络策略：不开放一律拒绝；默认清单只放行清单里的；不放行的不发出请求", async () => {
-    const before = seen.length;
-    await setAccess("none");
-    const none = await fetchUrl(`http://site.test:${port}/page`);
-    expect(none.status).toBe(403);
-    expect((await none.json()).error.message).toContain("不开放");
-
-    await setAccess("default");
-    expect((await fetchUrl(`http://site.test:${port}/page`)).status).toBe(403);
-    expect(seen.length).toBe(before);
-    expect(await content(`http://raw.githubusercontent.com:${port}/page`)).toContain("# 标题");
+  it("不受环境的网络策略约束（照 Claude Code）：哪一档都能抓，内网照样不连", async () => {
+    for (const access of ["none", "default", "custom"] as const) {
+      await setAccess(access);
+      expect(await content(`http://site.test:${port}/page`), access).toContain("# 标题");
+      expect((await fetchUrl("http://169.254.169.254/")).status, access).toBe(403);
+    }
   });
 
   it("不连内网、本机和元数据地址：直接写的 IP、解析出来的、IPv6 里嵌着的，都不发出请求", async () => {

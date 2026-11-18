@@ -4,7 +4,7 @@ import { createMiddleware } from "hono/factory";
 import type { AppDeps } from "../app";
 import { sessions, turns } from "../db/schema";
 import { errorResponse } from "../gateway/failures";
-import { sessionNetworkAccess, webFetch } from "../gateway/fetch";
+import { webFetch } from "../gateway/fetch";
 import { GatewayFiles } from "../gateway/files";
 import type { ModelGateway } from "../gateway/gateway";
 import { webSearch } from "../gateway/web";
@@ -126,7 +126,7 @@ export function gatewayRoutes(deps: AppDeps, gateway: ModelGateway) {
       return webFetch(
         deps,
         { tool: "web_fetch", ...owner(session), turnId: session.turnId },
-        { body, access: await sessionNetworkAccess(deps, session.id), signal: c.req.raw.signal },
+        { body, signal: c.req.raw.signal },
       );
     })
     .post("/v1/files", (c) =>

@@ -95,7 +95,7 @@ Generated-by: SeekCloud (AI)
 | `POST /v1/tools/search` | 联网搜索（DeepSeek 搜索接口的格式） | `Authorization: Bearer` |
 | `POST /v1/tools/fetch` | 网页抓取（DeepSeek 抓取接口的格式）：主站替沙箱去取，转成 Markdown | `Authorization: Bearer` |
 
-- 这个地址是沙箱直连宿主机，不经过 `HTTPS_PROXY`，任何网络策略下都通。网页抓取另外按会话所用环境的网络策略判断（主站的 `network/policy.ts`），不连内网和本机地址。
+- 这个地址是沙箱直连宿主机，不经过 `HTTPS_PROXY`，任何网络策略下都通。网页抓取由主站去取，不受网络策略约束（照 Claude Code），但不连内网和本机地址。
 - 宿主机转给主站时去掉会话令牌和 dsh 夹带的请求头，只留 `content-type`、`anthropic-version`、`anthropic-beta` 这几个，换上宿主机凭据和会话 ID；路径里带 `..` 或编码过的斜杠的不转。主站剥字段、换上提供方的 key（`apps/site/src/server/gateway/`）。
 - 宿主机还没连上主站时回 503，dsh 会按它自己的规则重试。
 - dsh 的模型目录（它会去取接口地址那个域名下的 `/models`）宿主机不提供，用 dsh 自带的；接 dsh 的时候（#25）核对一下取不到时的表现。

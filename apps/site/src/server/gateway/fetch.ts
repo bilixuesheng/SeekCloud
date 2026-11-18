@@ -3,16 +3,13 @@ import https from "node:https";
 import { isIP, type LookupFunction } from "node:net";
 import { pipeline, type Readable } from "node:stream";
 import zlib from "node:zlib";
-import { eq } from "drizzle-orm";
 import type { AppDeps } from "../app";
-import { environments, sessions } from "../db/schema";
 import {
   guardedLookup,
   type OutboundNetwork,
   PrivateAddressError,
   publicNetwork,
 } from "../network/address";
-import { type NetworkAccess, webFetchDecision } from "../network/policy";
 import type { WebToolCall } from "../ports";
 import { errorResponse } from "./failures";
 import { htmlToMarkdown } from "./html";
@@ -46,25 +43,12 @@ class FetchProblem extends Error {
 const problem = (status: number, message: string) =>
   errorResponse({ code: status === 504 ? "timeout" : "model_rejected", status, message });
 
-/** 会话所用环境的网络策略。环境已经删掉时按最严的"不开放"处理。 */
-export async function sessionNetworkAccess(
-  deps: Pick<AppDeps, "db">,
-  sessionId: string,
-): Promise<NetworkAccess> {
-  const [row] = await deps.db
-    .select({ access: environments.networkAccess })
-    .from(sessions)
-    .innerJoin(environments, eq(environments.id, sessions.environmentId))
-    .where(eq(sessions.id, sessionId));
-  return row?.access ?? "none";
-}
-
 /**
  * 网页抓取（POST /v1/tools/fetch，DeepSeek 抓取接口的格式：请求 { url }，回复 { content }）。
  * 主站替沙箱去取这个网址（#26 的 2026-11-15 评论）：
  *
  * - 只取 http 和 https，网址里不能带用户名和密码；
- * - 先按环境的网络策略判断（network/policy.ts，用户定之前照保守的做）；
+ * - 不受会话所用环境的网络策略约束（照 Claude Code：搜索和抓取是服务端的工具，2026-11-18 用户定的）；
  * - 按解析后的 IP 判断，不连内网、回环和元数据地址，连的就是判断时解析出来的那个地址（network/address.ts）；
  * - 不跟着重定向跳过去：告诉 Agent 重定向到了哪里，要不要抓由它再发一次（照样过上面的检查）；
  * - 响应有大小上限和超时；网页转成 Markdown，文本原样，别的（图片、压缩包）不收；
@@ -73,7 +57,7 @@ export async function sessionNetworkAccess(
 export async function webFetch(
   deps: FetchDeps,
   call: WebToolCall,
-  request: { body: Record<string, unknown>; access: NetworkAccess; signal: AbortSignal },
+  request: { body: Record<string, unknown>; signal: AbortSignal },
 ): Promise<Response> {
   const raw = request.body.url;
   if (typeof raw !== "string" || !raw.trim()) return problem(400, "要抓取的网址不能为空");
@@ -91,8 +75,6 @@ export async function webFetch(
   url.hash = "";
   const host = url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname;
 
-  const decision = webFetchDecision(request.access, host);
-  if (!decision.ok) return problem(403, decision.message);
   const network = deps.outboundNetwork ?? publicNetwork;
   // 直接写 IP 的网址不经过域名解析，在这里判断。
   if (isIP(host) && !network.allowAddress(host)) return problem(403, PRIVATE_ADDRESS);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_ALLOWLIST, matchesDomain, normalizeHost, webFetchDecision } from "./policy";
+import { DEFAULT_ALLOWLIST, matchesDomain, normalizeHost } from "./policy";
 
 describe("域名匹配（#47 的规则）", () => {
   it.each([
@@ -31,28 +31,5 @@ describe("域名匹配（#47 的规则）", () => {
       const base = entry.startsWith("*.") ? entry.slice(2) : entry;
       expect(normalizeHost(base), entry).toBe(base);
     }
-  });
-});
-
-describe("网页抓取按环境的网络策略判断（用户定之前照最保守的做）", () => {
-  it("不开放：一律拒绝", () => {
-    expect(webFetchDecision("none", "github.com").ok).toBe(false);
-  });
-
-  it("默认清单：只放行清单里的域名", () => {
-    expect(webFetchDecision("default", "raw.githubusercontent.com").ok).toBe(true);
-    expect(webFetchDecision("default", "registry.npmjs.org").ok).toBe(true);
-    const denied = webFetchDecision("default", "example.com");
-    expect(denied.ok).toBe(false);
-    if (!denied.ok) expect(denied.message).toContain("example.com");
-  });
-
-  it("自定义：只放行环境自己的清单（现在还没地方填，是空的）", () => {
-    expect(webFetchDecision("custom", "github.com").ok).toBe(false);
-    expect(webFetchDecision("custom", "a.corp.example", ["*.corp.example"]).ok).toBe(true);
-  });
-
-  it("完全开放：不限（内网地址另外拦）", () => {
-    expect(webFetchDecision("full", "example.com").ok).toBe(true);
   });
 });

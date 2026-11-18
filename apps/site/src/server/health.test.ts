@@ -10,16 +10,23 @@ describe("健康检查", () => {
   });
   afterAll(() => t.close());
 
-  it("返回版本号、数据库状态和当前时间", async () => {
+  it("没登录：返回状态、SeekCloud 的标识、数据库状态和当前时间，不给版本号", async () => {
     const res = await t.request("/api/health");
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       status: "ok",
-      version: "1.2.3",
+      product: "seekcloud",
       database: "ok",
       time: "2026-11-01T08:00:00.000Z",
     });
+  });
+
+  it("登录以后多给版本号", async () => {
+    const browser = await t.admin();
+    const res = await browser.get("/api/health");
+
+    expect((await res.json()).version).toBe("1.2.3");
   });
 
   it("时间跟着时钟走", async () => {
@@ -43,6 +50,8 @@ describe("健康检查：数据库连不上", () => {
     const res = await t.request("/api/health");
 
     expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({ status: "error", database: "error" });
+    const body = await res.json();
+    expect(body).toMatchObject({ status: "error", product: "seekcloud", database: "error" });
+    expect(body.version).toBeUndefined();
   });
 });
