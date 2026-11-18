@@ -206,7 +206,7 @@ describe.skipIf(!enabled)("沙箱（真的 Docker）", { timeout: 120_000 }, () 
           const out = (
             await sh(
               id,
-              'for f in /proc/[0-9]*/status; do awk \'/^Pid:/ { p = $2 } /^VmRSS:/ { print $2, p }\' "$f"; done 2>/dev/null | sort -n | tail -n 1',
+              "for f in /proc/[0-9]*/status; do awk '/^Pid:/ { p = $2 } /^VmRSS:/ { print $2, p }' \"$f\"; done 2>/dev/null | sort -n | tail -n 1",
             )
           ).out;
           const [rss = 0, pid = 0] = out.split(" ").map(Number);

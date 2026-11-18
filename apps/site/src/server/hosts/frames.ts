@@ -84,6 +84,7 @@ const ReportShape = z.object({
   diskAvailable: Bytes,
   diskTotal: Bytes,
   sandboxes: Count,
+  diskQuota: z.boolean().optional(),
 });
 
 const HelloShape = z.object({
