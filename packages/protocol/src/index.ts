@@ -186,6 +186,11 @@ export type HostCommand =
       text: string;
       model: string;
       effort: ThinkingEffort;
+      /**
+       * 这个会话以前没有哪个回合到过 Agent：Agent 那边还没有这个会话，新建就是了。
+       * 为假时 Agent 必须接着原来的会话，接不上就让回合失败，不悄悄开一个新的（#25）。旧版本的主站不填，按假处理。
+       */
+      firstTurn?: boolean;
     };
 
 /** 宿主机发给主站的事件。 */

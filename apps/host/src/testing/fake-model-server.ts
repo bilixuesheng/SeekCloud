@@ -15,10 +15,19 @@ export interface RecordedRequest {
  * 把收到的每个请求记下来，/v1/messages 回一段固定的流式回复，别的路径（比如遥测上报）回 404。
  * dsh 用 DEEPSEEK_BASE_URL 指过来。
  */
+/** 按脚本回复时的一步：思考、正文、要调的工具（Anthropic 的 tool_use）。 */
+export interface ScriptedReply {
+  thinking?: string;
+  text?: string;
+  tools?: { id: string; name: string; input: unknown }[];
+}
+
 export class FakeModelServer {
   readonly requests: RecordedRequest[] = [];
-  /** 模型回的那句话。 */
+  /** 模型回的那句话（脚本用完以后也回它）。 */
   reply = "好的";
+  /** 按顺序回的几步：第几次调模型就回第几步。 */
+  script: ScriptedReply[] = [];
   readonly #server = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
@@ -60,6 +69,7 @@ export class FakeModelServer {
   }
 
   #stream(res: http.ServerResponse) {
+    const step: ScriptedReply = this.script.shift() ?? { text: this.reply };
     res.writeHead(200, { "content-type": "text/event-stream" });
     const send = (event: string, data: object) =>
       res.write(`event: ${event}\ndata: ${JSON.stringify({ type: event, ...data })}\n\n`);
@@ -74,10 +84,38 @@ export class FakeModelServer {
         usage: { input_tokens: 1, output_tokens: 0 },
       },
     });
-    send("content_block_start", { index: 0, content_block: { type: "text", text: "" } });
-    send("content_block_delta", { index: 0, delta: { type: "text_delta", text: this.reply } });
-    send("content_block_stop", { index: 0 });
-    send("message_delta", { delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } });
+    let index = 0;
+    if (step.thinking) {
+      send("content_block_start", {
+        index,
+        content_block: { type: "thinking", thinking: "", signature: "" },
+      });
+      send("content_block_delta", {
+        index,
+        delta: { type: "thinking_delta", thinking: step.thinking },
+      });
+      send("content_block_stop", { index: index++ });
+    }
+    if (step.text) {
+      send("content_block_start", { index, content_block: { type: "text", text: "" } });
+      send("content_block_delta", { index, delta: { type: "text_delta", text: step.text } });
+      send("content_block_stop", { index: index++ });
+    }
+    for (const tool of step.tools ?? []) {
+      send("content_block_start", {
+        index,
+        content_block: { type: "tool_use", id: tool.id, name: tool.name, input: {} },
+      });
+      send("content_block_delta", {
+        index,
+        delta: { type: "input_json_delta", partial_json: JSON.stringify(tool.input) },
+      });
+      send("content_block_stop", { index: index++ });
+    }
+    send("message_delta", {
+      delta: { stop_reason: step.tools?.length ? "tool_use" : "end_turn" },
+      usage: { output_tokens: 5 },
+    });
     send("message_stop", {});
     res.end();
   }
