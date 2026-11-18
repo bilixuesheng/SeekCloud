@@ -116,6 +116,7 @@ COPY seekcloud-sign /usr/local/bin/seekcloud-sign
 COPY git-hooks/ /usr/local/share/seekcloud/git-hooks/
 COPY dsh/ /usr/local/share/seekcloud/dsh/
 COPY image/seekcloud-init /usr/local/bin/seekcloud-init
+COPY runner/seekcloud-runner.mjs /usr/local/lib/seekcloud/seekcloud-runner.mjs
 COPY image/check.sh /usr/local/lib/seekcloud/check.sh
 
 # dsh 的遥测关掉（基线配置里也关了，这是第二道）；提交尾注默认开着，宿主机准备沙箱时按设置重写

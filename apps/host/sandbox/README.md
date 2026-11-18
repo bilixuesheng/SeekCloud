@@ -150,3 +150,20 @@ docker build -f image/Dockerfile --build-arg SEEKCLOUD_IMAGE_VERSION=$(cat image
 `image/check.sh` 是镜像的自检：在用这个镜像建的沙箱里跑，检查各工具链能编译运行、沙箱里的 Docker、Chromium、dsh 和系统 Node 互不影响、git 钩子。`.github/workflows/sandbox-image.yml` 在测试机上构建镜像，再用 Sysbox 建一个沙箱跑它。
 
 发布镜像（推到镜像仓库）跟着发布包一起做（#94）。镜像里有 GPL 许可证的系统软件（git、bash 等，来自 Ubuntu 的软件包），发布时要附上取得源代码的方式。
+
+## 运行器和逐字输出
+
+dsh 由沙箱里常驻的运行器（`runner/seekcloud-runner.mjs`）托管，不是守护进程直接起的子进程（#25）：
+
+- 通用镜像的 `seekcloud-init` 用 dsh 自己的那份 Node 起它，监听 `/run/seekcloud/runner.sock`，退出了就再起。
+- 守护进程用 `docker exec -i <沙箱> /opt/seekcloud/node/bin/node /usr/local/lib/seekcloud/seekcloud-runner.mjs connect` 连进来。
+- 运行器起、停 dsh（自己一个进程组，停的时候连子进程一起停），把 dsh 的标准输出、第 4 个文件描述符和标准错误逐行编号存着。守护进程处理完一条就确认一条。
+- 守护进程重启、断线重连时，先说"收到第几条了"，运行器补发后面的，不丢、不重复。
+- 后连上的守护进程顶掉先连上的；只是探活的连接（没打招呼）不算。
+- 接口（每行一个 JSON）写在运行器文件开头的注释里。守护进程这边是 `apps/host/src/agent/runner-link.ts`。
+
+dsh 的 SDK 只推已经存进会话日志的事件，没有模型正在输出的增量。所以基线配置插进 `dsh/live-output.js`：
+
+- 它包住 Agent 自己的每次模型调用（dsh 的 `llm/stream` 钩子，压缩上下文这类 dsh 内部的调用不算），把思考和正文的增量、每次调用到现在的 token 数按行写到 `SEEKCLOUD_LIVE_FD` 指的文件描述符；
+- 运行器起 dsh 时把它设成 3，多开一条管道收；
+- 没有运行器时什么也不做。

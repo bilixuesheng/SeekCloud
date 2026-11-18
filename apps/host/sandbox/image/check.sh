@@ -109,6 +109,10 @@ check "模型看得到 .claude/skills 和 .claude/commands 的技能" sh -c \
   'grep -q "deploy-check\`: 发布前检查清单" requests.log && grep -q "review\`: Review the current diff" requests.log'
 kill "$fake_pid" 2>/dev/null
 
+echo "== 运行器"
+check "运行器在跑，连得上" sh -c 'for _ in $(seq 1 50); do [ -S /run/seekcloud/runner.sock ] && break; sleep 0.2; done
+  printf "{\"op\":\"hello\",\"since\":0}\n" | timeout 5 /opt/seekcloud/node/bin/node /usr/local/lib/seekcloud/seekcloud-runner.mjs connect | head -n 1 | grep -q "\"op\":\"welcome\""'
+
 echo "== SeekCloud 的文件"
 check "签名助手" test -x /usr/local/bin/seekcloud-sign
 check "git 钩子是链接到 _dispatch 的" sh -c \

@@ -1,7 +1,8 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { createInterface } from "node:readline";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { FakeModelServer } from "./testing/fake-model-server";
@@ -83,5 +84,42 @@ describe.skipIf(!DSH)("真的 dsh 叠上基线配置", { timeout: 120_000 }, () 
     expect(first).toContain("- `review`: Review the current diff");
     expect(first).toContain("- `make-component`: Make a React component named $1.");
     expect(first).not.toMatch(/- `release`/);
+  });
+});
+
+describe.skipIf(!DSH)("真的 dsh：逐字输出的插件", { timeout: 120_000 }, () => {
+  it("有运行器给的文件描述符时，模型输出的增量和 token 数一行一行写出来", async () => {
+    const model = new FakeModelServer();
+    model.reply = "逐字的回复";
+    const url = await model.start();
+    const root = await mkdtemp(join(tmpdir(), "seekcloud-dsh-live-"));
+    try {
+      const child = spawn(DSH as string, ["--profile", "headless", "--patch", BASELINE, "你好"], {
+        cwd: root,
+        stdio: ["ignore", "pipe", "pipe", "pipe"],
+        env: {
+          PATH: process.env.PATH,
+          HOME: root,
+          DSH_HOME: join(root, ".dsh"),
+          DEEPSEEK_API_KEY: "fake-key",
+          DEEPSEEK_BASE_URL: url,
+          SEEKCLOUD_LIVE_FD: "3",
+        },
+      });
+      const live: unknown[] = [];
+      createInterface({ input: child.stdio[3] as NodeJS.ReadableStream }).on("line", (line) =>
+        live.push(JSON.parse(line)),
+      );
+      const code = await new Promise((resolve) => child.on("close", resolve));
+      expect(code).toBe(0);
+      expect(live).toContainEqual({ kind: "text", text: "逐字的回复" });
+      expect(live.some((l) => typeof (l as { tokens?: unknown }).tokens === "number")).toBe(true);
+      expect(
+        live.every((l) => !("call" in (l as object)) || (l as { call: number }).call === 1),
+      ).toBe(true);
+    } finally {
+      await model.close();
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
