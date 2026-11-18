@@ -8,14 +8,28 @@ import { type AppDeps, createApp } from "../server/app";
 import { hasAdmin } from "../server/auth/admin";
 import { adminIdentity } from "../server/auth/admin-identity";
 import { connectDatabase } from "../server/db/client";
+import { modelProviders } from "../server/db/schema";
+import {
+  deepseekRouting,
+  setProviderKey,
+  transparentErrors,
+  usageAdmission,
+} from "../server/gateway/trunk";
 import { HostHub } from "../server/hosts/hub";
 import { runMaintenance } from "../server/maintenance";
-import type { Identity, SettingsPolicy } from "../server/ports";
+import type {
+  ErrorPresentation,
+  Identity,
+  ModelAdmission,
+  ProviderRouting,
+  SettingsPolicy,
+} from "../server/ports";
 import { SecretBox } from "../server/secrets";
 import { adminSettings } from "../server/settings";
 import { createTestDatabase } from "./database";
 import { FakeGitHub } from "./fake-github";
 import { FakeHost } from "./fake-host";
+import { FakeModelProvider } from "./fake-model";
 import { FakeClock } from "./fakes";
 import { TestBrowser } from "./test-browser";
 
@@ -39,7 +53,16 @@ export interface TestAppOptions {
   identity?: (deps: Pick<AppDeps, "db" | "clock" | "secureCookies">) => Identity;
   /** 换掉设置的读写规则（扩展点）。默认是主干的 adminSettings。 */
   settingsPolicy?: SettingsPolicy;
+  /** 换掉模型网关的三个扩展点。默认是主干的实现（gateway/trunk.ts）。 */
+  modelAdmission?: ModelAdmission;
+  providerRouting?: ProviderRouting;
+  errorPresentation?: ErrorPresentation;
+  /** false：还没填模型服务的 key。默认填好了一个假的，模型请求发到假的提供方 t.model。 */
+  modelKey?: false;
 }
+
+/** 测试里填好的模型服务 key（发给假提供方的请求里应该带着它）。 */
+export const MODEL_KEY = "sk-test-0123456789abcdef";
 
 /** t.admin() 设置和登录时用的管理员密码。 */
 const ADMIN_PASSWORD = "test-admin-password";
@@ -63,11 +86,25 @@ export async function createTestApp(options: TestAppOptions = {}) {
     secrets: new SecretBox(Buffer.alloc(32, 7)),
     host: options.host === false ? undefined : host,
   };
+  const model = new FakeModelProvider();
   const deps: AppDeps = {
     ...base,
     identity: (options.identity ?? adminIdentity)(base),
     settingsPolicy: options.settingsPolicy ?? adminSettings,
+    modelAdmission: options.modelAdmission ?? usageAdmission(base),
+    providerRouting: options.providerRouting ?? deepseekRouting(base),
+    errorPresentation: options.errorPresentation ?? transparentErrors,
+    modelFetch: model.fetch,
   };
+  if (options.modelKey !== false) {
+    try {
+      await setProviderKey(deps, MODEL_KEY);
+      await db.update(modelProviders).set({ baseUrl: "https://model.test/anthropic" });
+    } catch (error) {
+      // 测数据库连不上的情况（databaseUrl 指向一个不存在的库）：填不了 key，也用不着。
+      if (!options.databaseUrl) throw error;
+    }
+  }
   const hub = options.hosts ? new HostHub(deps) : undefined;
   if (hub) deps.host = hub;
   const app = createApp(deps);
@@ -116,6 +153,9 @@ export async function createTestApp(options: TestAppOptions = {}) {
     clock,
     github,
     host,
+    /** 假的模型服务：模型网关发出去的请求都记在这里，可以按脚本回。 */
+    model,
+    deps,
     request: (path: string, init?: RequestInit) => app.request(path, init),
     /** 一个有自己 Cookie 的浏览器，还没有登录。 */
     browser: () => new TestBrowser(app),

@@ -1,9 +1,10 @@
 import { purgeAccessLogs } from "./access-log";
 import { buildPendingExports, expireExports } from "./account/exports";
 import type { AppDeps } from "./app";
+import { purgeUpstreamErrors } from "./gateway/trunk";
 
 /**
- * 后台的定期任务：打包等着的数据导出、删掉过期的导出、删掉满 180 天的访问记录。
+ * 后台的定期任务：打包等着的数据导出、删掉过期的导出、删掉满 180 天的访问记录和满 30 天的上游原始报错。
  * main.ts 每分钟跑一次；测试里直接调用（t.runMaintenance()），配合假时钟。
  * 每一项自己出错不影响其他几项。
  */
@@ -12,6 +13,7 @@ export async function runMaintenance(deps: AppDeps): Promise<void> {
     ["打包数据导出", () => buildPendingExports(deps)],
     ["清理过期的导出", () => expireExports(deps)],
     ["清理过期的访问记录", () => purgeAccessLogs(deps)],
+    ["清理过期的上游原始报错", () => purgeUpstreamErrors(deps)],
   ];
   for (const [name, job] of jobs) {
     try {

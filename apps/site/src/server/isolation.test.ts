@@ -14,6 +14,7 @@ describe("两个人互相看不到对方的数据", () => {
   let bob: TestBrowser;
   let session: { shortId: string; sessionId: string; queueId: string; envId: string };
   let exportId: string;
+  let errorRef: string;
 
   beforeAll(async () => {
     t = await createTestApp({ identity: identity.attach });
@@ -43,6 +44,20 @@ describe("两个人互相看不到对方的数据", () => {
     expect((await alice.post("/api/account/export")).status).toBe(202);
     await t.runMaintenance();
     exportId = (await (await alice.get("/api/account/export")).json()).latest.id;
+
+    // 甲的会话调模型时上游出过一次错，原始报错按参考号存着。
+    t.model.reply({ status: 500, body: "甲的上游报错" });
+    const failed = await t.request("/api/gateway/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${t.host.credential}`,
+        "x-seekcloud-session": sessionId,
+      },
+      body: JSON.stringify({ model: "deepseek-flash", max_tokens: 10, messages: [] }),
+    });
+    errorRef = /参考号 (\w+)/.exec((await failed.json()).error.message)?.[1] as string;
+    expect((await alice.get(`/api/model-errors/${errorRef}`)).status).toBe(200);
   });
   afterAll(() => t.close());
 
@@ -68,6 +83,7 @@ describe("两个人互相看不到对方的数据", () => {
       "POST /api/sessions/{shortId}/delete": () => bob.post(`${s}/delete`),
       "GET /api/account/export/{id}/download": () =>
         bob.get(`/api/account/export/${exportId}/download`),
+      "GET /api/model-errors/{ref}": () => bob.get(`/api/model-errors/${errorRef}`),
     };
   };
 

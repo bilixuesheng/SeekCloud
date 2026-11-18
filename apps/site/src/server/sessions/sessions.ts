@@ -48,6 +48,10 @@ export const sessionErrors = {
   branch_not_found: { status: 400, message: "仓库中不存在该分支" },
   environment_not_found: { status: 404, message: "环境不存在" },
   model_not_found: { status: 400, message: "模型不存在或已下线" },
+  model_not_configured: {
+    status: 409,
+    message: "尚未设置模型服务的 API key，请在“设置 → 模型”中填写",
+  },
   session_not_found: { status: 404, message: "会话不存在" },
   session_closed: { status: 409, message: "会话已归档，请先取消归档再发送消息" },
   queued_not_found: { status: 404, message: "该消息已发送或已撤回" },
@@ -148,6 +152,17 @@ export class Sessions {
       input.effort ??
       fitEffort(model.efforts, await readSetting(this.#deps, "default_effort", { userId }));
     if (!effort || !model.efforts.includes(effort)) return { ok: false, error: "model_not_found" };
+    // 模型服务的 key 还没填：现在就说清楚，不等沙箱起来以后每次调模型都失败。
+    const call = {
+      purpose: "agent" as const,
+      userId,
+      sessionId: null,
+      turnId: null,
+      model: model.id,
+    };
+    if ((await this.#deps.providerRouting.route(model.id, call)).length === 0) {
+      return { ok: false, error: "model_not_configured" };
+    }
 
     // 装了 App 的仓库可以推送；没装的公开仓库只读挂载。
     const checked = await withGitHubToken(this.#deps, userId, async (token) => {

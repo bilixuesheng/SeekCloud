@@ -1,4 +1,5 @@
 import type {
+  ErrorCode,
   PullRequestState,
   SessionEventBody,
   SessionRepo,
@@ -279,3 +280,68 @@ export const settings = pgTable("settings", {
   value: jsonb("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
+
+/**
+ * 模型服务的提供方（模型网关，#26）。主干现在只有 DeepSeek 官方一个；多提供方在 #112 里加。
+ * key 用 SEEKCLOUD_SECRET_KEY 加密存放，接口从不返回原文。
+ */
+export const modelProviders = pgTable("model_providers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // 程序里认它用的标识，比如 deepseek。
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  // Anthropic Messages 兼容接口的地址，比如 https://api.deepseek.com/anthropic。
+  baseUrl: text("base_url").notNull(),
+  apiKey: text("api_key"),
+  keySetAt: timestamp("key_set_at", { withTimezone: true }),
+  // 上游说 key 不对（401、403）的时间；换了 key 以后清掉。设置里据此提示管理员检查 key。
+  keyRejectedAt: timestamp("key_rejected_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+/**
+ * 模型调用的用量（#26）：每次调用一条，只记 token 数，不换算成钱。purpose 是用途：Agent 的调用、起标题、
+ * 判断是否在等输入这些（gateway/purposes.ts）。平台自己发起的调用没有会话时 session_id 为空。
+ */
+export const modelUsage = pgTable(
+  "model_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    sessionId: uuid("session_id").references(() => sessions.id, { onDelete: "set null" }),
+    turnId: uuid("turn_id"),
+    purpose: text("purpose").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+    cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
+    // 中途断开、上游出错的为 false：已返回的用量照记，拿不到就是 0。
+    complete: boolean("complete").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("model_usage_session").on(t.sessionId), index("model_usage_at").on(t.createdAt)],
+);
+
+/**
+ * 上游模型服务的原始报错（ADR 0007 的 2026-11-14 修订）：只给管理员看，按参考号查，不进沙箱。
+ * 保存 30 天（maintenance.ts）。
+ */
+export const upstreamErrors = pgTable(
+  "upstream_errors",
+  {
+    ref: text("ref").primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id").references(() => sessions.id, { onDelete: "set null" }),
+    provider: text("provider").notNull(),
+    // 归到哪一类（ErrorCode）。
+    code: text("code").$type<ErrorCode>().notNull(),
+    // 上游的 HTTP 状态码；连不上时为空。
+    status: integer("status"),
+    // 上游的响应体（截到 16 KB），或者连不上时的错误说明。
+    body: text("body").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("upstream_errors_at").on(t.createdAt)],
+);

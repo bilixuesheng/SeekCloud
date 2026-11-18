@@ -140,6 +140,14 @@ export const UserIcon = () => (
   </svg>
 );
 
+/** 芯片：设置里的"模型"。 */
+export const ChipIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="4" y="4" width="8" height="8" rx="1.6" {...line} />
+    <path d="M6.5 2v2M9.5 2v2M6.5 12v2M9.5 12v2M2 6.5h2M2 9.5h2M12 6.5h2M12 9.5h2" {...line} />
+  </svg>
+);
+
 /** 对话气泡：设置里的"会话"。 */
 export const ChatIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
