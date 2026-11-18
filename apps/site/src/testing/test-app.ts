@@ -17,6 +17,7 @@ import {
 } from "../server/gateway/trunk";
 import { HostHub } from "../server/hosts/hub";
 import { runMaintenance } from "../server/maintenance";
+import type { OutboundNetwork } from "../server/network/address";
 import type {
   ErrorPresentation,
   Identity,
@@ -59,6 +60,9 @@ export interface TestAppOptions {
   errorPresentation?: ErrorPresentation;
   /** false：还没填模型服务的 key。默认填好了一个假的，模型请求发到假的提供方 t.model。 */
   modelKey?: false;
+  /** 网页抓取怎么解析域名、哪些地址能连。默认是真的（只连公网）。 */
+  outboundNetwork?: OutboundNetwork;
+  webFetchTimeoutMs?: number;
 }
 
 /** 测试里填好的模型服务 key（发给假提供方的请求里应该带着它）。 */
@@ -95,6 +99,8 @@ export async function createTestApp(options: TestAppOptions = {}) {
     providerRouting: options.providerRouting ?? deepseekRouting(base),
     errorPresentation: options.errorPresentation ?? transparentErrors,
     modelFetch: model.fetch,
+    outboundNetwork: options.outboundNetwork,
+    webFetchTimeoutMs: options.webFetchTimeoutMs,
   };
   if (options.modelKey !== false) {
     try {
