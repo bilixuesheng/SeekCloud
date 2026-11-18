@@ -127,7 +127,11 @@ export function createApp(deps: AppDeps) {
   );
 
   // 登录状态放在 Cookie 里，所以拒绝别的网站发来的表单请求。接口只收 JSON，跨站的 JSON 请求浏览器本来就拦。
-  app.use("/api/*", csrf());
+  // 模型网关不看 Cookie（只认宿主机凭据），沙箱经它上传文件用的是 multipart，不过这一道。
+  const sameSiteOnly = csrf();
+  app.use("/api/*", (c, next) =>
+    c.req.path.startsWith("/api/gateway/") ? next() : sameSiteOnly(c, next),
+  );
 
   app.openapi(healthRoute, async (c) => {
     const database = await deps.db.execute(sql`select 1`).then(

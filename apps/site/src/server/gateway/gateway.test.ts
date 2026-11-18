@@ -4,7 +4,8 @@ import { streamOf, UPSTREAM_USAGE } from "../../testing/fake-model";
 import { createTestApp, MODEL_KEY, type TestApp } from "../../testing/test-app";
 import type { TestBrowser } from "../../testing/test-browser";
 import { modelUsage, upstreamErrors } from "../db/schema";
-import { GatewayError, ModelGateway } from "./gateway";
+import { GatewayError } from "./failures";
+import { ModelGateway } from "./gateway";
 
 /** 模型网关（#26）：沙箱经宿主机发来的 Messages 请求，转给假的提供方 t.model。 */
 describe("模型网关", () => {

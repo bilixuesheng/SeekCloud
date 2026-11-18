@@ -108,25 +108,56 @@ export interface ModelUsage extends ModelCall {
   complete: boolean;
 }
 
+/** 联网工具：网关替沙箱做的联网搜索和网页抓取。按次数记，不记 token。 */
+export const WEB_TOOLS = ["web_search", "web_fetch"] as const;
+export type WebTool = (typeof WEB_TOOLS)[number];
+
+/** 一次联网搜索或网页抓取是谁发起的。 */
+export interface WebToolCall {
+  tool: WebTool;
+  userId: string | null;
+  sessionId: string | null;
+  turnId: string | null;
+}
+
+/** 一次联网工具调用的记录。provider 是转给了哪个提供方（主站自己去抓的网页为空）；ok 为假是出错或被拒绝。 */
+export interface WebToolUsage extends WebToolCall {
+  provider: string | null;
+  ok: boolean;
+}
+
+/** 准入的答复：放行，或者不放行加一句说明（原样回给调用方，沙箱看得到，不能带上游的信息）。 */
+export type Admission = { ok: true } | { ok: false; message: string };
+
 /**
- * 扩展点：模型调用的准入和记录。转发前问一次放不放行，转发后报一次用量。
- * 主干的实现（gateway/trunk.ts）：一律放行，用量写进 model_usage。用量上限在多提供方的规格里做（#112）。
+ * 扩展点：模型网关的准入和记录。转发前问一次放不放行，转发后报一次用量。
+ * 主干的实现（gateway/trunk.ts）：一律放行，模型调用写进 model_usage，联网工具写进 web_tool_usage。
+ * 用量上限在多提供方的规格里做（#112）。
  */
 export interface ModelAdmission {
-  /** 不放行时给一句说明，原样回给调用方（沙箱看得到，不能带上游的信息）。 */
-  admit(call: ModelCall): Promise<{ ok: true } | { ok: false; message: string }>;
+  admit(call: ModelCall): Promise<Admission>;
   record(usage: ModelUsage): Promise<void>;
+  admitWebTool(call: WebToolCall): Promise<Admission>;
+  recordWebTool(usage: WebToolUsage): Promise<void>;
 }
 
 /** 一个上游提供方：往哪里发、发之前怎么改写请求。 */
 export interface ProviderTarget {
-  /** 提供方的标识，记进用量和报错。 */
+  /** 提供方的标识，记进用量、报错和上传的文件。 */
   provider: string;
-  /** 上游接口的完整地址，path 是 Anthropic 的路径，比如 /v1/messages。 */
+  /**
+   * 上游接口的完整地址。path 是沙箱请求的路径：/v1/messages、/v1/files、/v1/files/{id}、/v1/tools/search，
+   * 查询参数由网关自己加。
+   */
   url(path: string): string;
   /**
-   * 发出去之前改写请求：只留白名单里的请求头、换上 key 和 SeekCloud 自己的 user-agent；
-   * 剥掉 dsh 夹带的字段（dsh_*）和 user_id；换成上游的模型名。不改动传进来的对象。
+   * 发给上游的请求头：只留白名单里的（anthropic-version、anthropic-beta），换上 key 和 SeekCloud 自己的 user-agent。
+   * 不带 dsh 的 x-deepseek-harness-*、宿主机凭据、会话令牌和 Cookie。path 同 url()：不同接口的认证方式可能不一样。
+   */
+  headers(path: string, incoming: Headers): Headers;
+  /**
+   * Messages 请求发出去之前改写：请求头照 headers("/v1/messages", …)；
+   * 剥掉 dsh 夹带的字段（dsh_*）和 user_id，换成上游的模型名。不改动传进来的对象。
    */
   prepare(request: { headers: Headers; body: Record<string, unknown> }): {
     headers: Headers;
@@ -134,13 +165,26 @@ export interface ProviderTarget {
   };
 }
 
+/** 不分模型的接口：Files（沙箱上传给模型看的图片）和联网搜索。 */
+export type ProviderService = "files" | "web_search";
+
+/** 一次不分模型的调用是谁发起的。 */
+export interface ServiceCall {
+  service: ProviderService;
+  userId: string | null;
+  sessionId: string | null;
+}
+
 /**
- * 扩展点：提供方路由。给定模型，返回依次尝试的提供方。网关只在上游还没开始返回内容时出错才试下一个。
+ * 扩展点：提供方路由。给定模型（或者不分模型的接口），返回依次尝试的提供方。网关只在上游还没开始返回内容时出错才试下一个。
  * 主干的实现（gateway/trunk.ts）只有一项（DeepSeek 官方），所以行为就是"出错时不自动换提供方"。
- * 返回空数组表示这个模型现在没有可用的提供方（比如还没填 key）。
+ * 返回空数组表示现在没有可用的提供方（比如还没填 key）。
+ *
+ * 上传的文件只在传上去的那个提供方那里有：Messages 请求里引用了文件时，网关只用存着这些文件的提供方。
  */
 export interface ProviderRouting {
   route(model: string, call: ModelCall): Promise<ProviderTarget[]>;
+  service(call: ServiceCall): Promise<ProviderTarget[]>;
 }
 
 /** 一次上游出错，网关记下的全部内容。 */

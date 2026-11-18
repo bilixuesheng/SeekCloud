@@ -8,7 +8,8 @@ export { type MigrationSet, runMigrations, TRUNK_MIGRATIONS } from "./db/migrate
 export * as schema from "./db/schema";
 export { createDefaultEnvironment } from "./environments";
 export { apiError, errorResponse, notLoggedIn } from "./errors";
-export { GatewayError, type GatewayFailure, ModelGateway } from "./gateway/gateway";
+export { GatewayError, type GatewayFailure } from "./gateway/failures";
+export { ModelGateway } from "./gateway/gateway";
 export {
   DEEPSEEK,
   deepseekRouting,
@@ -21,6 +22,7 @@ export type { GitHub } from "./github/port";
 export { type HostVariables, hostAuth } from "./hosts/credential";
 export { HostHub, type HostStatus } from "./hosts/hub";
 export type {
+  Admission,
   ApiErrorBody,
   Clock,
   CurrentUser,
@@ -31,12 +33,17 @@ export type {
   ModelPurpose,
   ModelUsage,
   ProviderRouting,
+  ProviderService,
   ProviderTarget,
+  ServiceCall,
   SettingsActor,
   SettingsPolicy,
   UpstreamFailure,
+  WebTool,
+  WebToolCall,
+  WebToolUsage,
 } from "./ports";
-export { MODEL_PURPOSES, systemClock } from "./ports";
+export { MODEL_PURPOSES, systemClock, WEB_TOOLS } from "./ports";
 export { jsonBody, newRouter } from "./routes/router";
 export { SecretBox } from "./secrets";
 export type { HostLink } from "./sessions/host";

@@ -1,10 +1,30 @@
-/** 假的模型服务（Anthropic Messages 兼容），给模型网关的测试用：记下收到的请求，按脚本回。 */
+/**
+ * 假的模型服务（Anthropic Messages 兼容，加上 Files 接口和 DeepSeek 的联网搜索），给模型网关的测试用：
+ * 记下收到的请求，按脚本回。没有脚本时：Messages 流式回"收到。"，Files 真的存在内存里，搜索回两条结果。
+ */
 
 export interface FakeModelRequest {
   url: string;
+  method: string;
   headers: Headers;
+  /** JSON 请求体；不是 JSON 时为空对象。 */
   body: Record<string, unknown>;
+  /** multipart 的请求体（上传文件）。 */
+  form?: FormData;
 }
+
+/** 假的搜索结果，夹带着上游自己的字段（网关不该带回沙箱）。 */
+export const FAKE_SEARCH_RESULTS = [
+  {
+    url: "https://example.com/a",
+    title: "第一条",
+    snippet: "摘要一",
+    date: "2026-11-01",
+    score: 0.9,
+    internal_id: "upstream-secret-id",
+  },
+  { url: "https://example.com/b", title: "第二条", snippet: "摘要二", date: null },
+];
 
 export type FakeModelReply =
   /** 流式回一串事件。hold 为真时只先发第一个，等测试调 release() 再发剩下的。 */
@@ -64,7 +84,10 @@ export function streamOf(text: string, outputTokens = 7): Array<{ event: string;
 
 export class FakeModelProvider {
   readonly requests: FakeModelRequest[] = [];
+  /** 传上来的文件。 */
+  readonly files = new Map<string, { filename: string; mimeType: string; size: number }>();
   readonly #replies: FakeModelReply[] = [];
+  #nextFile = 1;
   #release: (() => void) | undefined;
   /** 上游的流被调用方取消（沙箱断开）了没有。 */
   cancelled = false;
@@ -81,9 +104,21 @@ export class FakeModelProvider {
 
   readonly fetch: typeof fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-    this.requests.push({ url, headers: new Headers(init?.headers), body });
-    const reply = this.#replies.shift() ?? { stream: streamOf("收到。") };
+    const method = init?.method ?? "GET";
+    const headers = new Headers(init?.headers);
+    const contentType = headers.get("content-type") ?? "";
+    let body: Record<string, unknown> = {};
+    let form: FormData | undefined;
+    if (contentType.startsWith("multipart/form-data")) {
+      form = await new Response(init?.body, {
+        headers: { "content-type": contentType },
+      }).formData();
+    } else if (init?.body) {
+      body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    }
+    this.requests.push({ url, method, headers, body, form });
+    const path = new URL(url).pathname;
+    const reply = this.#replies.shift() ?? this.#default(method, path, form);
     if ("networkError" in reply) throw new TypeError(reply.networkError);
     if ("status" in reply) {
       return new Response(reply.body, {
@@ -133,4 +168,39 @@ export class FakeModelProvider {
       headers: { "content-type": "text/event-stream; charset=utf-8", ...upstreamHeaders },
     });
   };
+
+  /** 没有脚本时的回复：按接口来。 */
+  #default(method: string, path: string, form: FormData | undefined): FakeModelReply {
+    if (path.endsWith("/v1/tools/search")) return { json: { results: FAKE_SEARCH_RESULTS } };
+    if (path.endsWith("/v1/files") && method === "POST") {
+      const file = form?.get("file");
+      if (!(file instanceof File)) return { status: 400, body: '{"error":"no file"}' };
+      const id = `file_fake${this.#nextFile++}`;
+      this.files.set(id, { filename: file.name, mimeType: file.type, size: file.size });
+      return {
+        json: {
+          type: "file",
+          id,
+          filename: file.name,
+          mime_type: file.type,
+          size_bytes: file.size,
+          created_at: new Date(Date.UTC(2026, 10, 18, 0, 0, this.#nextFile)).toISOString(),
+          downloadable: false,
+          // 上游自己的字段，网关不该带回沙箱。
+          organization_id: "org_upstream_secret",
+        },
+      };
+    }
+    const fileId = /\/v1\/files\/([^/]+)$/.exec(path)?.[1];
+    if (fileId && method === "DELETE") {
+      if (!this.files.delete(decodeURIComponent(fileId))) {
+        return {
+          status: 404,
+          body: '{"error":{"type":"not_found_error","message":"no such file"}}',
+        };
+      }
+      return { json: { id: decodeURIComponent(fileId), type: "file_deleted" } };
+    }
+    return { stream: streamOf("收到。") };
+  }
 }

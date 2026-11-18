@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { Server } from "node:http";
 import { join } from "node:path";
+import type { ModelGatewayLink } from "../model-gateway/forward";
 import { loadSigningKey } from "../signing/sshsig";
 import { ProxyCa } from "./ca";
 import { createGitProxy } from "./proxy";
@@ -25,9 +26,11 @@ export interface GitProxyConfig {
 export function startGitProxy(
   config: GitProxyConfig,
   sessions: GitSessions = new GitSessions(),
+  modelGateway?: ModelGatewayLink,
 ): { sessions: GitSessions; server: Server } {
   const server = createGitProxy({
     sessions,
+    modelGateway,
     ca: new ProxyCa(join(config.dataDir, "proxy-ca")),
     signingKey: loadSigningKey(readFileSync(config.signingKeyPath, "utf8"), "seekcloud"),
     signerEmail: config.signerEmail,
