@@ -54,7 +54,7 @@ describe.skipIf(!enabled)("沙箱的磁盘额度（Sysbox）", { timeout: 300_00
     net = await ensureSandboxNetwork({ name: spec.network, bridge: `sc${pool}` }, docker);
     await applyFirewall({ bridge: net.bridge, gateway: net.gateway, ports: [], chain }, root);
     sandboxes = new Sandboxes(spec, docker, root);
-  });
+  }, 120_000);
   afterAll(async () => {
     if (sandboxes) for (const s of await sandboxes.list()) await sandboxes.remove(s.sessionId);
     if (net) {
@@ -62,7 +62,7 @@ describe.skipIf(!enabled)("沙箱的磁盘额度（Sysbox）", { timeout: 300_00
       await removeSandboxNetwork(spec.network, docker);
     }
     await root("rm", ["-rf", "--", dir]);
-  });
+  }, 120_000);
 
   const sh = async (id: string, script: string) => {
     const r = await sandboxes.exec(id, ["sh", "-c", script], { timeoutMs: 180_000 });
