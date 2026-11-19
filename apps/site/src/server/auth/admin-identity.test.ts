@@ -31,6 +31,13 @@ describeIdentityContract("主干的管理员密码登录", async () => {
         );
         password = newPassword;
       },
+      appLogIn: async () => {
+        const res = await t
+          .browser()
+          .post("/api/auth/login", { password, client: "app", deviceName: "测试手机" });
+        if (res.status !== 200) throw new Error(`App 登录失败：${res.status} ${await res.text()}`);
+        return ((await res.json()) as { token: string }).token;
+      },
     },
     close: t.close,
   };

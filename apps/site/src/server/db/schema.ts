@@ -37,12 +37,24 @@ export const users = pgTable("users", {
 });
 
 /** 网页的登录状态。Cookie 里放随机令牌，这里只存它的哈希。（"会话"专指和 Agent 的对话，这里不用这个词。） */
+/**
+ * 登录状态：浏览器的 Cookie，或者安卓 App 的设备令牌（#177）。都只存哈希。设置里的设备列表就是这张表。
+ * App 的令牌每次用都顺延有效期；浏览器的照旧从登录时算 30 天。最后使用的时间和 IP 最多一分钟记一次。
+ */
 export const loginSessions = pgTable("login_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   tokenHash: text("token_hash").notNull().unique(),
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  /** browser：Cookie；app：放在 Authorization 里的设备令牌。 */
+  client: text("client", { enum: ["browser", "app"] })
+    .notNull()
+    .default("browser"),
+  /** App 登录时传上来的设备名（手机型号这类），当普通文字显示。浏览器的为空。 */
+  deviceName: text("device_name"),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  lastIp: text("last_ip"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: createdAt(),
 });

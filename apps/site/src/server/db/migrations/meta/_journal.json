@@ -78,6 +78,13 @@
       "when": 1795099480774,
       "tag": "0010_workspace_diffs",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795131301691,
+      "tag": "0011_login_devices",
+      "breakpoints": true
     }
   ]
 }
