@@ -203,7 +203,8 @@ run_wizard() {
 # 测试机的引导（#14）：在测试机上用 root 运行。
 #   curl -fsSLo test-machine.sh https://raw.githubusercontent.com/bilixuesheng/SeekCloud/main/scripts/test-machine.sh
 #   sudo bash test-machine.sh
-# 检查是不是完整的虚拟机，装 Docker Engine 和 Sysbox，自检，再注册成本仓库的 GitHub 自托管 Runner。
+# 检查是不是完整的虚拟机，装 Docker Engine 和 Sysbox，把沙箱的存储放到开了项目配额的 XFS 上（#168），
+# 自检，再注册成本仓库的 GitHub 自托管 Runner。
 # 可以重复运行：做过的步骤会跳过。
 
 REPO="bilixuesheng/SeekCloud"
@@ -227,7 +228,7 @@ refund_hint() {
   warn "不要点\"停用\"或\"删除\"：那会直接删掉服务器，就退不了款了。"
 }
 
-TOTAL_STAGES=6
+TOTAL_STAGES=7
 
 banner "SeekCloud 测试机：Docker、Sysbox 和 GitHub Runner"
 
@@ -310,9 +311,96 @@ else
   systemctl is-active --quiet sysbox || { warn "sysbox 服务没起来："; journalctl -u sysbox -n 20 --no-pager; exit 1; }
   step "装好了：$(sysbox-runc --version 2>/dev/null | head -1)"
 fi
-pause "按回车开始自检"
+pause "按回车继续"
 
 # ── 4 ────────────────────────────────────────────────────────────────────
+stage "沙箱的存储：每个沙箱一份固定的磁盘额度"
+# Docker、containerd、Sysbox 和沙箱自己的数据放到一块开了项目配额（prjquota）的 XFS 上，
+# 守护进程才能给每个沙箱设磁盘上限（apps/host/src/sandbox/disk-quota.ts）。系统盘是 ext4 时建一个镜像文件，
+# 格式化成 XFS 用 loop 挂上，不用重新分区；四个目录用 bind 挂过去。
+STORAGE_IMG="/var/lib/seekcloud-storage.img"
+STORAGE_MNT="/srv/seekcloud-storage"
+STORAGE_DIRS=(docker containerd sysbox seekcloud)
+storage_ready() {
+  [[ "$(findmnt -n -o FSTYPE "$STORAGE_MNT" 2>/dev/null)" == "xfs" ]] || return 1
+  findmnt -n -o OPTIONS "$STORAGE_MNT" | grep -qE "prjquota|pquota" || return 1
+  local d
+  for d in "${STORAGE_DIRS[@]}"; do
+    [[ "$(findmnt -n -o TARGET --target "/var/lib/$d" 2>/dev/null)" == "/var/lib/$d" ]] || return 1
+  done
+}
+if storage_ready; then
+  step "已经配好了：$STORAGE_MNT 是 $(df -h --output=size "$STORAGE_MNT" | tail -1 | xargs) 的 XFS，开了项目配额，跳过"
+else
+  say "这一步把 Docker、Sysbox 和沙箱的数据搬到一块开了项目配额的 XFS 上，每个沙箱才限得住磁盘。"
+  say "系统盘是 ext4，所以建一个镜像文件，格式化成 XFS 再挂上，不用重新分区。"
+  warn "Docker、containerd 和 Sysbox 要停一下，已有的容器和镜像会删掉。"
+  note "测试机上的镜像下次跑工作流时会重新构建，大约十来分钟。"
+  note "先到 GitHub 仓库的 Actions 页面看一眼，没有正在跑的工作流再继续。"
+  confirm "继续？" || exit 1
+  apt-get install -y -q xfsprogs
+  runner_registered=0
+  if [[ -f "$RUNNER_DIR/.runner" ]]; then
+    runner_registered=1
+    (cd "$RUNNER_DIR" && ./svc.sh stop >/dev/null) || true
+  fi
+  systemctl stop docker.socket docker.service sysbox.service containerd.service
+  # 旧的数据（只有测试用的容器和镜像）删掉，腾出地方给镜像文件
+  for d in "${STORAGE_DIRS[@]}"; do
+    umount -R "/var/lib/$d" 2>/dev/null || true
+    rm -rf "/var/lib/$d"
+    mkdir -p "/var/lib/$d"
+  done
+  if [[ ! -f "$STORAGE_IMG" ]]; then
+    avail=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+    # 给系统留 6 GB；镜像文件一次占满（fallocate），不用稀疏文件：宿主机盘满时里面的文件系统不会出 I/O 错
+    size=$(( avail - 6 ))
+    if (( size < 15 )); then
+      warn "硬盘剩余 ${avail} GB，放不下（至少要 21 GB）。"
+      systemctl start containerd docker sysbox
+      exit 1
+    fi
+    step "建 ${size} GB 的镜像文件 $STORAGE_IMG"
+    fallocate -l "${size}G" "$STORAGE_IMG"
+    chmod 600 "$STORAGE_IMG"
+    mkfs.xfs -q -f "$STORAGE_IMG"
+  fi
+  mkdir -p "$STORAGE_MNT"
+  # 开机自动挂上：先挂 XFS，再 bind；docker、containerd、sysbox 等挂好了再起
+  sed -i '/# seekcloud-storage$/d' /etc/fstab
+  echo "$STORAGE_IMG $STORAGE_MNT xfs loop,prjquota,nofail 0 0 # seekcloud-storage" >> /etc/fstab
+  for d in "${STORAGE_DIRS[@]}"; do
+    echo "$STORAGE_MNT/$d /var/lib/$d none bind,x-systemd.requires-mounts-for=$STORAGE_MNT 0 0 # seekcloud-storage" >> /etc/fstab
+  done
+  for svc in containerd docker sysbox; do
+    mkdir -p "/etc/systemd/system/$svc.service.d"
+    printf '[Unit]\nRequiresMountsFor=/var/lib/docker /var/lib/containerd /var/lib/sysbox\n' \
+      > "/etc/systemd/system/$svc.service.d/seekcloud-storage.conf"
+  done
+  systemctl daemon-reload
+  findmnt "$STORAGE_MNT" >/dev/null || mount "$STORAGE_MNT"
+  for d in "${STORAGE_DIRS[@]}"; do
+    mkdir -p "$STORAGE_MNT/$d"
+    findmnt "/var/lib/$d" >/dev/null || mount "/var/lib/$d"
+  done
+  systemctl start containerd docker sysbox
+  if ! xfs_quota -x -c "state -p" "$STORAGE_MNT" | grep -q "Enforcement: ON"; then
+    warn "项目配额没有生效。把下面这段输出发给 Claude："
+    xfs_quota -x -c "state -p" "$STORAGE_MNT" || true
+    findmnt "$STORAGE_MNT" || true
+    exit 1
+  fi
+  if ! storage_ready; then
+    warn "目录没有挂好。把下面这段输出发给 Claude："
+    findmnt --target /var/lib/docker || true
+    exit 1
+  fi
+  if (( runner_registered == 1 )); then (cd "$RUNNER_DIR" && ./svc.sh start >/dev/null) || true; fi
+  step "配好了：$STORAGE_MNT 是 $(df -h --output=size "$STORAGE_MNT" | tail -1 | xargs) 的 XFS，开了项目配额"
+fi
+pause "按回车开始自检"
+
+# ── 5 ────────────────────────────────────────────────────────────────────
 stage "自检：Sysbox 容器里再跑 Docker"
 say "起一个 Sysbox 容器，在里面起 Docker，再跑 hello-world。大约一分钟。"
 docker rm -f "$SELFTEST" >/dev/null 2>&1 || true
@@ -341,7 +429,7 @@ else
 fi
 pause "自检通过。按回车继续"
 
-# ── 5 ────────────────────────────────────────────────────────────────────
+# ── 6 ────────────────────────────────────────────────────────────────────
 stage "GitHub：外部贡献者的工作流要先审批"
 say "仓库是公开的。这一步防止别人 fork 以后提的 PR 在你的测试机上跑代码。"
 say "在手机浏览器里打开："
@@ -351,7 +439,7 @@ step "选 \"Require approval for all outside collaborators\""
 step "点这一栏下面的 Save"
 pause "改好了按回车"
 
-# ── 6 ────────────────────────────────────────────────────────────────────
+# ── 7 ────────────────────────────────────────────────────────────────────
 stage "注册成仓库的 GitHub Runner"
 if [[ -f "$RUNNER_DIR/.runner" ]]; then
   step "已经注册过了，跳过"

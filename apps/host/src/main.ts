@@ -41,15 +41,26 @@ async function setUpSandboxes(gitProxyPort: number) {
       gateway: network.gateway,
       ports: [gitProxyPort],
     });
+    const diskGb = positive("SEEKCLOUD_SANDBOX_DISK_GB", 30);
+    if (!Number.isInteger(diskGb)) throw new Error("SEEKCLOUD_SANDBOX_DISK_GB 要是整数");
     const sandboxes = new Sandboxes({
       image,
       runtime: process.env.SEEKCLOUD_SANDBOX_RUNTIME ?? "sysbox-runc",
       network: network.name,
       cpus: positive("SEEKCLOUD_SANDBOX_CPUS", 4),
       memoryMb: positive("SEEKCLOUD_SANDBOX_MEMORY_MB", 4096),
+      // 沙箱自己的 /var/lib/docker 和磁盘上限（#168）
+      storage: {
+        dir: process.env.SEEKCLOUD_SANDBOX_DATA ?? `${dataDir}/sandboxes`,
+        limitGb: diskGb,
+      },
     });
+    const quota = await sandboxes.diskQuota();
     console.log(
-      `沙箱：镜像 ${image}，网络 ${network.name}（${network.subnet}），宿主机已有 ${await sandboxes.count()} 个沙箱`,
+      `沙箱：镜像 ${image}，网络 ${network.name}（${network.subnet}），宿主机已有 ${await sandboxes.count()} 个沙箱；` +
+        (quota.ok
+          ? `每个沙箱的磁盘上限 ${diskGb} GB`
+          : `单个沙箱的磁盘上限不生效：${quota.reason}（见 scripts/test-machine.sh 的"沙箱的存储"）`),
     );
     return { sandboxes, gateway: network.gateway };
   } catch (error) {
@@ -141,7 +152,8 @@ async function main() {
   // 每 30 秒报一次负载。数沙箱失败（Docker 停了）时照样报，沙箱数记 0。
   setInterval(async () => {
     const count = sandbox ? await sandbox.sandboxes.count().catch(() => 0) : 0;
-    site.report(hostReport(dataDir, count));
+    const quota = sandbox ? await sandbox.sandboxes.diskQuota().catch(() => undefined) : undefined;
+    site.report(hostReport(dataDir, count, quota?.ok ?? false));
   }, 30_000).unref();
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     // 只断开和主站的连接：沙箱不跟着停（#18 的 2026-11-15 评论）。
