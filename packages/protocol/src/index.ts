@@ -144,6 +144,12 @@ export interface AiLabels {
 /** 没有下发过开关时（比如旧版本的主站）按都开处理。 */
 export const DEFAULT_AI_LABELS: AiLabels = { signature: true, commitTrailer: true };
 
+/** 提交的作者和提交者。 */
+export interface Committer {
+  name: string;
+  email: string;
+}
+
 /** 主站发给宿主机的命令。 */
 export type HostCommand =
   | {
@@ -155,6 +161,11 @@ export type HostCommand =
       model: string;
       effort: ThinkingEffort;
       aiLabels: AiLabels;
+      /**
+       * 提交作者：管理员关联的 GitHub 账号（显示名，没有就用 login；邮箱是 <编号>+<login>@users.noreply.github.com）。
+       * 宿主机写进沙箱的 git 配置，签名服务按它核对提交者（#27）。没关联 GitHub、或者关联得早没有编号时不填。
+       */
+      committer?: Committer;
     }
   /** 管理员在设置里改了 AI 标识的开关：运行中的会话跟着变，不用重开。 */
   | { type: "set_ai_labels"; sessionId: string; aiLabels: AiLabels }

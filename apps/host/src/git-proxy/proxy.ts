@@ -350,11 +350,13 @@ async function handleSign(options: GitProxyOptions, req: IncomingMessage, res: S
   }
   if (!looksLikeGitObject(message)) return reply(res, 400, "只给 git 的提交和标签对象签名");
   const signer = gitObjectSigner(message);
-  if (signer !== options.signerEmail) {
+  // 主站下发了会话的提交身份（管理员关联的 GitHub 账号，#27）就认它；旧版本的主站没下发时认宿主机配置的邮箱
+  const allowed = session.committer?.email ?? options.signerEmail;
+  if (signer !== allowed) {
     return reply(
       res,
       403,
-      `只给提交者是 SeekCloud 账号（${options.signerEmail}）的提交签名，这个提交的提交者是 ${signer ?? "未知"}`,
+      `只给提交者是这个会话的提交身份（${allowed}）的提交签名，这个提交的提交者是 ${signer ?? "未知"}`,
     );
   }
   // 审计：哪个会话签了哪个对象。

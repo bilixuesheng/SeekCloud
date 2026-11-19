@@ -8,6 +8,8 @@ const HOUR = 3_600_000;
 export interface FakeUser {
   id: string;
   login: string;
+  /** GitHub 上的显示名；没填时为 null。 */
+  name: string | null;
   installed: Repo[];
 }
 
@@ -29,8 +31,13 @@ export class FakeGitHub implements GitHub {
     this.#clock = clock;
   }
 
-  addUser(user: { login: string }): FakeUser {
-    const created = { id: String(1000 + this.#users.size), installed: [], ...user };
+  addUser(user: { login: string; name?: string | null }): FakeUser {
+    const created = {
+      id: String(1000 + this.#users.size),
+      installed: [],
+      ...user,
+      name: user.name ?? null,
+    };
     this.#users.set(created.id, created);
     return created;
   }
@@ -102,7 +109,7 @@ export class FakeGitHub implements GitHub {
 
   async getUser(accessToken: string) {
     const user = this.#userFor(accessToken);
-    return { id: user.id, login: user.login };
+    return { id: user.id, login: user.login, name: user.name };
   }
 
   async listInstalledRepos(accessToken: string) {

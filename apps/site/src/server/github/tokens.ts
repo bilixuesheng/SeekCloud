@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { AppDeps } from "../app";
 import { githubTokens } from "../db/schema";
-import { GitHubAuthError, type GitHubTokens } from "./port";
+import { GitHubAuthError, type GitHubTokens, type GitHubUser } from "./port";
 
 const REFRESH_AHEAD_MS = 5 * 60_000;
 
@@ -17,10 +17,15 @@ const sealed = (deps: Pick<AppDeps, "secrets">, tokens: GitHubTokens, now: Date)
 export async function connectGitHub(
   deps: AppDeps,
   userId: string,
-  login: string,
+  user: GitHubUser,
   tokens: GitHubTokens,
 ): Promise<void> {
-  const row = { login, ...sealed(deps, tokens, deps.clock.now()) };
+  const row = {
+    login: user.login,
+    githubId: user.id,
+    name: user.name,
+    ...sealed(deps, tokens, deps.clock.now()),
+  };
   await deps.db
     .insert(githubTokens)
     .values({ userId, ...row })

@@ -3,6 +3,8 @@
 export interface GitHubUser {
   id: string;
   login: string;
+  /** GitHub 上的显示名；没填时为 null。提交作者用它（#27）。 */
+  name: string | null;
 }
 
 export interface GitHubTokens {

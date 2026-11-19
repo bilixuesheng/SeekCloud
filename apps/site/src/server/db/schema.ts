@@ -86,6 +86,10 @@ export const githubTokens = pgTable("github_tokens", {
     .references(() => users.id, { onDelete: "cascade" }),
   // GitHub 的 login，显示用。
   login: text("login").notNull(),
+  // GitHub 的用户编号和显示名：提交作者用（<编号>+<login>@users.noreply.github.com，#27）。
+  // 这两列加上之前关联的为空，下次重新关联时补上。
+  githubId: text("github_id"),
+  name: text("name"),
   accessToken: text("access_token").notNull(),
   accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }).notNull(),
   refreshToken: text("refresh_token").notNull(),
