@@ -39,6 +39,10 @@ export const SETTINGS = {
    * 运行器还在跑，重连以后事件按序号补上，回合可以接着走；网络不稳的部署可以放长一点。
    */
   host_offline_grace: { shape: HostOfflineGraceValue, fallback: 120 as number },
+  /**
+   * 平台自己发起的模型调用（判断是否在等输入这些，#140）用哪个模型。"auto" 是自动：用模型列表里最省的那个。
+   */
+  platform_model: { shape: z.string().max(100), fallback: "auto" as string },
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;

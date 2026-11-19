@@ -28,6 +28,7 @@ import { settingsRoutes } from "./routes/settings";
 import type { SecretBox } from "./secrets";
 import type { HostLink } from "./sessions/host";
 import { Sessions } from "./sessions/sessions";
+import { WaitingCheck } from "./sessions/waiting-check";
 
 export interface AppDeps {
   version: string;
@@ -58,6 +59,11 @@ export interface AppDeps {
   outboundNetwork?: OutboundNetwork;
   /** 网页抓取的超时，默认 30 秒。测试里改短。 */
   webFetchTimeoutMs?: number;
+  /**
+   * 回合结束后问模型"是不是在等输入"（#140）。默认开；false 时只用规则（测试默认关：后台的这次调用会抢走
+   * 测试给假模型排好的回复）。
+   */
+  waitingCheck?: false | { timeoutMs?: number };
 }
 
 const CheckResult = z.enum(["ok", "error"]);
@@ -165,7 +171,10 @@ export function createApp(deps: AppDeps) {
   const gateway = new ModelGateway(deps);
   app.route("/api/gateway", gatewayRoutes(deps, gateway));
   app.route("/api/auth/github", githubAuthRoutes(deps));
-  const sessions = new Sessions(deps);
+  const sessions = new Sessions(deps, {
+    waitingCheck:
+      deps.waitingCheck === false ? undefined : new WaitingCheck(deps, gateway, deps.waitingCheck),
+  });
   app.route("/api/account", accountRoutes(deps));
   app.route("/api/auth", deps.identity.routes);
   app.route("/api/github", githubRoutes(deps, sessions));

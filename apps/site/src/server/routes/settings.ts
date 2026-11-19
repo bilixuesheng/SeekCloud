@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { AppDeps } from "../app";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
+import { findModel } from "../sessions/models";
 import type { Sessions } from "../sessions/sessions";
 import {
   AiLabelsValue,
@@ -97,6 +98,34 @@ const putHostOfflineGraceRoute = createRoute({
   },
 });
 
+const PlatformModel = z.object({ model: z.string().max(100) }).openapi("PlatformModel", {
+  description:
+    "平台自己发起的模型调用（判断会话是否在等你输入这些）用哪个模型：模型的 ID，或者 auto（自动，用模型列表里最省的那个）。",
+});
+
+const getPlatformModelRoute = createRoute({
+  method: "get",
+  path: "/platform-model",
+  summary: "平台自己发起的模型调用用哪个模型",
+  responses: {
+    200: { description: "没改过时是 auto", ...json(PlatformModel) },
+    401: errorResponse("没有登录"),
+  },
+});
+
+const putPlatformModelRoute = createRoute({
+  method: "put",
+  path: "/platform-model",
+  summary: "修改平台自己发起的模型调用用哪个模型",
+  request: { body: { ...json(PlatformModel), required: true } },
+  responses: {
+    200: { description: "改好以后的值", ...json(PlatformModel) },
+    400: errorResponse("不支持这个模型"),
+    401: errorResponse("没有登录"),
+    403: errorResponse("这项设置不能修改（主干里不会出现）"),
+  },
+});
+
 const locked = apiError("setting_locked", "这项设置不能修改");
 
 /** 设置窗口里的全站设置。 */
@@ -145,5 +174,22 @@ export function settingsRoutes(deps: AppDeps, sessions: Sessions) {
         return c.json(locked, 403);
       }
       return c.json({ seconds }, 200);
+    })
+    .openapi(getPlatformModelRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      return c.json({ model: await readSetting(deps, "platform_model", { userId: me.id }) }, 200);
+    })
+    .openapi(putPlatformModelRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      const { model } = c.req.valid("json");
+      if (model !== "auto" && !findModel(model)) {
+        return c.json(apiError("unknown_model", "不支持这个模型"), 400);
+      }
+      if (!(await writeSetting(deps, "platform_model", { userId: me.id }, model))) {
+        return c.json(locked, 403);
+      }
+      return c.json({ model }, 200);
     });
 }

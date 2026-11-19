@@ -41,6 +41,7 @@ import { DEFAULT_MODEL, findModel } from "./models";
 import { pinTitle } from "./pin-title";
 import { toSafeError } from "./safe-error";
 import { Topic } from "./topic";
+import type { WaitingCheck } from "./waiting-check";
 
 /** 一次读多少条事件。 */
 export const EVENT_PAGE = 500;
@@ -141,8 +142,12 @@ export class Sessions {
   /** 后台还没做完的"等你输入"判断（#judgeLater）。 */
   readonly #judging = new Set<Promise<void>>();
 
-  constructor(deps: AppDeps) {
+  /** 回合结束后问模型"是不是在等输入"（#140）。不给就只用规则。 */
+  readonly #waitingCheck: WaitingCheck | undefined;
+
+  constructor(deps: AppDeps, options: { waitingCheck?: WaitingCheck } = {}) {
     this.#deps = deps;
+    this.#waitingCheck = options.waitingCheck;
     deps.host?.connect(
       (event) => this.handleHostEvent(event),
       () => void this.dispatchQueued(),
@@ -961,9 +966,18 @@ export class Sessions {
       )
       .orderBy(desc(sessionEvents.seq))
       .limit(1);
+    const [owner] = await this.#deps.db
+      .select({ userId: sessions.userId })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId));
+    const check = this.#waitingCheck;
     const detail = await judgeTurnEnd({
       reason: turn.status,
       reply: reply?.body.type === "message" ? reply.body.text : "",
+      ask:
+        check && owner
+          ? (text) => check.ask({ userId: owner.userId, sessionId, reply: text })
+          : undefined,
     });
     const session = await this.#deps.db.transaction(async (tx) => {
       const [row] = await tx

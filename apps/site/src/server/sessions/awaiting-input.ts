@@ -6,8 +6,8 @@ import type { TurnEndReason } from "@seekcloud/protocol";
  *
  * - 被管理员停止：已完成；
  * - 回合失败：等你输入（要管理员决定怎么办）；
- * - 正常结束：最后一条回复的最后一段是不是问句。规则版先顶着，#140 换成一次便宜的模型调用，
- *   所以接口是异步的，换的时候只改这里。
+ * - 正常结束：问一次便宜的模型（#140，waiting-check.ts）；模型判断不出来时，用规则看最后一条回复的
+ *   最后一段是不是问句。
  *
  * 卡片（选择题 #42、批准 #41、计划待批准）和用量上限暂停现在还没有对应的事件：做那几张时，在各自的地方
  * 直接设成"等你输入"，不经过这里的规则（它们一定是在等管理员）。
@@ -18,9 +18,18 @@ export async function judgeTurnEnd(outcome: {
   reason: TurnEndReason;
   /** 这个回合最后一条 Agent 回复；没说话时是空的。 */
   reply: string;
+  /**
+   * 问模型（#140，waiting-check.ts）：是不是在等管理员回答。判断不出来（没填 key、超时、报错、答非所问）
+   * 返回 undefined，退回下面的规则。不给就只用规则。
+   */
+  ask?: (reply: string) => Promise<boolean | undefined>;
 }): Promise<TurnEndDetail> {
   if (outcome.reason === "stopped") return "done";
   if (outcome.reason === "failed") return "awaiting_input";
+  // 没说话：做完了，不用问
+  if (!outcome.reply.trim()) return "done";
+  const asked = outcome.ask ? await outcome.ask(outcome.reply) : undefined;
+  if (asked !== undefined) return asked ? "awaiting_input" : "done";
   return looksLikeQuestion(outcome.reply) ? "awaiting_input" : "done";
 }
 

@@ -8,6 +8,10 @@ export interface ModelInfo {
   /** 能不能看图（发图片要用）。 */
   vision: boolean;
   efforts: readonly ThinkingEffort[];
+  /**
+   * 相对的价钱（越小越省）。平台自己发起的调用（判断是否在等输入这些）没在设置里选模型时，用最省的那个（#140）。
+   */
+  relativeCost: number;
 }
 
 /**
@@ -21,6 +25,7 @@ export const MODELS: readonly ModelInfo[] = [
     description: "速度快、用量省，适合日常改动",
     vision: false,
     efforts: THINKING_EFFORTS,
+    relativeCost: 1,
   },
   {
     id: "deepseek-v4-pro",
@@ -28,6 +33,7 @@ export const MODELS: readonly ModelInfo[] = [
     description: "更强，适合复杂的任务",
     vision: false,
     efforts: THINKING_EFFORTS,
+    relativeCost: 4,
   },
 ];
 
