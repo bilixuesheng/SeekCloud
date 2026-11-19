@@ -165,6 +165,12 @@ export const MAX_DIFF_BYTES = 2 * 1024 * 1024;
 /** 单个文件的 patch 超过这么多就不带。 */
 export const MAX_FILE_PATCH_BYTES = 256 * 1024;
 
+/**
+ * Agent（dsh）的会话文件打包（tar.gz 的 base64）最多多大（#27）：宿主机每个回合结束时发一份给主站存着，
+ * 沙箱被回收以后重建时，主站在准备沙箱的命令里带回去，Agent 接着原来的对话。超过的不发。
+ */
+export const MAX_AGENT_ARCHIVE_BASE64 = 12 * 1024 * 1024;
+
 /** 推送失败时，同一条管理员消息最多自动跟进几次（#27）。 */
 export const MAX_PUSH_FOLLOW_UPS = 2;
 
@@ -228,6 +234,11 @@ export type HostCommand =
        * 宿主机写进沙箱的 git 配置，签名服务按它核对提交者（#27）。没关联 GitHub、或者关联得早没有编号时不填。
        */
       committer?: Committer;
+      /**
+       * Agent 的会话文件（上一次回合结束时宿主机发来的 agent.archive）。沙箱是新建的（被回收过）时宿主机放回去，
+       * Agent 接着原来的对话；沙箱还在时不用。还没有过回合的会话不带。
+       */
+      agentArchive?: string;
     }
   /** 管理员在设置里改了 AI 标识的开关：运行中的会话跟着变，不用重开。 */
   | { type: "set_ai_labels"; sessionId: string; aiLabels: AiLabels }
@@ -297,6 +308,8 @@ export type LiveEvent =
 
 export type HostEvent =
   | { type: "sandbox.ready"; sessionId: string }
+  /** Agent 的会话文件打包（tar.gz 的 base64）：每个回合结束时发一份，主站覆盖着存。 */
+  | { type: "agent.archive"; sessionId: string; turnId: string; data: string }
   /** 回合结束时会话分支对比基础分支的改动（改动面板）。主站存最新的一份，不进会话事件。 */
   | { type: "workspace.diff"; sessionId: string; turnId: string; repos: RepoDiff[] }
   | { type: "sandbox.failed"; sessionId: string; error: SafeError }

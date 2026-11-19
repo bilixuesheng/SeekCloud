@@ -1,4 +1,4 @@
-import type { HostEvent } from "@seekcloud/protocol";
+import { type HostEvent, MAX_AGENT_ARCHIVE_BASE64 } from "@seekcloud/protocol";
 import type { GitSessions } from "../git-proxy/sessions";
 import { type SandboxGit, sandboxGitEnv, WORKSPACE, workspaceDirs } from "../sandbox/provision";
 import type { Sandboxes } from "../sandbox/sandboxes";
@@ -12,6 +12,11 @@ export interface AgentHost {
   stopTurn(sessionId: string, turnId: string): Promise<void>;
   /** 不再用这个会话的 Agent（删除沙箱）：断开它的运行器。 */
   close(sessionId: string): void;
+  /**
+   * 沙箱是新建的（被回收过）时，放回 Agent 的会话文件（主站存着的 agent.archive），Agent 接着原来的对话。
+   * 沙箱里已经有会话文件时什么也不做。
+   */
+  restore?(sessionId: string, archive: string): Promise<void>;
 }
 
 /** 通用镜像里的路径（apps/host/sandbox/image/Dockerfile）。 */
@@ -83,6 +88,54 @@ export class SandboxAgents implements AgentHost {
     await this.#agent(sessionId).startTurn(input);
   }
 
+  /** Agent 的会话文件打包发给主站（沙箱被回收以后靠它接着原来的对话）。太大的不发。 */
+  async #sendArchive(sessionId: string, turnId: string): Promise<void> {
+    try {
+      const packed = await this.deps.sandboxes.exec(
+        sessionId,
+        [
+          "sh",
+          "-c",
+          'cd "$1" 2>/dev/null && [ -d sessions ] || exit 3; tar czf - sessions | base64 -w0',
+          "sh",
+          IMAGE.dshHome,
+        ],
+        { user: "0", timeoutMs: 120_000 },
+      );
+      if (packed.exitCode === 3) return; // 还没有会话文件
+      const data = packed.stdout.trim();
+      if (packed.exitCode !== 0 || data.length === 0) {
+        throw new Error(packed.stderr.trim() || `退出码 ${packed.exitCode}`);
+      }
+      if (data.length > MAX_AGENT_ARCHIVE_BASE64) {
+        this.deps.log?.(
+          `会话 ${sessionId} 的 Agent 会话文件太大（${data.length} 字节），没有发给主站`,
+        );
+        return;
+      }
+      this.deps.emit({ type: "agent.archive", sessionId, turnId, data });
+    } catch (error) {
+      this.deps.log?.(`会话 ${sessionId} 打包 Agent 会话文件失败：${String(error)}`);
+    }
+  }
+
+  async restore(sessionId: string, archive: string): Promise<void> {
+    const result = await this.deps.sandboxes.exec(
+      sessionId,
+      [
+        "sh",
+        "-c",
+        'mkdir -p "$1" && cd "$1" && { [ -d sessions ] && exit 0; base64 -d | tar xzf -; }',
+        "sh",
+        IMAGE.dshHome,
+      ],
+      { input: archive, user: "0", timeoutMs: 120_000 },
+    );
+    if (result.exitCode !== 0) {
+      throw new Error(`放回 Agent 的会话文件失败：${result.stderr.trim()}`);
+    }
+  }
+
   #exec(sessionId: string): SandboxExec {
     return (argv, options) => this.deps.sandboxes.exec(sessionId, argv, { ...options, user: "0" });
   }
@@ -119,6 +172,9 @@ export class SandboxAgents implements AgentHost {
           }
         }
         this.deps.emit(event);
+        if (event.type === "agent" && event.event.type === "turn.ended") {
+          await this.#sendArchive(sessionId, event.turnId);
+        }
         // 回合结束以后再算对比基础分支的 diff（改动面板），不耽误回合结束
         const repos = this.deps.sessions.get(sessionId)?.workspace ?? [];
         if (event.type === "agent" && event.event.type === "turn.ended" && repos.length > 0) {

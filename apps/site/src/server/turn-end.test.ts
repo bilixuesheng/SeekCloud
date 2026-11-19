@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { RepoOutcome, SessionEvent } from "@seekcloud/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { StreamedEvent } from "../testing/event-stream";
@@ -229,5 +231,49 @@ describe("回合结束时整理工作区的结果（#27）", () => {
     } finally {
       t.host.manual = false;
     }
+  });
+
+  it("Agent 的会话文件：存下来，唤醒时准备沙箱的命令带回去；格式不对、别的会话的回合发来的不存；删会话时一起删", async () => {
+    t.host.script({ type: "message", text: "好了" });
+    const id = await start("记住这次对话");
+    await t.host.idle();
+    const turn = t.host.last("start_turn");
+    const archive = Buffer.from("假的 tar.gz").toString("base64");
+    const file = join(t.dataDir, "agent-sessions", `${turn.sessionId}.tar.gz`);
+    await t.host.emit({
+      type: "agent.archive",
+      sessionId: turn.sessionId,
+      turnId: randomUUID(),
+      data: archive,
+    });
+    await t.host.emit({
+      type: "agent.archive",
+      sessionId: turn.sessionId,
+      turnId: turn.turnId,
+      data: "不是 base64!",
+    });
+    await t.host.idle();
+    expect(existsSync(file)).toBe(false);
+    await t.host.emit({
+      type: "agent.archive",
+      sessionId: turn.sessionId,
+      turnId: turn.turnId,
+      data: archive,
+    });
+    await t.host.idle();
+    expect(readFileSync(file).toString()).toBe("假的 tar.gz");
+
+    // 休眠以后（归档再取消归档）发消息唤醒：重新准备沙箱，带上会话文件
+    expect((await browser.post(`/api/sessions/${id}/archive`, {})).status).toBe(200);
+    expect((await browser.post(`/api/sessions/${id}/unarchive`, {})).status).toBe(200);
+    await browser.post(`/api/sessions/${id}/messages`, { text: "接着来" });
+    await t.host.idle();
+    expect(t.host.last("prepare_sandbox")).toMatchObject({
+      sessionId: turn.sessionId,
+      agentArchive: archive,
+    });
+
+    expect((await browser.post(`/api/sessions/${id}/delete`, {})).status).toBe(204);
+    expect(existsSync(file)).toBe(false);
   });
 });

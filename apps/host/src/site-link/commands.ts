@@ -92,6 +92,12 @@ export function handleCommands(deps: {
                 setup: { sessionToken, committer: command.committer, repos: command.repos },
               },
             );
+            // 沙箱被回收过：放回 Agent 的会话文件。放不回去不挡着，开始回合时接不上会话再报
+            if (command.agentArchive && deps.agents?.restore) {
+              await deps.agents
+                .restore(sessionId, command.agentArchive)
+                .catch((error) => log(`会话 ${sessionId} ${String(error)}`));
+            }
             deps.send({ type: "sandbox.ready", sessionId });
           },
           (ref, error) =>

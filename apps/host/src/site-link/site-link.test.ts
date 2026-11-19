@@ -376,6 +376,52 @@ describe("宿主机到主站的连接", () => {
     expect(JSON.stringify(site.events()[1])).not.toContain("repository not found");
   });
 
+  it("准备沙箱带着 Agent 的会话文件：沙箱好了以后交给 Agent 放回去；放不回去也照样回沙箱好了", async () => {
+    const restored: string[] = [];
+    const sandboxes: SandboxHost = {
+      async prepare() {},
+      async setAiLabels() {},
+      async destroy() {},
+      async count() {
+        return 0;
+      },
+    };
+    const agents: AgentHost = {
+      async startTurn() {},
+      async inject() {},
+      async stopTurn() {},
+      close() {},
+      async restore(sessionId, archive) {
+        restored.push(`${sessionId} ${archive}`);
+        if (sessionId === "broken") throw new Error("tar 坏了");
+      },
+    };
+    const { site, logs } = await setup(sandboxes, agents);
+    for (const sessionId of ["s1", "broken", "fresh"]) {
+      site.command({
+        type: "prepare_sandbox",
+        sessionId,
+        repos: [],
+        environmentId: "e1",
+        model: "m",
+        effort: "high",
+        aiLabels: { signature: true, commitTrailer: true },
+        ...(sessionId !== "fresh" && { agentArchive: "QUJD" }),
+      });
+    }
+    await site.until(() => site.events().length === 3);
+    // 每个会话各排各的队，先后不定
+    expect(site.events().map((e) => e.event)).toEqual(
+      expect.arrayContaining([
+        { type: "sandbox.ready", sessionId: "s1" },
+        { type: "sandbox.ready", sessionId: "broken" },
+        { type: "sandbox.ready", sessionId: "fresh" },
+      ]),
+    );
+    expect(restored.sort()).toEqual(["broken QUJD", "s1 QUJD"]);
+    expect(logs.some((l) => l.includes("tar 坏了"))).toBe(true);
+  });
+
   it("有 Agent 时：开始回合交给它（带上是不是第一个回合），插话、停止也转过去；删除沙箱时先断开它", async () => {
     const calls: unknown[] = [];
     const agents: AgentHost = {

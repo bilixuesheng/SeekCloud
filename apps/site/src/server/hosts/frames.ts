@@ -3,6 +3,7 @@ import {
   type HostEvent,
   type HostHello,
   type HostReport,
+  MAX_AGENT_ARCHIVE_BASE64,
   MAX_FILE_PATCH_BYTES,
   MAX_LISTED_FILES,
   TURN_END_REASONS,
@@ -97,6 +98,12 @@ const FileChangeShape = z.object({
 
 const HostEventShape = z.discriminatedUnion("type", [
   z.object({ type: z.literal("sandbox.ready"), sessionId: Id }),
+  z.object({
+    type: z.literal("agent.archive"),
+    sessionId: Id,
+    turnId: Id,
+    data: z.string().max(MAX_AGENT_ARCHIVE_BASE64),
+  }),
   z.object({
     type: z.literal("workspace.diff"),
     sessionId: Id,

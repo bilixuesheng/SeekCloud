@@ -127,7 +127,7 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
       emit: (e) => events.push(e),
       log: (m) => logs.push(m),
     });
-  });
+  }, 180_000);
   afterAll(async () => {
     agents?.close(sessionId);
     agents?.close(repoSession);
@@ -140,7 +140,7 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
     await model.close();
     await github?.close();
     if (dir) await rm(dir, { recursive: true, force: true });
-  });
+  }, 180_000);
 
   const agentEvents = () => events.flatMap((e) => (e.type === "agent" ? [e.event] : []));
   const until = async <T>(check: () => T | undefined | false, what: string): Promise<T> => {
@@ -321,5 +321,83 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
     expect(push?.authorization).toBe(
       `Basic ${Buffer.from("x-access-token:ghu_user").toString("base64")}`,
     );
+  });
+
+  it("沙箱被回收以后重建：放回 Agent 的会话文件，Agent 接着原来的对话；工作区从远端的会话分支接着", async () => {
+    // 上一个回合结束时发给主站的会话文件
+    const archive = await until(
+      () =>
+        events.find((e) => e.type === "agent.archive" && e.sessionId === repoSession) as
+          | Extract<HostEvent, { type: "agent.archive" }>
+          | undefined,
+      "Agent 的会话文件",
+    );
+    // 回收：沙箱连同里面的文件一起删掉
+    agents.close(repoSession);
+    await sandboxes.remove(repoSession);
+    expect(await sandboxes.find(repoSession)).toBeUndefined();
+
+    // 重建：准备沙箱（克隆，远端已经有会话分支就接着它），放回会话文件
+    const repo = {
+      fullName: "acme/app",
+      baseBranch: "main",
+      branch: "seekcloud/t2",
+      access: "push" as const,
+    };
+    const sessionToken = randomBytes(32).toString("base64url");
+    sessions.register({
+      sessionId: repoSession,
+      sessionToken,
+      repos: [repo],
+      workspace: [repo],
+      aiLabels: { signature: true, commitTrailer: true },
+      committer,
+    });
+    sessions.setGitHubToken(repoSession, "ghu_user");
+    await sandboxes.prepare(
+      repoSession,
+      { signature: true, commitTrailer: true },
+      { git, setup: { sessionToken, committer, repos: [repo] } },
+    );
+    await agents.restore(repoSession, archive.data);
+
+    model.script = [
+      {
+        tools: [
+          {
+            id: "toolu_3",
+            name: "bash",
+            input: { command: "git log --format=%s -3 && ls", description: "看看工作区" },
+          },
+        ],
+      },
+      { text: "还记得" },
+    ];
+    const before = events.length;
+    await agents.startTurn(repoSession, {
+      turnId: "t3",
+      text: "还记得上一回合做了什么吗",
+      model: "deepseek-flash",
+      effort: "high",
+      firstTurn: false,
+    });
+    const mine = () =>
+      events
+        .slice(before)
+        .flatMap((e) => (e.type === "agent" && e.sessionId === repoSession ? [e.event] : []));
+    const end = await until(
+      () => mine().find((e) => e.type === "turn.ended"),
+      "重建以后的回合结束",
+    );
+    expect(end, logs.slice(-20).join("\n")).toEqual({ type: "turn.ended", reason: "completed" });
+    // 接着原来的会话：发给模型的对话里有上一回合的消息
+    const last = model.requests.filter((r) => r.path.endsWith("/v1/messages")).at(-1);
+    expect(JSON.stringify(last?.body)).toContain("加一个文件并推送");
+    // 工作区接着远端的会话分支：上一回合的提交和补提交的草稿都在
+    const result = mine().find((e) => e.type === "tool.result") as AgentEvent & {
+      type: "tool.result";
+    };
+    expect(result.output).toContain("SeekCloud：保存这一回合未提交的改动");
+    expect(result.output).toContain("draft.txt");
   });
 });
