@@ -36,8 +36,13 @@ export const SESSION_STATUSES = [
 ] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
 
-/** 状态的附加说明，不是新状态。没有说明时为 null。 */
-export const SESSION_STATUS_DETAILS = ["preparing_sandbox"] as const;
+/**
+ * 状态的附加说明，不是新状态。没有说明时为 null。
+ * preparing_sandbox：运行中，沙箱还在准备；
+ * awaiting_input：等待回复，Agent 在等管理员回答（问了问题、回合失败要管理员决定）；
+ * done：等待回复，Agent 做完了在待命（#139）。这两个休眠以后保留，发消息开始新回合、归档时清掉。
+ */
+export const SESSION_STATUS_DETAILS = ["preparing_sandbox", "awaiting_input", "done"] as const;
 export type SessionStatusDetail = (typeof SESSION_STATUS_DETAILS)[number] | null;
 
 /** 会话状态和它的附加说明，总是一起出现。 */

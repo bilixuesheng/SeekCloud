@@ -4,7 +4,7 @@ import { MoreIcon, WarningIcon } from "../Icons";
 import { navigate } from "../router";
 import { PullRequestBadge } from "./PullRequestBadge";
 import { SessionMenu } from "./SessionHeader";
-import { relativeTime, type Session, statusText } from "./types";
+import { relativeTime, type Session, statusMark, statusText } from "./types";
 
 /** 呼吸一次的时长，和 styles.css 里 .session-pulse 的一样。 */
 const PULSE_MS = 1300;
@@ -17,28 +17,33 @@ const PULSE_MS = 1300;
 export function StatusMark({ state, unread = false }: { state: SessionState; unread?: boolean }) {
   const label = statusText(state);
   const [delay] = useState(() => -(performance.now() % PULSE_MS));
-  if (state.status === "running" || state.status === "queued") {
-    return (
-      <span
-        className="session-pulse"
-        style={{ animationDelay: `${delay}ms` }}
-        role="img"
-        aria-label={label}
-        title={label}
-      />
-    );
+  switch (statusMark(state, unread)) {
+    case "running":
+      return (
+        <span
+          className="session-pulse"
+          style={{ animationDelay: `${delay}ms` }}
+          role="img"
+          aria-label={label}
+          title={label}
+        />
+      );
+    case "failed":
+      return (
+        <span className="session-warning" role="img" aria-label={label} title={label}>
+          <WarningIcon />
+        </span>
+      );
+    case "awaiting":
+      // 一个强调色的圆圈里一个点：和"有新内容"的实心蓝点分得开
+      return (
+        <span className="session-awaiting" role="img" aria-label="等你输入" title="等你输入" />
+      );
+    case "unread":
+      return <span className="session-unread" role="img" aria-label="有新内容" title="有新内容" />;
+    default:
+      return null;
   }
-  if (state.status === "failed") {
-    return (
-      <span className="session-warning" role="img" aria-label={label} title={label}>
-        <WarningIcon />
-      </span>
-    );
-  }
-  if (unread) {
-    return <span className="session-unread" role="img" aria-label="有新内容" title="有新内容" />;
-  }
-  return null;
 }
 
 /**

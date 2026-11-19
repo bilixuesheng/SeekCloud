@@ -195,7 +195,11 @@ describe("发起会话，宿主机按脚本跑完一个回合", () => {
 
     const stream = await browser.stream(`/api/sessions/${session.shortId}/events`);
     const all: SessionEvent[] = [];
-    while (all.filter((e) => e.type === "status" && e.status === "waiting").length < 2) {
+    // 回合结束时的"等待回复"（不带附加说明；判断完补的那条带"等你输入"或"已完成"，#139）
+    while (
+      all.filter((e) => e.type === "status" && e.status === "waiting" && e.detail === null).length <
+      2
+    ) {
       all.push(parse(await stream.next()));
     }
     await stream.close();
