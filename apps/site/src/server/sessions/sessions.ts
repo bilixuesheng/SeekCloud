@@ -2,6 +2,7 @@ import { randomInt } from "node:crypto";
 import type {
   AgentEvent,
   AiLabels,
+  Committer,
   HostCommand,
   HostEvent,
   LiveEvent,
@@ -21,6 +22,7 @@ import type { AppDeps } from "../app";
 import type { Tx } from "../db/client";
 import {
   environments,
+  githubTokens,
   messagePins,
   queuedMessages,
   sessionEvents,
@@ -993,7 +995,25 @@ export class Sessions {
       model: session.model,
       effort: session.effort,
       aiLabels: await readSetting(this.#deps, "ai_labels", { userId: session.userId }),
+      committer: await this.#committer(session.userId),
     });
+  }
+
+  /** 提交作者：管理员关联的 GitHub 账号（#27）。没关联、或者关联得早没存编号时为 undefined。 */
+  async #committer(userId: string): Promise<Committer | undefined> {
+    const [row] = await this.#deps.db
+      .select({
+        login: githubTokens.login,
+        githubId: githubTokens.githubId,
+        name: githubTokens.name,
+      })
+      .from(githubTokens)
+      .where(eq(githubTokens.userId, userId));
+    if (!row?.githubId) return undefined;
+    return {
+      name: row.name || row.login,
+      email: `${row.githubId}+${row.login}@users.noreply.github.com`,
+    };
   }
 
   /**

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AppDeps } from "../app";
-import type { GitHubTokens } from "./port";
+import type { GitHubTokens, GitHubUser } from "./port";
 import { connectGitHub } from "./tokens";
 
 const STATE_COOKIE = "sc_gh_state";
@@ -38,15 +38,15 @@ export async function finishGitHubLink(deps: AppDeps, c: Context): Promise<strin
   if (!me) return "/?github=failed";
 
   let tokens: GitHubTokens;
-  let login: string;
+  let user: GitHubUser;
   try {
     tokens = await deps.github.exchangeCode(code);
-    ({ login } = await deps.github.getUser(tokens.accessToken));
+    user = await deps.github.getUser(tokens.accessToken);
   } catch (error) {
     console.error("GitHub 授权失败", error);
     return "/?github=failed";
   }
   // 令牌留在主站（ADR 0003），不经过浏览器。
-  await connectGitHub(deps, me.id, login, tokens);
+  await connectGitHub(deps, me.id, user, tokens);
   return parseNext(next);
 }

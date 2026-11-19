@@ -410,7 +410,34 @@ describe("提交签名", () => {
       GIT_COMMITTER_EMAIL: "someone@example.com",
     });
     expect(impostor.ok).toBe(false);
-    expect(impostor.output).toContain("只给提交者是 SeekCloud 账号");
+    expect(impostor.output).toContain("只给提交者是这个会话的提交身份");
+  });
+
+  it("签名服务按会话的提交身份核对提交者：主站下发了就只签提交者是它的，没下发时认宿主机配置的邮箱", async () => {
+    const committer = { name: "Octo Cat", email: "1001+octo@users.noreply.github.com" };
+    sessions.register({
+      sessionId: "s-committer",
+      sessionToken: "token-committer",
+      repos: [],
+      committer,
+    });
+    const commit = (email: string) =>
+      `tree ${"a".repeat(40)}\nauthor Octo Cat <${email}> 1700000000 +0000\ncommitter Octo Cat <${email}> 1700000000 +0000\n\n改一下\n`;
+    const sign = (token: string, email: string) =>
+      fetch(`${proxyUrl}/sign?namespace=git`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: commit(email),
+      });
+    const ok = await sign("token-committer", committer.email);
+    expect(ok.status).toBe(200);
+    expect(await ok.text()).toContain("BEGIN SSH SIGNATURE");
+    // 下发了提交身份以后，宿主机配置的邮箱不再算数
+    expect((await sign("token-committer", BOT_EMAIL)).status).toBe(403);
+    // 没下发提交身份的会话照旧
+    expect((await sign(SESSION_TOKEN, BOT_EMAIL)).status).toBe(200);
+    expect((await sign(SESSION_TOKEN, committer.email)).status).toBe(403);
+    sessions.remove("s-committer");
   });
 
   it("签名服务只签 git 对象", async () => {

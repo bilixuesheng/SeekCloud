@@ -110,10 +110,17 @@ describe("发起会话，宿主机按脚本跑完一个回合", () => {
       environmentId: environments.environments[0]?.id,
       model: "deepseek-flash",
       effort: "high",
+      // 提交作者是管理员关联的 GitHub 账号：没填显示名就用 login，邮箱是 GitHub 的 noreply 地址
+      committer: {
+        name: "octo",
+        email: expect.stringMatching(/^\d+\+octo@users\.noreply\.github\.com$/),
+      },
     });
     expect(t.host.last("start_turn")).toMatchObject({
       sessionId: prepare.sessionId,
       text: "修个 bug",
+      // 这个会话还没有回合到过 Agent
+      firstTurn: true,
     });
   });
 
@@ -216,7 +223,12 @@ describe("发起会话，宿主机按脚本跑完一个回合", () => {
     // 不换就不记。
     await browser.post(`/api/sessions/${session.shortId}/messages`, { text: "继续" });
     await t.host.idle();
-    expect(t.host.last("start_turn")).toMatchObject({ model: "deepseek-v4-pro", effort: "max" });
+    // 前面的回合到过 Agent 了：接着原来的会话，不是第一个回合
+    expect(t.host.last("start_turn")).toMatchObject({
+      model: "deepseek-v4-pro",
+      effort: "max",
+      firstTurn: false,
+    });
     const bad = await browser.post(`/api/sessions/${session.shortId}/messages`, {
       text: "换个不存在的",
       model: "gpt-9",

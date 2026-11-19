@@ -54,6 +54,7 @@ export function handleCommands(deps: {
           sessionToken: randomBytes(32).toString("base64url"),
           repos: command.repos.map((r) => ({ fullName: r.fullName, access: r.access })),
           aiLabels,
+          committer: command.committer,
         });
         const sandboxes = deps.sandboxes;
         if (!sandboxes) {

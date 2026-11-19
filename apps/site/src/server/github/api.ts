@@ -92,8 +92,8 @@ export function githubApi(options: Options): GitHub {
       oauth({ grant_type: "refresh_token", refresh_token: refreshToken }),
 
     async getUser(token) {
-      const user = await call<{ id: number; login: string }>(token, "/user");
-      return { id: String(user.id), login: user.login };
+      const user = await call<{ id: number; login: string; name?: string | null }>(token, "/user");
+      return { id: String(user.id), login: user.login, name: user.name || null };
     },
 
     async listInstalledRepos(token) {
