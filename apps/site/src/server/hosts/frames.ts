@@ -3,6 +3,7 @@ import {
   type HostEvent,
   type HostHello,
   type HostReport,
+  MAX_FILE_PATCH_BYTES,
   MAX_LISTED_FILES,
   TURN_END_REASONS,
 } from "@seekcloud/protocol";
@@ -84,8 +85,46 @@ const AgentEventShape = z.discriminatedUnion("type", [
   }),
 ]);
 
+const Sha = z.string().regex(/^[0-9a-f]{40,64}$/);
+
+const FileChangeShape = z.object({
+  path: z.string().max(4096),
+  from: z.string().max(4096).optional(),
+  additions: Count,
+  deletions: Count,
+  binary: z.boolean().optional(),
+});
+
 const HostEventShape = z.discriminatedUnion("type", [
   z.object({ type: z.literal("sandbox.ready"), sessionId: Id }),
+  z.object({
+    type: z.literal("workspace.diff"),
+    sessionId: Id,
+    turnId: Id,
+    repos: z
+      .array(
+        z.object({
+          fullName: z.string().max(200),
+          baseBranch: z.string().max(255),
+          base: Sha,
+          head: Sha,
+          files: z
+            .array(
+              FileChangeShape.extend({
+                // 多给一点余量：宿主机按字节算，这里按字符数
+                patch: z
+                  .string()
+                  .max(MAX_FILE_PATCH_BYTES * 2)
+                  .optional(),
+                tooLarge: z.boolean().optional(),
+              }),
+            )
+            .max(MAX_LISTED_FILES),
+          truncated: z.boolean().optional(),
+        }),
+      )
+      .max(50),
+  }),
   z.object({ type: z.literal("sandbox.failed"), sessionId: Id, error: SafeErrorShape }),
   z.object({ type: z.literal("agent"), sessionId: Id, turnId: Id, event: AgentEventShape }),
   z.object({

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { RepoOutcome, SessionEvent } from "@seekcloud/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { StreamedEvent } from "../testing/event-stream";
@@ -170,6 +171,61 @@ describe("回合结束时整理工作区的结果（#27）", () => {
       await agent(followUp.turnId, { type: "workspace", repos: [outcome("pushed")] });
       await agent(followUp.turnId, { type: "turn.ended", reason: "completed" });
       expect(t.host.last("start_turn").text).toBe("页脚用灰色");
+    } finally {
+      t.host.manual = false;
+    }
+  });
+
+  it("对比基础分支的 diff（改动面板）：每个仓库只留最新的，补发来的旧回合的不盖新的；不是这个会话的回合不收", async () => {
+    t.host.manual = true;
+    try {
+      const id = await start("改个样式");
+      const sessionId = t.host.last("prepare_sandbox").sessionId;
+      await t.host.emit({ type: "sandbox.ready", sessionId });
+      const first = t.host.last("start_turn");
+      const diff = (turnId: string, patch: string) =>
+        t.host.emit({
+          type: "workspace.diff",
+          sessionId,
+          turnId,
+          repos: [
+            {
+              fullName: "octo/app",
+              baseBranch: "main",
+              base: "b".repeat(40),
+              head: HEAD,
+              files: [{ path: "a.css", additions: 1, deletions: 0, patch }],
+            },
+          ],
+        });
+      expect(await (await browser.get(`/api/sessions/${id}/diff`)).json()).toEqual({ repos: [] });
+      await t.host.emit({
+        type: "agent",
+        sessionId,
+        turnId: first.turnId,
+        event: { type: "turn.started" },
+      });
+      await t.host.emit({
+        type: "agent",
+        sessionId,
+        turnId: first.turnId,
+        event: { type: "turn.ended", reason: "completed" },
+      });
+      await diff(first.turnId, "第一回合");
+      await browser.post(`/api/sessions/${id}/messages`, { text: "再改" });
+      await t.host.idle();
+      const second = t.host.last("start_turn");
+      await diff(second.turnId, "第二回合");
+      await diff(first.turnId, "补发来的第一回合");
+      await diff(randomUUID(), "别的回合");
+      await diff("not-a-uuid", "乱写的");
+      await t.host.idle();
+      const body = (await (await browser.get(`/api/sessions/${id}/diff`)).json()) as {
+        repos: Array<{ fullName: string; files: Array<{ patch?: string }> }>;
+      };
+      expect(body.repos.map((r) => [r.fullName, r.files[0]?.patch])).toEqual([
+        ["octo/app", "第二回合"],
+      ]);
     } finally {
       t.host.manual = false;
     }

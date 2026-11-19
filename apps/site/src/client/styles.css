@@ -4756,3 +4756,205 @@ a.button:active,
   background: var(--danger-soft);
   color: var(--danger);
 }
+
+/* 改动卡片上的文件名能点：打开改动面板 */
+button.changes-path {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+
+button.changes-path:hover {
+  color: var(--accent-fg);
+  text-decoration: underline;
+}
+
+/* 改动面板（#27）：宽屏从右边滑出，手机上占满屏幕 */
+.panel-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgb(0 0 0 / 0.28);
+  opacity: 0;
+  transition: opacity 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.panel-scrim.shown {
+  opacity: 1;
+}
+
+.changes-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100vw);
+  background: var(--page);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.changes-panel.shown {
+  transform: none;
+}
+
+.changes-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 0 8px 0 20px;
+  padding-top: env(safe-area-inset-top);
+  border-bottom: 1px solid var(--border);
+}
+
+.changes-panel-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.changes-panel-head .changes-counts {
+  flex: 1;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.changes-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px calc(24px + env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
+}
+
+.changes-panel-empty {
+  margin: 40px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.changes-panel-empty.error {
+  color: var(--danger);
+}
+
+.changes-repo-section + .changes-repo-section {
+  margin-top: 24px;
+}
+
+.changes-repo-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.changes-repo-title span {
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.file-diff {
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+  scroll-margin-top: 12px;
+}
+
+.file-diff-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px 0 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.file-diff-head:hover {
+  background: var(--hover);
+}
+
+.changes-chevron.right.open {
+  transform: rotate(90deg);
+}
+
+.file-diff-body {
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.file-diff-note {
+  margin: 0;
+  padding: 10px 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.diff-lines {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.diff-no {
+  width: 1%;
+  padding: 0 8px;
+  color: var(--faint);
+  text-align: right;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.diff-text {
+  padding: 0 12px 0 4px;
+  white-space: pre;
+  color: var(--fg-2);
+}
+
+.diff-add {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.diff-del {
+  background: color-mix(in srgb, var(--danger) 11%, transparent);
+}
+
+.diff-hunk td {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  background: var(--accent-soft);
+  color: var(--muted);
+}
+
+.diff-note .diff-text {
+  color: var(--faint);
+  font-style: italic;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .changes-panel,
+  .panel-scrim {
+    transition: none;
+  }
+}

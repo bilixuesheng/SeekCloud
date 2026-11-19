@@ -1,6 +1,6 @@
 import type { FileChange } from "@seekcloud/protocol";
 import { useState } from "react";
-import { ChevronDownIcon, UndoIcon } from "../Icons";
+import { ChevronDownIcon, ChevronRightIcon, UndoIcon } from "../Icons";
 import type { TurnChanges } from "./timeline";
 
 /** 卡片上先列几个文件（照 Claude）。 */
@@ -14,10 +14,13 @@ const SHOWN = 3;
 export function ChangesCard({
   changes,
   onUndo,
+  onOpen,
 }: {
   changes: TurnChanges;
   /** 撤销一个文件：发一条消息给 Agent。Agent 在工作时为空（按钮是灰的）。 */
   onUndo?: (text: string) => void;
+  /** 打开改动面板（对比基础分支的 diff），path 是要先展开的文件。不给时"查看全部"在卡片里展开。 */
+  onOpen?: (path?: string) => void;
 }) {
   const [all, setAll] = useState(false);
   const several = changes.repos.length > 1;
@@ -41,13 +44,25 @@ export function ChangesCard({
       <ul className="changes-files">
         {shown.map(({ repo, file }) => (
           <li key={`${repo}:${file.path}`} className="changes-file">
-            <span
-              className="changes-path"
-              title={file.from ? `${file.from} → ${file.path}` : file.path}
-            >
-              {several && <span className="changes-repo">{repo.split("/")[1]}/</span>}
-              {file.path}
-            </span>
+            {onOpen ? (
+              <button
+                type="button"
+                className="changes-path link"
+                title={file.from ? `${file.from} → ${file.path}` : file.path}
+                onClick={() => onOpen(file.path)}
+              >
+                {several && <span className="changes-repo">{repo.split("/")[1]}/</span>}
+                {file.path}
+              </button>
+            ) : (
+              <span
+                className="changes-path"
+                title={file.from ? `${file.from} → ${file.path}` : file.path}
+              >
+                {several && <span className="changes-repo">{repo.split("/")[1]}/</span>}
+                {file.path}
+              </span>
+            )}
             <LineCounts file={file} />
             {single && (
               <button
@@ -72,8 +87,8 @@ export function ChangesCard({
         <button
           type="button"
           className="changes-all"
-          aria-expanded={all}
-          onClick={() => setAll((open) => !open)}
+          aria-expanded={onOpen ? undefined : all}
+          onClick={() => (onOpen ? onOpen() : setAll((open) => !open))}
         >
           <span>{all ? "收起" : `查看全部 ${total} 个文件`}</span>
           <span className="changes-counts">
@@ -81,7 +96,7 @@ export function ChangesCard({
             <span className="deleted">−{sum("deletions")}</span>
           </span>
           <span className={`changes-chevron${all ? " open" : ""}`}>
-            <ChevronDownIcon />
+            {onOpen ? <ChevronRightIcon /> : <ChevronDownIcon />}
           </span>
         </button>
       )}

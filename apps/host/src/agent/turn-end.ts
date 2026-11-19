@@ -1,6 +1,9 @@
 import {
   type FileChange,
+  MAX_DIFF_BYTES,
+  MAX_FILE_PATCH_BYTES,
   MAX_LISTED_FILES,
+  type RepoDiff,
   type RepoOutcome,
   type SessionRepo,
 } from "@seekcloud/protocol";
@@ -165,4 +168,88 @@ export async function finishTurn(
     });
   }
   return outcomes;
+}
+
+/** git diff 的原文按文件切开（每段以 "diff --git " 开头）。 */
+export function splitPatch(patch: string): string[] {
+  if (!patch.startsWith("diff --git ")) return [];
+  return patch
+    .split(/\n(?=diff --git )/)
+    .map((chunk) => (chunk.endsWith("\n") ? chunk : `${chunk}\n`));
+}
+
+/**
+ * 会话分支对比基础分支的改动（改动面板，#27）：从会话分支和基础分支分开的地方算起，所以基础分支后来的提交不算进来。
+ * 单个文件太大的不带 patch，整个仓库的 patch 最多 MAX_DIFF_BYTES。
+ */
+export async function branchDiffs(
+  exec: SandboxExec,
+  repos: readonly SessionRepo[],
+): Promise<RepoDiff[]> {
+  const dirs = workspaceDirs(repos);
+  const diffs: RepoDiff[] = [];
+  for (const [i, repo] of repos.entries()) {
+    const cwd = dirs[i] as string;
+    const run = (argv: string[], timeoutMs = 60_000) => exec(argv, { cwd, timeoutMs });
+    const head = (
+      await run(["git", "rev-parse", "--verify", `refs/heads/${repo.branch}`])
+    ).stdout.trim();
+    const upstream = `refs/remotes/origin/${repo.baseBranch}`;
+    const forked = await run(["git", "merge-base", upstream, head]);
+    const base =
+      forked.exitCode === 0
+        ? forked.stdout.trim()
+        : (await run(["git", "rev-parse", "--verify", upstream])).stdout.trim();
+    if (!/^[0-9a-f]{40,64}$/.test(head) || !/^[0-9a-f]{40,64}$/.test(base)) continue;
+
+    const numstat = await run(["git", "diff", "--numstat", "-z", "-M", base, head], 5 * 60_000);
+    const all = numstat.exitCode === 0 ? parseNumstat(numstat.stdout) : [];
+    const listed = all.slice(0, MAX_LISTED_FILES);
+    // 原文最多读 4 倍的上限（读多了也用不上），后面的当作太大
+    const raw = await run(
+      [
+        "sh",
+        "-c",
+        'git diff -M --no-color --no-ext-diff "$1" "$2" | head -c "$3"',
+        "sh",
+        base,
+        head,
+        String(MAX_DIFF_BYTES * 4),
+      ],
+      5 * 60_000,
+    );
+    const chunks = splitPatch(raw.stdout);
+    // 读到上限被截断的：最后一段不完整，扔掉
+    const cut = Buffer.byteLength(raw.stdout) >= MAX_DIFF_BYTES * 4;
+    if (cut) chunks.pop();
+    // 和 numstat 一样的顺序；对不上（很少见）就都不带 patch
+    const aligned = cut ? chunks.length <= all.length : chunks.length === all.length;
+    let budget = MAX_DIFF_BYTES;
+    let truncated = all.length > listed.length;
+    const files = listed.map((file, index) => {
+      const patch = aligned ? chunks[index] : undefined;
+      if (file.binary) return file;
+      if (patch === undefined) {
+        truncated = true;
+        return file;
+      }
+      const size = Buffer.byteLength(patch);
+      if (size > MAX_FILE_PATCH_BYTES) return { ...file, tooLarge: true };
+      if (size > budget) {
+        truncated = true;
+        return file;
+      }
+      budget -= size;
+      return { ...file, patch };
+    });
+    diffs.push({
+      fullName: repo.fullName,
+      baseBranch: repo.baseBranch,
+      base,
+      head,
+      files,
+      ...(truncated && { truncated: true }),
+    });
+  }
+  return diffs;
 }

@@ -145,6 +145,26 @@ export interface RepoOutcome {
   omittedFiles?: number;
 }
 
+/**
+ * 会话分支对比基础分支的改动（改动面板，#27）：回合结束时宿主机在 workspace 之后发一份，主站每个仓库只留最新的。
+ * patch 是 git diff 的原文；单个文件太大的不带 patch（tooLarge），整个仓库的 patch 加起来最多 MAX_DIFF_BYTES。
+ */
+export interface RepoDiff {
+  fullName: string;
+  baseBranch: string;
+  /** 会话分支和基础分支分开的那个提交；找不到（浅克隆太浅）时是基础分支本身。 */
+  base: string;
+  head: string;
+  files: Array<FileChange & { patch?: string; tooLarge?: boolean }>;
+  /** 文件太多、patch 太大，后面的没带 patch。 */
+  truncated?: boolean;
+}
+
+/** 一个仓库的 diff 最多带多少字节的 patch。 */
+export const MAX_DIFF_BYTES = 2 * 1024 * 1024;
+/** 单个文件的 patch 超过这么多就不带。 */
+export const MAX_FILE_PATCH_BYTES = 256 * 1024;
+
 /** 推送失败时，同一条管理员消息最多自动跟进几次（#27）。 */
 export const MAX_PUSH_FOLLOW_UPS = 2;
 
@@ -277,6 +297,8 @@ export type LiveEvent =
 
 export type HostEvent =
   | { type: "sandbox.ready"; sessionId: string }
+  /** 回合结束时会话分支对比基础分支的改动（改动面板）。主站存最新的一份，不进会话事件。 */
+  | { type: "workspace.diff"; sessionId: string; turnId: string; repos: RepoDiff[] }
   | { type: "sandbox.failed"; sessionId: string; error: SafeError }
   | { type: "agent"; sessionId: string; turnId: string; event: AgentEvent }
   | ({ type: "progress"; sessionId: string; turnId: string } & ModelProgress)

@@ -3,7 +3,7 @@ import type { GitSessions } from "../git-proxy/sessions";
 import { type SandboxGit, sandboxGitEnv, WORKSPACE, workspaceDirs } from "../sandbox/provision";
 import type { Sandboxes } from "../sandbox/sandboxes";
 import { DshAgent, type TurnInput } from "./dsh-agent";
-import { finishTurn, type SandboxExec, turnStart } from "./turn-end";
+import { branchDiffs, finishTurn, type SandboxExec, turnStart } from "./turn-end";
 
 /** 守护进程处理主站的命令时用到的 Agent 操作（commands.ts）。测试里可以换成假的。 */
 export interface AgentHost {
@@ -119,6 +119,21 @@ export class SandboxAgents implements AgentHost {
           }
         }
         this.deps.emit(event);
+        // 回合结束以后再算对比基础分支的 diff（改动面板），不耽误回合结束
+        const repos = this.deps.sessions.get(sessionId)?.workspace ?? [];
+        if (event.type === "agent" && event.event.type === "turn.ended" && repos.length > 0) {
+          try {
+            const diffs = await branchDiffs(this.#exec(sessionId), repos);
+            this.deps.emit({
+              type: "workspace.diff",
+              sessionId,
+              turnId: event.turnId,
+              repos: diffs,
+            });
+          } catch (error) {
+            this.deps.log?.(`会话 ${sessionId} 算改动的 diff 失败：${String(error)}`);
+          }
+        }
       })
       .catch((error) => this.deps.log?.(`会话 ${sessionId} 的事件没发出去：${String(error)}`));
     this.#emitting.set(sessionId, next);

@@ -31,6 +31,7 @@ import { Slot } from "../registry";
 import { Whale } from "../Whale";
 import { catchUpBubble } from "./bubble-in";
 import { ChangesCard } from "./ChangesCard";
+import { ChangesPanel } from "./ChangesPanel";
 import { Composer } from "./Composer";
 import { firstMessageOf } from "./first-message";
 import { contentKey, ScrollFollower } from "./follow-scroll";
@@ -162,6 +163,9 @@ export function SessionPage({
 
   // 停止：只停下回合，输入框里的字不动（照 Claude）
   const [stopping, setStopping] = useState(false);
+  // 改动面板：开着时 focus 是要先展开的文件
+  const [changesPanel, setChangesPanel] = useState<{ focus?: string }>();
+  const closeChanges = useCallback(() => setChangesPanel(undefined), []);
   const stop = async () => {
     setStopping(true);
     setError(undefined);
@@ -200,6 +204,12 @@ export function SessionPage({
       {/* 会话顶部的提示条（插槽，registry.tsx）：没有登记的组件时不占位置 */}
       <Slot name="session-banner" />
       {pins.length > 0 && <PinNav pins={pins} scroller={scroller} />}
+      <ChangesPanel
+        sessionId={id}
+        open={changesPanel !== undefined}
+        focus={changesPanel?.focus}
+        onClose={closeChanges}
+      />
 
       <div className="timeline" ref={scroller} {...follow.handlers}>
         <SessionLinks.Provider
@@ -238,6 +248,7 @@ export function SessionPage({
                       : undefined
                   }
                   onRetry={canRetry ? (text) => void send(text, false) : undefined}
+                  onOpenChanges={(path) => setChangesPanel({ focus: path })}
                 />
               ))}
               {timeline.queued.map((item, index) => (
@@ -843,6 +854,7 @@ function TimelineEntry({
   pin,
   onPin,
   onRetry,
+  onOpenChanges,
 }: {
   item: TimelineItem;
   nameOf: (model: string) => string;
@@ -854,6 +866,8 @@ function TimelineEntry({
   /** 能置顶（一个回合最后的那条回复）：下面那一行有图钉。 */
   onPin?: (pinned: boolean) => void;
   onRetry?: (text: string) => void;
+  /** 打开改动面板（改动卡片上的"查看全部"、点文件）。 */
+  onOpenChanges?: (path?: string) => void;
 }) {
   const motion = " fresh";
   switch (item.kind) {
@@ -884,7 +898,7 @@ function TimelineEntry({
           )}
           <PacedReply text={item.text} live={live}>
             {item.turnEnd?.changes && (
-              <ChangesCard changes={item.turnEnd.changes} onUndo={onRetry} />
+              <ChangesCard changes={item.turnEnd.changes} onUndo={onRetry} onOpen={onOpenChanges} />
             )}
             {item.turnEnd && (
               <ReplyMeta
@@ -903,7 +917,7 @@ function TimelineEntry({
     case "changes":
       return (
         <div className={`assistant-message${live ? "" : motion}`} data-seq={item.key}>
-          <ChangesCard changes={item.changes} onUndo={onRetry} />
+          <ChangesCard changes={item.changes} onUndo={onRetry} onOpen={onOpenChanges} />
         </div>
       );
     case "model":
