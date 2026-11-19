@@ -20,7 +20,7 @@ import type {
 import { fitEffort, MAX_PUSH_FOLLOW_UPS } from "@seekcloud/protocol";
 import { and, asc, desc, eq, gt, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import type { AppDeps } from "../app";
-import type { Tx } from "../db/client";
+import type { Database, Tx } from "../db/client";
 import {
   environments,
   githubTokens,
@@ -38,7 +38,7 @@ import { readSetting } from "../settings";
 import { readAgentArchive, removeAgentArchive, saveAgentArchive } from "./agent-archive";
 import { judgeTurnEnd } from "./awaiting-input";
 import { DEFAULT_MODEL, findModel } from "./models";
-import { pinTitle } from "./pin-title";
+import { type PinTitles, pinTitle } from "./pin-title";
 import { toSafeError } from "./safe-error";
 import { Topic } from "./topic";
 import type { WaitingCheck } from "./waiting-check";
@@ -142,12 +142,14 @@ export class Sessions {
   /** 后台还没做完的"等你输入"判断（#judgeLater）。 */
   readonly #judging = new Set<Promise<void>>();
 
-  /** 回合结束后问模型"是不是在等输入"（#140）。不给就只用规则。 */
+  /** 平台自己发起的模型调用（platform-call.ts）：不给就只用规则。 */
   readonly #waitingCheck: WaitingCheck | undefined;
+  readonly #pinTitles: PinTitles | undefined;
 
-  constructor(deps: AppDeps, options: { waitingCheck?: WaitingCheck } = {}) {
+  constructor(deps: AppDeps, options: { waitingCheck?: WaitingCheck; pinTitles?: PinTitles } = {}) {
     this.#deps = deps;
     this.#waitingCheck = options.waitingCheck;
+    this.#pinTitles = options.pinTitles;
     deps.host?.connect(
       (event) => this.handleHostEvent(event),
       () => void this.dispatchQueued(),
@@ -410,7 +412,7 @@ export class Sessions {
 
   /**
    * 置顶或取消置顶一条 Agent 回复（seq 是它的事件序号）。置顶时给它取一个短标题（pin-title.ts）：
-   * 用这个回合里到这条为止的回复。重复置顶不变。返回置顶后的整个列表。
+   * 用这个回合里到这条为止的回复，先问模型，模型给不出来用规则。重复置顶不变。返回置顶后的整个列表。
    */
   async setMessagePin(
     userId: string,
@@ -418,6 +420,8 @@ export class Sessions {
     seq: number,
     pinned: boolean,
   ): Promise<Result<MessagePin[]>> {
+    // 模型要几秒：在事务外问，不拿着会话的锁等
+    const asked = pinned ? await this.#askPinTitle(userId, shortId, seq) : undefined;
     const done = await this.#deps.db.transaction(async (tx) => {
       const session = await this.#lockOwn(tx, userId, shortId);
       if (!session) return "session_not_found" as const;
@@ -432,25 +436,13 @@ export class Sessions {
         .from(sessionEvents)
         .where(and(eq(sessionEvents.sessionId, session.id), eq(sessionEvents.seq, seq)));
       if (target?.body.type !== "message") return "message_not_found" as const;
-      const turn = target.turn;
-      const replies = await tx
-        .select({ body: sessionEvents.body, seq: sessionEvents.seq })
-        .from(sessionEvents)
-        .where(
-          and(
-            eq(sessionEvents.sessionId, session.id),
-            turn === null ? sql`${sessionEvents.turn} is null` : eq(sessionEvents.turn, turn),
-            sql`${sessionEvents.seq} <= ${seq}`,
-          ),
-        )
-        .orderBy(asc(sessionEvents.seq));
-      const texts = replies.flatMap((r) => (r.body.type === "message" ? [r.body.text] : []));
+      const texts = await this.#repliesUpTo(tx, session.id, target.turn, seq);
       await tx
         .insert(messagePins)
         .values({
           sessionId: session.id,
           seq,
-          title: pinTitle(texts),
+          title: asked ?? pinTitle(texts),
           createdAt: this.#deps.clock.now(),
         })
         .onConflictDoNothing();
@@ -458,6 +450,45 @@ export class Sessions {
     });
     if (typeof done === "string") return { ok: false, error: done };
     return { ok: true, value: await this.#pins(done.id) };
+  }
+
+  /** 这个回合里到 seq 为止的 Agent 回复，按顺序。 */
+  async #repliesUpTo(db: Database | Tx, sessionId: string, turn: number | null, seq: number) {
+    const replies = await db
+      .select({ body: sessionEvents.body })
+      .from(sessionEvents)
+      .where(
+        and(
+          eq(sessionEvents.sessionId, sessionId),
+          turn === null ? sql`${sessionEvents.turn} is null` : eq(sessionEvents.turn, turn),
+          sql`${sessionEvents.seq} <= ${seq}`,
+        ),
+      )
+      .orderBy(asc(sessionEvents.seq));
+    return replies.flatMap((r) => (r.body.type === "message" ? [r.body.text] : []));
+  }
+
+  /** 问模型给要置顶的回复起短标题。已经置顶了、找不到这条回复、模型给不出来：undefined。 */
+  async #askPinTitle(userId: string, shortId: string, seq: number): Promise<string | undefined> {
+    const titles = this.#pinTitles;
+    if (!titles) return undefined;
+    const [session] = await this.#deps.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(and(eq(sessions.userId, userId), eq(sessions.shortId, shortId)));
+    if (!session) return undefined;
+    const [pinnedAlready] = await this.#deps.db
+      .select({ seq: messagePins.seq })
+      .from(messagePins)
+      .where(and(eq(messagePins.sessionId, session.id), eq(messagePins.seq, seq)));
+    if (pinnedAlready) return undefined;
+    const [target] = await this.#deps.db
+      .select()
+      .from(sessionEvents)
+      .where(and(eq(sessionEvents.sessionId, session.id), eq(sessionEvents.seq, seq)));
+    if (target?.body.type !== "message") return undefined;
+    const texts = await this.#repliesUpTo(this.#deps.db, session.id, target.turn, seq);
+    return titles.title({ userId, sessionId: session.id, texts });
   }
 
   async #pins(sessionId: string): Promise<MessagePin[]> {

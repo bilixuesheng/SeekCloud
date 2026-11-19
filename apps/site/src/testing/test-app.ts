@@ -66,8 +66,8 @@ export interface TestAppOptions {
    */
   modelFetch?: typeof fetch;
   modelBaseUrl?: string;
-  /** 回合结束后问模型"是不是在等输入"（#140）。默认关，只用规则；测它的测试打开。 */
-  waitingCheck?: { timeoutMs?: number };
+  /** 平台自己发起的模型调用（判断是否在等输入、置顶的短标题）。默认关，只用规则；测它们的测试打开。 */
+  platformCalls?: { timeoutMs?: number };
   /** 网页抓取怎么解析域名、哪些地址能连。默认是真的（只连公网）。 */
   outboundNetwork?: OutboundNetwork;
   webFetchTimeoutMs?: number;
@@ -109,7 +109,7 @@ export async function createTestApp(options: TestAppOptions = {}) {
     modelFetch: options.modelFetch ?? model.fetch,
     outboundNetwork: options.outboundNetwork,
     webFetchTimeoutMs: options.webFetchTimeoutMs,
-    waitingCheck: options.waitingCheck ?? false,
+    platformCalls: options.platformCalls ?? false,
   };
   if (options.modelKey !== false) {
     try {
