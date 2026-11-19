@@ -60,4 +60,6 @@ jobs:
           # Runner 不是 root：防火墙规则借特权容器加（docker 组本来就等于 root）
           SEEKCLOUD_TEST_ROOT: docker
           SEEKCLOUD_TEST_INTERNET: "1"
+          # sandbox-image.yml 在测试机上构建的通用镜像：在真的沙箱里跑一个回合（turn.sysbox.test.ts）
+          SEEKCLOUD_SANDBOX_TEST_IMAGE: seekcloud-sandbox:ci
         run: pnpm --filter @seekcloud/host exec vitest run src/sandbox
