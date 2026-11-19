@@ -35,6 +35,7 @@ import {
 import { githubNotConnected } from "../errors";
 import { githubAccessToken, withGitHubToken } from "../github/tokens";
 import { readSetting } from "../settings";
+import { readAgentArchive, removeAgentArchive, saveAgentArchive } from "./agent-archive";
 import { DEFAULT_MODEL, findModel } from "./models";
 import { pinTitle } from "./pin-title";
 import { toSafeError } from "./safe-error";
@@ -378,6 +379,17 @@ export class Sessions {
     }
   }
 
+  /** 宿主机发来的 Agent 会话文件：是这个会话的回合发来的才存（agent-archive.ts）。 */
+  async #storeArchive(event: Extract<HostEvent, { type: "agent.archive" }>): Promise<void> {
+    if (!UUID.test(event.turnId) || !UUID.test(event.sessionId)) return;
+    const [turn] = await this.#deps.db
+      .select({ id: turns.id })
+      .from(turns)
+      .where(and(eq(turns.id, event.turnId), eq(turns.sessionId, event.sessionId)));
+    if (!turn) return;
+    await saveAgentArchive(this.#deps, event.sessionId, event.data);
+  }
+
   /** 会话里置顶的消息，按在会话里的先后排。 */
   async listPins(userId: string, shortId: string): Promise<Result<MessagePin[]>> {
     const [session] = await this.#deps.db
@@ -496,6 +508,7 @@ export class Sessions {
     if (!session) return { ok: false, error: "session_not_found" };
     this.#notify(session);
     this.#send({ type: "destroy_sandbox", sessionId: session.id });
+    await removeAgentArchive(this.#deps, session.id);
     return { ok: true, value: undefined };
   }
 
@@ -879,6 +892,10 @@ export class Sessions {
       await this.#storeDiff(event);
       return;
     }
+    if (event.type === "agent.archive") {
+      await this.#storeArchive(event);
+      return;
+    }
     const handled = await this.#deps.db.transaction(async (tx) => {
       const [session] = await tx
         .select()
@@ -1147,6 +1164,7 @@ export class Sessions {
       effort: session.effort,
       aiLabels: await readSetting(this.#deps, "ai_labels", { userId: session.userId }),
       committer: await this.#committer(session.userId),
+      agentArchive: await readAgentArchive(this.#deps, sessionId),
     });
   }
 
