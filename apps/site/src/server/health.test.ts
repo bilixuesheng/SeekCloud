@@ -17,6 +17,8 @@ describe("健康检查", () => {
     expect(await res.json()).toEqual({
       status: "ok",
       product: "seekcloud",
+      // 安卓 App 连接时核对（#177），没登录也给；还没发过 App，不限
+      minAppVersion: null,
       database: "ok",
       time: "2026-11-01T08:00:00.000Z",
     });

@@ -47,6 +47,8 @@ export class FakeIdentity implements Identity {
   };
 
   async currentUser(c: Context): Promise<CurrentUser | undefined> {
+    // 不认 Authorization：带了它就只按它认（ports.ts 的 Identity），这里一律算没登录
+    if (c.req.header("authorization") !== undefined) return undefined;
     const userId = this.#logins.get(getCookie(c, COOKIE) ?? "");
     return userId ? { id: userId } : undefined;
   }

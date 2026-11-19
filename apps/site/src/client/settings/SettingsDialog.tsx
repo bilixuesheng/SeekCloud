@@ -10,6 +10,7 @@ import { LegalLink } from "../legal/LegalPage";
 import { type SettingsSectionEntry, type SettingsSectionProps, useRegistry } from "../registry";
 import { navigate } from "../router";
 import { effortLabels } from "../session/ModelPicker";
+import { shortDateTime } from "../session/relative-time";
 import { reloadModels } from "../session/useModels";
 import { currentTheme, setTheme, type Theme } from "../theme";
 import { MODEL_PROVIDER } from "./ModelSettings";
@@ -382,6 +383,7 @@ export function AccountSettings({ notice, onSignedOut, onProfileChanged }: Setti
       <section className="settings-section">
         <h2>登录状态</h2>
         <ul className="settings-list">
+          <DeviceRows onSignedOut={onSignedOut} />
           <li className="settings-row">
             <span className="settings-row-text">
               <span className="settings-row-name">在所有设备上退出</span>
@@ -431,6 +433,89 @@ export function AccountSettings({ notice, onSignedOut, onProfileChanged }: Setti
  * 现在显示在侧栏底部和首页的问候语里；以后的系统提示词也带上它，Agent 称呼你时用（#59）。
  * 点"修改"就地改，去掉首尾空格，1–20 个字。
  */
+interface LoginDevice {
+  id: string;
+  client: "browser" | "app";
+  deviceName: string | null;
+  current: boolean;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+/**
+ * 登录着的设备（#177）：浏览器和安卓 App，每台一行，能单独退出。身份来源没有这个接口（下游换掉了）时不显示。
+ * 退出的是当前这台时和退出登录一样。
+ */
+function DeviceRows({ onSignedOut }: { onSignedOut: () => void }) {
+  const [devices, setDevices] = useState<LoginDevice[]>();
+  const [confirming, setConfirming] = useState<string>();
+  const [failed, setFailed] = useState<string>();
+
+  useEffect(() => {
+    api<{ devices: LoginDevice[] }>("/api/auth/devices").then(
+      (res) => setDevices(res.devices),
+      () => setDevices([]),
+    );
+  }, []);
+
+  const logOut = async (device: LoginDevice) => {
+    setFailed(undefined);
+    try {
+      await api(`/api/auth/devices/${device.id}`, {}, "DELETE");
+      if (device.current) return onSignedOut();
+      setDevices((list) => list?.filter((d) => d.id !== device.id));
+      setConfirming(undefined);
+    } catch (e) {
+      setFailed((e as ApiError).message);
+    }
+  };
+
+  if (!devices?.length) return null;
+  return (
+    <>
+      {devices.map((d) => (
+        <li key={d.id} className="settings-row">
+          <span className="settings-row-text">
+            <span className="settings-row-name">
+              {d.client === "app" ? (d.deviceName ?? "安卓设备") : "浏览器"}
+              {d.current && "（当前设备）"}
+            </span>
+            <span className="settings-row-sub">
+              {d.client === "app" ? "安卓 App" : "网页"}
+              {` · ${d.lastUsedAt ? "最后使用于" : "登录于"} ${shortDateTime(new Date(d.lastUsedAt ?? d.createdAt))}`}
+            </span>
+          </span>
+          {confirming === d.id ? (
+            <span className="settings-actions">
+              <button
+                type="button"
+                className="pill-button"
+                onClick={() => setConfirming(undefined)}
+              >
+                取消
+              </button>
+              <button type="button" className="pill-button danger" onClick={() => void logOut(d)}>
+                确认退出
+              </button>
+            </span>
+          ) : (
+            <button type="button" className="pill-button" onClick={() => setConfirming(d.id)}>
+              退出
+            </button>
+          )}
+        </li>
+      ))}
+      {failed && (
+        <li className="settings-row">
+          <p className="alert" role="alert">
+            {failed}
+          </p>
+        </li>
+      )}
+    </>
+  );
+}
+
 function NicknameRow({ onChanged }: { onChanged: () => void }) {
   const me = useCached<{ nickname: string | null }>(ME);
   const nickname = me.data?.nickname;

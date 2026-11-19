@@ -39,7 +39,7 @@
   - #26（模型网关）做了：主站的 `/api/gateway/v1/messages`（宿主机凭据加会话 ID 认证，剥字段，流式逐个事件转发，报错只给说明、状态码和参考号）、Files 接口（每个会话只碰得到自己传的）、联网搜索（`/v1/tools/search`）和网页抓取（`/v1/tools/fetch`，主站替沙箱去取，转成 Markdown；不连内网和本机地址，不跟重定向；照 Claude 不受网络策略约束，2026-11-18 用户定的），联网工具按次数记用量，用量记录，三个扩展点，设置的"模型"一类填 DeepSeek key，没填 key 时发起会话报错；宿主机这边的转发（沙箱发到 Git 代理端口的 `/v1/…`，宿主机核对会话临时令牌后带上宿主机凭据转给主站）。#26 做完了。
   - #25（Agent 适配接口）2026-11-18 做了大部分（PR #161、#162），剩下的写在 #25 的最后一条评论里：选择题和批准的卡片、命令时长、守护进程重启不打断回合（#111）。工作目录指到主仓库（#27 做了）、沙箱回收后 dsh 会话日志的去处（#27 的会话文件复制做了）。
   - #27（第一条真实闭环）的代码做完了（PR #166、#167、#170–#173），等真机验收。
-  - 要人做的工单打 `ready-for-human` 标签：#121、#126。
+  - 要人做的工单打 `ready-for-human` 标签：#121、#126（安卓的发布密钥，包名、应用名已经定了）。
 - AI 标识两个开关的规格和工单也拆了：规格 [#57](https://github.com/bilixuesheng/SeekCloud/issues/57)，工单 #58（已完成）、#59。八项新功能里只有这一项没有待定的事，所以先写了。
 - 2026-11-11 做了一次复查，记在 `docs/roadmap/2026-11-11-review.md`：界面上查出来并改掉的问题、路线图没覆盖到的地方（待定的每条都有建议）、安全排查的结论。写新功能的规格之前先读它。文档里待定的几条 2026-11-14 都定了，结论写在每条后面，写规格时照着做。
 - 2026-11-15 做了一次项目审查，记在 `docs/roadmap/2026-11-15-review.md`：查出来并改掉的问题、决定之间对不上的地方、工单阻塞关系的调整、设计上的坑、要用户定的 14 条（每条先写 Claude Code 网页版怎么做，再给建议）。实现工单之前先读它；工单的正文和 2026-11-15 的评论一起读。
@@ -54,14 +54,14 @@
   | #107 检查更新和一键更新 | #108–#111 |
   | #112 多提供方、余额和用量上限 | #113–#116 |
   | #117 Windows 支持 | #118–#121 |
-  | #122 安卓 App | #123–#126 |
+  | #122 安卓 App | #123–#126、#177–#182 |
   | #127 Agent 模式、轨迹视图和插件市场 | #128–#133 |
   | #134 英文界面 | #135–#137 |
   | #138 会话状态细分：等你输入和已完成 | #139、#140 |
 
 - 审查文档第六节的 14 条 2026-11-18 都定了，结论写在每条最后，相关的工单加了评论。要点：网页抓取照 Claude 不受网络策略约束；等回答的会话照常休眠、回答时唤醒接着跑；会话链接单独一个开关、默认关；支持 Git LFS（#152）；没登录时 `/api/health` 不给版本号；安装脚本测公开的镜像站选最快的拉；安卓做原生 App（Kotlin + Jetpack Compose + Material 3，底栏的液态玻璃用 Apache-2.0 的 AndroidLiquidGlass 自己写，不借 DSH Go 的代码，通知是 App 直接弹、可选常驻），#122 要照这个重写；中文界面处处用"云上求索"；侧栏的分组和拖动照 Claude（#153）。安卓的包名是 `cn.seekcloud.app`（用户的域名 seekcloud.cn 倒写，2026-11-18 定的）。
 - **接下来**：
-  1. 照 2026-11-18 的结论重写安卓规格 #122 和它的工单（#123–#126）。
+  1. 安卓的规格 #122 和工单 2026-11-19 照原生 App 重拆好了（#122 的 2026-11-19 评论里有一张表）：主站这边的设备令牌 #177 不等别的，可以先做；App 的工程骨架 #123 等它。
   2. 实现不等测试机、也不等别的工单的：#17 剩下的部分（基线配置已做）、#153（侧栏的分组和拖动）、#94（发布包和安装脚本）、#100（两步验证）、#135（文案目录）。#139（等你输入的规则版）、#140（换成模型判断）做了，#140 剩下用真的 DeepSeek 实测误判率。#59 里 git 钩子的那一项做了（钩子读沙箱里的 `/etc/seekcloud/commit-trailer`，宿主机准备沙箱和收到 `set_ai_labels` 时写它，#18 做了）。#17、#18 做完了，#25 做了大部分。接着是 #27（第一条真实闭环）。它要先做三件事：
      - 准备沙箱时克隆仓库（做了）；
      - 照 `apps/host/sandbox/README.md` 配好沙箱里的代理、CA 证书和 git 配置（做了）；
@@ -90,7 +90,7 @@
 - 在仓库根目录运行：`pnpm typecheck`、`pnpm lint`（Biome；`pnpm format` 自动修）、`pnpm test`、`pnpm build`。CI 跑的就是这四个。
 - 测试要一个 PostgreSQL，默认连 `postgres://postgres:postgres@localhost:5432/postgres`，可以用 `TEST_DATABASE_URL` 改。云端会话里先运行 `service postgresql start`，再用 `runuser -u postgres -- psql -c "ALTER USER postgres PASSWORD 'postgres';"` 设好密码。
 - GitHub 的调用全部经过 `apps/site/src/server/github/port.ts` 的接口；测试里是 `t.github`（`src/testing/fake-github.ts`，内存里的假 GitHub）。
-- 登录：只有一个管理员账户，只用密码登录（ADR 0008）。设置、登录、改密码、重置在 `apps/site/src/server/auth/admin.ts`，登录的接口在 `auth/admin-routes.ts`，密码只存 scrypt 哈希（`auth/password.ts`）；同一个 IP 一小时输错 10 次就暂停。GitHub 不是登录方式，只在设置里关联（`src/server/github/link.ts`）。
+- 登录：只有一个管理员账户，只用密码登录（ADR 0008）。设置、登录、改密码、重置在 `apps/site/src/server/auth/admin.ts`，登录的接口在 `auth/admin-routes.ts`，密码只存 scrypt 哈希（`auth/password.ts`）；同一个 IP 一小时输错 10 次就暂停。GitHub 不是登录方式，只在设置里关联（`src/server/github/link.ts`）。登录状态在 `auth/login-sessions.ts`（`login_sessions` 表，只存哈希）：网页用 Cookie；安卓 App 登录时带 `client: "app"` 和设备名，拿到设备令牌，之后放在 `Authorization: Bearer` 里（#177），带了它就只按令牌认、不看 Cookie、不做同站检查；App 的令牌每次用都顺延 30 天。设备列表是 `/api/auth/devices`（设置的"账户"里能单独退出一台）。事件流每次保活（`streamKeepaliveMs`，默认 25 秒）再核对一次登录状态，退出了就断开。`/api/health` 的 `minAppVersion`（`app.ts` 的 `MIN_APP_VERSION`）是支持的最低 App 版本。
 - 扩展点（ADR 0010）：`AppDeps` 里的 `identity`（身份来源）和 `settingsPolicy`（设置的读写规则），接口在 `apps/site/src/server/ports.ts`，主干的实现是 `auth/admin-identity.ts` 的 `adminIdentity` 和 `settings.ts` 的 `adminSettings`，在 `main.ts` 里组装。接口里判断是谁一律用 `deps.identity.currentUser(c)`，不直接用 `auth/login-sessions.ts`；设置一律用 `settings.ts` 的 `readSetting`、`writeSetting`，加一项设置就在 `SETTINGS` 里加一行。`extension-rules.test.ts` 读源码守住这几条。下游只从包的出口拿东西：`@seekcloud/site/server`（`src/server/index.ts`）和 `@seekcloud/site/testing`（`src/testing/index.ts`）；下游的表放自己的迁移目录，用 `runMigrations(db, [{ folder, table }])`。
 - 浏览器端的扩展点（ADR 0010）在 `apps/site/src/client/registry.tsx`：页面（地址样式、组件、要不要登录、是不是盖在页面上的弹窗）、设置分类（加一类只登记一项，`order` 排顺序）、四个插槽（`sidebar-foot`、`composer-below`、`session-banner`、`home-below-greeting`，页面上用 `<Slot name="..." />`）。主干自己的在 `client/trunk.tsx` 登记，`main.tsx` 只做登记和挂载（`mountApp`）；登录后的页面从 `useShell()`（`client/shell.tsx`）拿管理员、会话列表这些。路由（`router.ts`）查这张表，找不到的地址回首页。下游从 `@seekcloud/site/client`（`src/client/index.ts`）拿。
 - 加了路径里带某个人的数据 ID 的接口（`/api/sessions/{shortId}/...` 这类），要在 `server/isolation.test.ts` 的清单里加一行，漏了测试就失败：它用测试替身 `FakeIdentity`（`src/testing/fake-identity.ts`）放进第二个人，拿对方的 ID 调每个接口。身份来源的契约测试在 `src/testing/identity-contract.ts`，最小下游样例在 `src/testing/downstream-example/`（起一个真的 HTTP 服务）。
