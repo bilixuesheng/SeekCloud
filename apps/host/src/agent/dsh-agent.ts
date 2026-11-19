@@ -182,7 +182,22 @@ export class DshAgent {
   #startDsh(): Promise<void> {
     const launch = this.#options.launch();
     const started = new Promise<number>((resolve, reject) => {
-      this.#starting = { resolve, reject };
+      // 运行器没回"起来了"也没回错误（比如连接断了又没连上）：不一直等下去
+      const timer = setTimeout(() => {
+        this.#starting = undefined;
+        reject(new Error("等不到 dsh 起来（30 秒）"));
+      }, 30_000);
+      timer.unref();
+      this.#starting = {
+        resolve: (pid) => {
+          clearTimeout(timer);
+          resolve(pid);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      };
     });
     this.#link.send({ op: "start", args: launch.args, cwd: launch.cwd, env: launch.env });
     return started.then(async (pid) => {
@@ -198,7 +213,19 @@ export class DshAgent {
     this.#stopping = true;
     const exited = new Promise<void>((resolve) => this.#exited.push(resolve));
     this.#link.send({ op: "stop", graceMs: 3000 });
-    await exited;
+    // 运行器 3 秒后会 SIGKILL；再等不到退出（连接断了）就当它没了，下次起一个新的
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<void>((resolve) => {
+      timer = setTimeout(() => {
+        this.#options.log?.(`会话 ${this.#options.sessionId} 等不到 dsh 退出，当作已经停了`);
+        this.#stopping = false;
+        this.#forgetProcess();
+        resolve();
+      }, 10_000);
+      timer.unref();
+    });
+    await Promise.race([exited, late]);
+    clearTimeout(timer);
   }
 
   #forgetProcess(): void {

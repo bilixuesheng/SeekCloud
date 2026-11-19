@@ -39,6 +39,7 @@ jobs:
   # dsh 要 Node 24.9 以上，版本按 apps/host/sandbox/dsh/VERSION 装，模型服务是假的，不需要任何密钥。
   dsh:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -56,4 +57,5 @@ jobs:
       - name: 测试
         env:
           SEEKCLOUD_DSH_BIN: ${{ runner.temp }}/dsh/node_modules/.bin/dsh
-        run: pnpm --filter @seekcloud/host exec vitest run src/dsh- src/agent/
+        # 一个一个写出每个测试的结果：卡住时看得出是哪一个
+        run: pnpm --filter @seekcloud/host exec vitest run --reporter=verbose src/dsh- src/agent/
