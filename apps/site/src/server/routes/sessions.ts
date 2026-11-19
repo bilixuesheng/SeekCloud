@@ -263,6 +263,41 @@ const MessagePinSchema = z
   })
   .openapi("MessagePin");
 
+const RepoDiffSchema = z
+  .object({
+    fullName: z.string(),
+    baseBranch: z.string(),
+    base: z.string().openapi({ description: "会话分支和基础分支分开的那个提交" }),
+    head: z.string().openapi({ description: "会话分支现在的提交" }),
+    files: z.array(
+      z.object({
+        path: z.string(),
+        from: z.string().optional().openapi({ description: "改名的原路径" }),
+        additions: z.number().int(),
+        deletions: z.number().int(),
+        binary: z.boolean().optional(),
+        patch: z.string().optional().openapi({ description: "git diff 的原文；太大的不带" }),
+        tooLarge: z.boolean().optional(),
+      }),
+    ),
+    truncated: z.boolean().optional().openapi({ description: "文件太多、patch 太大，后面的没带" }),
+  })
+  .openapi("RepoDiff");
+
+const diffRoute = createRoute({
+  method: "get",
+  path: "/sessions/{shortId}/diff",
+  summary: "会话分支对比基础分支的改动（改动面板）",
+  description:
+    "每个回合结束时宿主机算一份，这里是每个仓库最新的那份。还没有回合结束过的仓库不在里面。",
+  request: { params: ShortIdParam },
+  responses: {
+    200: { description: "按会话的仓库顺序", ...json(z.object({ repos: z.array(RepoDiffSchema) })) },
+    401: errorResponse("没有登录"),
+    404: errorResponse("会话不存在"),
+  },
+});
+
 const listPinsRoute = createRoute({
   method: "get",
   path: "/sessions/{shortId}/pins",
@@ -556,6 +591,13 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       );
       if (!result.ok) return c.json(fail(result.error).body, 404);
       return c.json(result.value, 200);
+    })
+    .openapi(diffRoute, async (c) => {
+      const user = await deps.identity.currentUser(c);
+      if (!user) return c.json(notLoggedIn, 401);
+      const result = await sessions.listDiffs(user.id, c.req.valid("param").shortId);
+      if (!result.ok) return c.json(fail(result.error).body, 404);
+      return c.json({ repos: result.value }, 200);
     })
     .openapi(listPinsRoute, async (c) => {
       const user = await deps.identity.currentUser(c);

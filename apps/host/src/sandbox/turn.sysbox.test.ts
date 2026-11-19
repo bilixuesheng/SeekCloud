@@ -304,6 +304,18 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
     expect(saved).toContain("-----BEGIN SSH SIGNATURE-----");
     expect(saved).toContain("Generated-by: SeekCloud (AI)");
 
+    // 回合结束以后还有一份对比基础分支的 diff（改动面板）
+    const diff = await until(
+      () =>
+        events.find((e) => e.type === "workspace.diff" && e.sessionId === repoSession) as
+          | Extract<HostEvent, { type: "workspace.diff" }>
+          | undefined,
+      "对比基础分支的 diff",
+    );
+    expect(diff.repos[0]?.baseBranch).toBe("main");
+    expect(diff.repos[0]?.files.map((f) => f.path).sort()).toEqual(["draft.txt", "hello.txt"]);
+    expect(diff.repos[0]?.files.find((f) => f.path === "hello.txt")?.patch).toContain("+你好");
+
     // 推送请求带的是代理换上的用户令牌，沙箱里没有它
     const push = github.requests.find((r) => r.path.endsWith("/git-receive-pack"));
     expect(push?.authorization).toBe(

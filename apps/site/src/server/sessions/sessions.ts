@@ -8,6 +8,7 @@ import type {
   LiveEvent,
   MessagePin,
   PullRequestState,
+  RepoDiff,
   SafeError,
   Session,
   SessionEvent,
@@ -29,6 +30,7 @@ import {
   sessionRepos,
   sessions,
   turns,
+  workspaceDiffs,
 } from "../db/schema";
 import { githubNotConnected } from "../errors";
 import { githubAccessToken, withGitHubToken } from "../github/tokens";
@@ -317,6 +319,63 @@ export class Sessions {
   async #markUnreadIfAway(tx: Tx, sessionId: string): Promise<void> {
     if (this.#events.count(sessionId) > 0) return;
     await tx.update(sessions).set({ unread: true }).where(eq(sessions.id, sessionId));
+  }
+
+  /** 会话分支对比基础分支的改动（改动面板，#27），按会话的仓库顺序。还没有的仓库不在里面。 */
+  async listDiffs(userId: string, shortId: string): Promise<Result<RepoDiff[]>> {
+    const [session] = await this.#deps.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(and(eq(sessions.userId, userId), eq(sessions.shortId, shortId)));
+    if (!session) return { ok: false, error: "session_not_found" };
+    const rows = await this.#deps.db
+      .select({ repo: workspaceDiffs.repo, body: workspaceDiffs.body })
+      .from(workspaceDiffs)
+      .where(eq(workspaceDiffs.sessionId, session.id));
+    const order = (
+      await this.#deps.db
+        .select({ fullName: sessionRepos.fullName })
+        .from(sessionRepos)
+        .where(eq(sessionRepos.sessionId, session.id))
+        .orderBy(asc(sessionRepos.position))
+    ).map((r) => r.fullName);
+    return {
+      ok: true,
+      value: rows
+        .filter((row) => order.includes(row.repo))
+        .sort((a, b) => order.indexOf(a.repo) - order.indexOf(b.repo))
+        .map((row) => row.body),
+    };
+  }
+
+  /** 宿主机发来的 diff：每个仓库只留最新的（补发来的旧回合的不盖新的）。不是这个会话的回合的不收。 */
+  async #storeDiff(event: Extract<HostEvent, { type: "workspace.diff" }>): Promise<void> {
+    if (!UUID.test(event.turnId) || !UUID.test(event.sessionId)) return;
+    const [turn] = await this.#deps.db
+      .select({ number: turns.number })
+      .from(turns)
+      .where(and(eq(turns.id, event.turnId), eq(turns.sessionId, event.sessionId)));
+    if (!turn) return;
+    for (const repo of event.repos) {
+      await this.#deps.db
+        .insert(workspaceDiffs)
+        .values({
+          sessionId: event.sessionId,
+          repo: repo.fullName,
+          turn: turn.number,
+          body: repo,
+          updatedAt: this.#deps.clock.now(),
+        })
+        .onConflictDoUpdate({
+          target: [workspaceDiffs.sessionId, workspaceDiffs.repo],
+          set: {
+            turn: sql`excluded.turn`,
+            body: sql`excluded.body`,
+            updatedAt: sql`excluded.updated_at`,
+          },
+          setWhere: sql`excluded.turn >= ${workspaceDiffs.turn}`,
+        });
+    }
   }
 
   /** 会话里置顶的消息，按在会话里的先后排。 */
@@ -814,6 +873,10 @@ export class Sessions {
   async handleHostEvent(event: HostEvent): Promise<void> {
     if (event.type === "progress" || event.type === "delta") {
       await this.#forwardLive(event);
+      return;
+    }
+    if (event.type === "workspace.diff") {
+      await this.#storeDiff(event);
       return;
     }
     const handled = await this.#deps.db.transaction(async (tx) => {

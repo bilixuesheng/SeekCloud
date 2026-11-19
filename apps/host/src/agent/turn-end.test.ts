@@ -6,7 +6,14 @@ import type { SessionRepo } from "@seekcloud/protocol";
 import { describe, expect, it } from "vitest";
 import type { SandboxGit } from "../sandbox/provision";
 import { cleanGitEnv } from "../testing/fake-github";
-import { finishTurn, parseNumstat, type SandboxExec, turnStart } from "./turn-end";
+import {
+  branchDiffs,
+  finishTurn,
+  parseNumstat,
+  type SandboxExec,
+  splitPatch,
+  turnStart,
+} from "./turn-end";
 
 const git: SandboxGit = {
   proxy: { host: "10.88.0.1", port: 8080 },
@@ -191,5 +198,62 @@ describe("回合结束时整理工作区", () => {
       ["acme/lib", 1, true],
     ]);
     expect(box.remoteHead(app.bare)).not.toBe("");
+  });
+
+  describe("对比基础分支的 diff（改动面板）", () => {
+    it("按文件切开 git diff 的原文", () => {
+      const patch =
+        "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\ndiff --git a/b b/b\nnew file mode 100644\n";
+      expect(splitPatch(patch)).toEqual([
+        "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n",
+        "diff --git a/b b/b\nnew file mode 100644\n",
+      ]);
+      expect(splitPatch("")).toEqual([]);
+    });
+
+    it("从会话分支和基础分支分开的地方算起：基础分支后来的提交不算；每个文件带 patch，二进制不带", async () => {
+      const box = sandbox(["app"]);
+      const [app] = box.repos as [(typeof box.repos)[0]];
+      const repos = [box.session("app")];
+      writeFileSync(join(app.dir, "README.md"), `${LINES.join("\n")}\n加了一行\n`);
+      writeFileSync(join(app.dir, "logo.png"), Buffer.from([0, 1, 2, 0, 255]));
+      box.sh(app.dir, "add", ".");
+      box.sh(app.dir, "commit", "-q", "-m", "改了");
+      // 基础分支后来又有了别的提交
+      const other = mkdtempSync(join(tmpdir(), "other-"));
+      execFileSync("git", ["clone", "-q", app.bare, other], { env: cleanGitEnv(other) });
+      writeFileSync(join(other, "later.txt"), "后来的\n");
+      box.sh(other, "add", ".");
+      box.sh(other, "commit", "-q", "-m", "基础分支的新提交");
+      box.sh(other, "push", "-q", "origin", "main");
+      box.sh(app.dir, "fetch", "-q", "origin");
+
+      const [diff] = await branchDiffs(box.exec, repos);
+      expect(diff).toMatchObject({ fullName: "acme/app", baseBranch: "main" });
+      expect(diff?.head).toBe(box.sh(app.dir, "rev-parse", BRANCH));
+      expect(diff?.base).toBe(box.sh(app.dir, "rev-parse", "main"));
+      expect(diff?.files.map((f) => f.path).sort()).toEqual(["README.md", "logo.png"]);
+      const readme = diff?.files.find((f) => f.path === "README.md");
+      expect(readme).toMatchObject({ additions: 1, deletions: 0 });
+      expect(readme?.patch).toContain("+加了一行");
+      expect(readme?.patch?.startsWith("diff --git a/README.md b/README.md")).toBe(true);
+      const logo = diff?.files.find((f) => f.path === "logo.png");
+      expect(logo).toMatchObject({ binary: true });
+      expect(logo?.patch).toBeUndefined();
+      expect(diff?.truncated).toBeUndefined();
+    });
+
+    it("单个文件太大的不带 patch", async () => {
+      const box = sandbox(["app"]);
+      const [app] = box.repos as [(typeof box.repos)[0]];
+      writeFileSync(join(app.dir, "big.txt"), `${"很长的一行\n".repeat(30_000)}`);
+      writeFileSync(join(app.dir, "small.txt"), "小\n");
+      box.sh(app.dir, "add", ".");
+      box.sh(app.dir, "commit", "-q", "-m", "大文件");
+      const [diff] = await branchDiffs(box.exec, [box.session("app")]);
+      expect(diff?.files.find((f) => f.path === "big.txt")).toMatchObject({ tooLarge: true });
+      expect(diff?.files.find((f) => f.path === "big.txt")?.patch).toBeUndefined();
+      expect(diff?.files.find((f) => f.path === "small.txt")?.patch).toContain("+小");
+    });
   });
 });

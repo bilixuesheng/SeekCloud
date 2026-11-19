@@ -1,6 +1,7 @@
 import type {
   ErrorCode,
   PullRequestState,
+  RepoDiff,
   SessionEventBody,
   SessionRepo,
   SessionStatusDetail,
@@ -255,6 +256,24 @@ export const messagePins = pgTable(
     createdAt: createdAt(),
   },
   (t) => [primaryKey({ columns: [t.sessionId, t.seq] })],
+);
+
+/**
+ * 会话分支对比基础分支的改动（改动面板，#27）：宿主机每个回合结束时发一份，每个仓库只留最新的
+ * （turn 大的盖过小的，补发来的旧的不盖新的）。
+ */
+export const workspaceDiffs = pgTable(
+  "workspace_diffs",
+  {
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    repo: text("repo").notNull(),
+    turn: integer("turn").notNull(),
+    body: jsonb("body").$type<RepoDiff>().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.sessionId, t.repo] })],
 );
 
 export const accessEvent = pgEnum("access_event", ["login", "session_start", "message"]);

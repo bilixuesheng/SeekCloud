@@ -75,6 +75,7 @@ describe("两个人互相看不到对方的数据", () => {
         bob.post(`${s}/queue/${session.queueId}/send-now`),
       "POST /api/sessions/{shortId}/rename": () => bob.post(`${s}/rename`, { title: "乙改的" }),
       "GET /api/sessions/{shortId}/pins": () => bob.get(`${s}/pins`),
+      "GET /api/sessions/{shortId}/diff": () => bob.get(`${s}/diff`),
       "POST /api/sessions/{shortId}/pins": () => bob.post(`${s}/pins`, { seq: 1, pinned: true }),
       "POST /api/sessions/{shortId}/read": () => bob.post(`${s}/read`, { unread: true }),
       "POST /api/sessions/{shortId}/pin": () => bob.post(`${s}/pin`, { pinned: true }),

@@ -71,6 +71,13 @@
       "when": 1795047103371,
       "tag": "0009_github_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795099480774,
+      "tag": "0010_workspace_diffs",
+      "breakpoints": true
     }
   ]
 }
