@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import type { Server } from "node:http";
@@ -9,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { SandboxAgents } from "../agent/sandbox-agents";
 import { GitSessions } from "../git-proxy/sessions";
 import { startGitProxy } from "../git-proxy/start";
+import { startFakeGitHub } from "../testing/fake-github";
 import { FakeModelServer } from "../testing/fake-model-server";
 import { Docker, runProgram } from "./docker";
 import {
@@ -19,12 +21,14 @@ import {
   rootViaDocker,
   type SandboxNetwork,
 } from "./network";
+import type { SandboxGit } from "./provision";
 import { Sandboxes } from "./sandboxes";
 
 /**
  * 在真的沙箱里跑一个回合（#25、#27 之前的整体验证）：用通用镜像（镜像里的运行器和 dsh）、Sysbox、
  * 沙箱专用网络和防火墙，dsh 调模型经 Git 代理端口上的模型网关转发。"主站"是假的：它的模型网关接口
- * 直接由按脚本回复的假模型扮演。
+ * 直接由按脚本回复的假模型扮演。GitHub 也是假的（git http-backend），Git 代理把 github.com 转过去：
+ * 准备沙箱时真的装 CA、写 git 配置、克隆、切到会话分支，Agent 在主仓库里提交、签名、推送（#27）。
  *
  * 只在测试机上跑：设 SEEKCLOUD_SYSBOX_TESTS=1，SEEKCLOUD_SANDBOX_TEST_IMAGE 指向测试机上构建好的
  * 通用镜像（sandbox-image.yml 构建的 seekcloud-sandbox:ci）。
@@ -42,11 +46,15 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
   const model = new FakeModelServer();
   const sessions = new GitSessions();
   const sessionId = randomUUID();
+  const repoSession = randomUUID();
+  const committer = { name: "Mona 测试", email: "1+mona@users.noreply.github.com" };
   const events: HostEvent[] = [];
   const logs: string[] = [];
   let dir: string;
   let net: SandboxNetwork;
   let proxy: Server;
+  let git: SandboxGit;
+  let github: Awaited<ReturnType<typeof startFakeGitHub>>;
   let sandboxes: Sandboxes;
   let agents: SandboxAgents;
 
@@ -63,6 +71,8 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
 
     // 假主站：模型网关的接口（/api/gateway/v1/messages）由假模型回
     const siteUrl = await model.start();
+    github = await startFakeGitHub("ghu_user");
+    github.createRepo("acme/app");
     const key = join(dir, "signing.pem");
     await writeFile(
       key,
@@ -74,21 +84,28 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
       repos: [],
       aiLabels: { signature: true, commitTrailer: false },
     });
-    ({ server: proxy } = startGitProxy(
+    const started = startGitProxy(
       {
         dataDir: dir,
         signingKeyPath: key,
         signerEmail: "seekcloud@example.com",
         host: net.gateway,
         port: 0,
+        upstreams: github.upstreams,
       },
       sessions,
       { siteUrl, credential: () => "host-credential" },
-    ));
+    );
+    proxy = started.server;
     await new Promise<void>((resolve) =>
       proxy.listening ? resolve() : proxy.once("listening", resolve),
     );
     const port = (proxy.address() as AddressInfo).port;
+    git = {
+      proxy: { host: net.gateway, port },
+      caPem: started.caPem,
+      signingPublicKey: started.signingPublicKey,
+    };
     await applyFirewall({ bridge: net.bridge, gateway: net.gateway, ports: [port], chain }, root);
 
     sandboxes = new Sandboxes(
@@ -106,13 +123,14 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
     agents = new SandboxAgents({
       sandboxes,
       sessions,
-      gateway: { host: net.gateway, port },
+      git,
       emit: (e) => events.push(e),
       log: (m) => logs.push(m),
     });
   });
   afterAll(async () => {
     agents?.close(sessionId);
+    agents?.close(repoSession);
     if (sandboxes) for (const s of await sandboxes.list()) await sandboxes.remove(s.sessionId);
     if (net) {
       await removeFirewall({ bridge: net.bridge, chain }, root);
@@ -120,6 +138,7 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
     }
     proxy?.close();
     await model.close();
+    await github?.close();
     if (dir) await rm(dir, { recursive: true, force: true });
   });
 
@@ -186,5 +205,89 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
     expect(request?.headers.authorization).toBe("Bearer host-credential");
     expect(request?.headers["x-seekcloud-session"]).toBe(sessionId);
     expect(request?.headers["x-api-key"]).toBeUndefined();
+  });
+
+  it("有仓库的会话：克隆、切到会话分支，Agent 在主仓库里提交，提交带签名和尾注，推送经 Git 代理到 GitHub", async () => {
+    const repo = {
+      fullName: "acme/app",
+      baseBranch: "main",
+      branch: "seekcloud/t2",
+      access: "push" as const,
+    };
+    const sessionToken = randomBytes(32).toString("base64url");
+    sessions.register({
+      sessionId: repoSession,
+      sessionToken,
+      repos: [repo],
+      aiLabels: { signature: true, commitTrailer: true },
+      committer,
+    });
+    sessions.setGitHubToken(repoSession, "ghu_user");
+    await sandboxes.prepare(
+      repoSession,
+      { signature: true, commitTrailer: true },
+      { git, setup: { sessionToken, committer, repos: [repo] } },
+    );
+
+    model.script = [
+      {
+        tools: [
+          {
+            id: "toolu_2",
+            name: "bash",
+            input: {
+              command: [
+                "pwd",
+                "git rev-parse --abbrev-ref HEAD",
+                "echo 你好 > hello.txt",
+                "git add hello.txt",
+                'git commit -q -m "加一个文件"',
+                "git push -q origin HEAD 2>&1",
+                "echo 推送完成",
+              ].join(" && "),
+              description: "提交并推送",
+            },
+          },
+        ],
+      },
+      { text: "推好了" },
+    ];
+    const before = events.length;
+    await agents.startTurn(repoSession, {
+      turnId: "t2",
+      text: "加一个文件并推送",
+      model: "deepseek-flash",
+      effort: "high",
+      firstTurn: true,
+    });
+    const mine = () =>
+      events
+        .slice(before)
+        .flatMap((e) => (e.type === "agent" && e.sessionId === repoSession ? [e.event] : []));
+    const end = await until(() => mine().find((e) => e.type === "turn.ended"), "第二个回合结束");
+    const result = mine().find((e) => e.type === "tool.result") as AgentEvent & {
+      type: "tool.result";
+    };
+    expect(end, `${result?.output}\n${logs.slice(-20).join("\n")}`).toEqual({
+      type: "turn.ended",
+      reason: "completed",
+    });
+    expect(result.output).toContain("/workspace/app"); // 工作目录是主仓库
+    expect(result.output).toContain("seekcloud/t2");
+    expect(result.output).toContain("推送完成");
+
+    // 推到了假 GitHub：会话分支上是 Agent 的提交，提交者是会话的提交身份，带签名和 AI 尾注
+    expect(github.refs("acme/app")).toContain("refs/heads/seekcloud/t2");
+    const commit = execFileSync("git", ["cat-file", "commit", "refs/heads/seekcloud/t2"], {
+      cwd: join(github.root, "acme/app.git"),
+    }).toString();
+    expect(commit).toContain(`committer ${committer.name} <${committer.email}>`);
+    expect(commit).toContain("-----BEGIN SSH SIGNATURE-----");
+    expect(commit).toContain("Generated-by: SeekCloud (AI)");
+    // 推送请求带的是代理换上的用户令牌，沙箱里没有它
+    const push = github.requests.find((r) => r.path.endsWith("/git-receive-pack"));
+    expect(push?.authorization).toBe(
+      `Basic ${Buffer.from("x-access-token:ghu_user").toString("base64")}`,
+    );
   });
 });

@@ -4,6 +4,7 @@ import { GitSessions } from "./git-proxy/sessions";
 import { startGitProxy } from "./git-proxy/start";
 import type { ModelGatewayLink } from "./model-gateway/forward";
 import { applyFirewall, DEFAULT_NETWORK, ensureSandboxNetwork } from "./sandbox/network";
+import type { SandboxGit } from "./sandbox/provision";
 import { Sandboxes } from "./sandbox/sandboxes";
 import { handleCommands } from "./site-link/commands";
 import { SiteLink } from "./site-link/connection";
@@ -85,14 +86,26 @@ async function main() {
   const gitProxyHost = process.env.SEEKCLOUD_GIT_PROXY_HOST ?? sandbox?.gateway ?? "127.0.0.1";
   const signingKeyPath = process.env.SEEKCLOUD_SIGNING_KEY;
   const signerEmail = process.env.SEEKCLOUD_SIGNER_EMAIL;
+  let git: SandboxGit | undefined;
   if (signingKeyPath && signerEmail) {
     const host = gitProxyHost;
-    startGitProxy(
+    const proxy = startGitProxy(
       { dataDir, signingKeyPath, signerEmail, host, port: gitProxyPort },
       sessions,
       modelGateway,
     );
+    // 沙箱里的 git 配置（sandbox/provision.ts）
+    git = {
+      proxy: { host, port: gitProxyPort },
+      caPem: proxy.caPem,
+      signingPublicKey: proxy.signingPublicKey,
+      fallbackCommitter: { name: "SeekCloud", email: signerEmail },
+    };
     console.log(`Git 代理已启动：http://${host}:${gitProxyPort}`);
+  } else if (sandbox) {
+    console.log(
+      "没有设置 SEEKCLOUD_SIGNING_KEY 和 SEEKCLOUD_SIGNER_EMAIL，Git 代理没有启动，沙箱里跑不了 Agent。",
+    );
   }
 
   if (!siteUrl || !key) {
@@ -108,17 +121,19 @@ async function main() {
   });
   link = site;
   // 沙箱里的 dsh（#25）：调模型经 Git 代理端口上的模型网关转发
-  const agents = sandbox
-    ? new SandboxAgents({
-        sandboxes: sandbox.sandboxes,
-        sessions,
-        gateway: { host: gitProxyHost, port: gitProxyPort },
-        emit: (event) => site.send(event),
-      })
-    : undefined;
+  const agents =
+    sandbox && git
+      ? new SandboxAgents({
+          sandboxes: sandbox.sandboxes,
+          sessions,
+          git,
+          emit: (event) => site.send(event),
+        })
+      : undefined;
   const commands = handleCommands({
     sessions,
     sandboxes: sandbox?.sandboxes,
+    git,
     agents,
     send: (event) => site.send(event),
   });

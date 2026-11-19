@@ -1,0 +1,10 @@
+#!/bin/sh
+# 沙箱里的 gh（装在 /usr/local/bin，排在 /usr/bin/gh 前面，见 README.md）。
+# gh 只在调 GitHub 时经过宿主机的 Git 代理：代理把占位的 GH_TOKEN 换成用户的令牌。
+# 别的出站在出站代理做好之前直连（#47），所以不给整个沙箱设 HTTPS_PROXY。
+if [ -n "${SEEKCLOUD_GITHUB_PROXY:-}" ]; then
+  HTTPS_PROXY=$SEEKCLOUD_GITHUB_PROXY
+  https_proxy=$SEEKCLOUD_GITHUB_PROXY
+  export HTTPS_PROXY https_proxy
+fi
+exec /usr/bin/gh "$@"

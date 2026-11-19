@@ -10,7 +10,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import type { AgentHost } from "../agent/sandbox-agents";
 import { GitSessions } from "../git-proxy/sessions";
-import type { SandboxHost } from "../sandbox/sandboxes";
+import { CloneError, type SandboxGit } from "../sandbox/provision";
+import type { SandboxHost, Workspace } from "../sandbox/sandboxes";
 import { handleCommands } from "./commands";
 import { connectUrl, SiteLink } from "./connection";
 
@@ -109,7 +110,11 @@ describe("宿主机到主站的连接", () => {
   });
 
   /** 一个假主站，加一个连上它的守护进程。 */
-  const setup = async (sandboxes?: SandboxHost, agents?: AgentHost) => {
+  const setup = async (
+    sandboxes?: SandboxHost,
+    agents?: AgentHost,
+    extra: { git?: SandboxGit; tokenWaitMs?: number } = {},
+  ) => {
     const site = new FakeSite();
     await new Promise((resolve) => site.server.once("listening", resolve));
     const sessions = new GitSessions();
@@ -132,6 +137,7 @@ describe("宿主机到主站的连接", () => {
       sandboxes,
       agents,
       log: (m) => logs.push(m),
+      ...extra,
     });
     cleanup.push(async () => {
       await link.stop();
@@ -298,6 +304,76 @@ describe("宿主机到主站的连接", () => {
       type: "agent",
       event: { type: "turn.ended", reason: "failed", error: { code: "internal" } },
     });
+  });
+
+  it("配了 Git 代理时：工作区（会话临时令牌、提交身份、仓库）跟着准备沙箱交下去，GitHub 令牌到了才克隆；克隆失败回克隆仓库失败", async () => {
+    const prepared: { sessionId: string; workspace?: Workspace; githubToken?: string }[] = [];
+    const ref: { sessions?: GitSessions } = {};
+    const sandboxes: SandboxHost = {
+      async prepare(sessionId, _aiLabels, workspace) {
+        prepared.push({
+          sessionId,
+          workspace,
+          githubToken: ref.sessions?.get(sessionId)?.githubToken,
+        });
+        if (sessionId === "bad") throw new CloneError("克隆 acme/app：fatal: repository not found");
+      },
+      async setAiLabels() {},
+      async destroy() {},
+      async count() {
+        return 0;
+      },
+    };
+    const git: SandboxGit = {
+      proxy: { host: "10.88.0.1", port: 8080 },
+      caPem: "CA",
+      signingPublicKey: "ssh-ed25519 AAAA",
+    };
+    const { site, sessions } = await setup(sandboxes, undefined, { git, tokenWaitMs: 5_000 });
+    ref.sessions = sessions;
+    const repo = {
+      fullName: "acme/app",
+      baseBranch: "main",
+      branch: "seekcloud/abc",
+      access: "push" as const,
+    };
+    const committer = { name: "Mona", email: "1+mona@users.noreply.github.com" };
+    const prepare = (sessionId: string) =>
+      site.command({
+        type: "prepare_sandbox",
+        sessionId,
+        repos: [repo],
+        environmentId: "e1",
+        model: "m",
+        effort: "high",
+        aiLabels: { signature: true, commitTrailer: true },
+        committer,
+      });
+
+    prepare("s1");
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(prepared).toEqual([]); // 还在等 GitHub 令牌
+    site.command({ type: "set_github_token", sessionId: "s1", token: "ghu_user" });
+    await site.until(() => site.events().length === 1);
+    expect(site.events()[0]?.event).toEqual({ type: "sandbox.ready", sessionId: "s1" });
+    expect(prepared[0]).toEqual({
+      sessionId: "s1",
+      githubToken: "ghu_user",
+      workspace: {
+        git,
+        setup: { sessionToken: sessions.get("s1")?.sessionToken, committer, repos: [repo] },
+      },
+    });
+
+    prepare("bad");
+    site.command({ type: "set_github_token", sessionId: "bad", token: "ghu_user" });
+    await site.until(() => site.events().length === 2);
+    expect(site.events()[1]?.event).toMatchObject({
+      type: "sandbox.failed",
+      sessionId: "bad",
+      error: { code: "repo_clone_failed" },
+    });
+    expect(JSON.stringify(site.events()[1])).not.toContain("repository not found");
   });
 
   it("有 Agent 时：开始回合交给它（带上是不是第一个回合），插话、停止也转过去；删除沙箱时先断开它", async () => {

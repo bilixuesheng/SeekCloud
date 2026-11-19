@@ -1,27 +1,40 @@
 # 沙箱里的 Git 配置
 
-宿主机建沙箱时，按下面配好 git 和 `gh`，沙箱里就不需要任何 GitHub 凭据。规则见 ADR 0003。
+宿主机准备沙箱时（`prepare_sandbox`），按下面配好 git 和 `gh`、克隆仓库，沙箱里就不需要任何 GitHub 凭据。规则见 ADR 0003，代码在 `apps/host/src/sandbox/provision.ts`。
+
+1. 代理的 CA 证书写到 `/etc/seekcloud/proxy-ca.crt`，再装进系统的信任列表（`/usr/local/share/ca-certificates/` 再 `update-ca-certificates`）。
+2. 写 `/etc/gitconfig`（下面的"git 配置"）。会话临时令牌每次准备沙箱都换新的，所以每次都重写。
+3. 每个仓库克隆到 `/workspace/<名字>`（名字重了的用 `<owner>-<名字>`），`--depth 50`，从基础分支克隆。已经克隆过的（休眠后唤醒）跳过。
+4. 切到会话分支：远端已经有（沙箱被回收后重建）就接着它，没有就从基础分支新开。
+5. 克隆失败时会话以"克隆仓库失败"结束，git 的原始报错只写进宿主机的日志。
+6. Agent 的工作目录是第一个仓库（主仓库）；没有仓库的会话在 `/workspace`。
+
+仓库名和分支名先检查一遍再交给 git：分支名不能以 `-` 开头（会被当成选项），不能有 git 不认的字符。
+
+出站代理做好之前（#47），沙箱只有 GitHub 的流量经过 Git 代理，别的出站直连：不给整个沙箱设 `HTTPS_PROXY`（Git 代理只放行 GitHub 的域名）。git 用 `/etc/gitconfig` 里 `github.com` 专用的 `http.proxy`，`gh` 用镜像里的包装脚本（`/usr/local/bin/gh`，本目录的 `gh`），只在它自己的进程里设 `HTTPS_PROXY`。
 
 ## 环境变量
 
+Agent（dsh）的进程带着这些，它跑的命令都继承：
+
 | 变量 | 值 | 用途 |
 |---|---|---|
-| `HTTPS_PROXY`、`https_proxy` | `http://session:<会话临时令牌>@<宿主机地址>:<代理端口>` | 所有 HTTPS 出站都经过宿主机；GitHub 的请求由 Git 代理处理 |
-| `GH_TOKEN`、`GITHUB_TOKEN` | `proxy-injected` | 占位符，代理换成用户的令牌。用户在环境里自己设了的，原样传入 |
+| `SEEKCLOUD_GITHUB_PROXY` | `http://session:<会话临时令牌>@<宿主机地址>:<代理端口>` | `gh` 的包装脚本把它设成 `HTTPS_PROXY` |
+| `GH_TOKEN`、`GITHUB_TOKEN` | `proxy-injected` | 占位符，代理换成用户的令牌 |
 | `SEEKCLOUD_SESSION_TOKEN` | 会话临时令牌 | 签名助手用它向宿主机表明身份 |
 | `SEEKCLOUD_SIGN_URL` | `http://<宿主机地址>:<代理端口>/sign` | 签名服务 |
-| `NODE_EXTRA_CA_CERTS`、`GIT_SSL_CAINFO` 等 | 代理 CA 证书的路径 | 让各种工具信任代理解密 GitHub 流量用的证书 |
+| `NODE_EXTRA_CA_CERTS` | `/etc/seekcloud/proxy-ca.crt` | Node 不读系统的信任列表，单独告诉它 |
 | `GIT_CONFIG_COUNT`、`GIT_CONFIG_KEY_0`、`GIT_CONFIG_VALUE_0` | `1`、`core.hooksPath`、`/usr/local/share/seekcloud/git-hooks` | 提交说明加 AI 生成的尾注，见下面"提交说明里的 AI 标识" |
+| `GIT_TERMINAL_PROMPT` | `0` | git 要密码时直接失败，不卡住 |
+| `NO_PROXY`、`no_proxy` | 宿主机地址 | 签名、模型网关直连宿主机 |
 
-代理的 CA 证书还要装进系统的信任列表（`/usr/local/share/ca-certificates/` 再 `update-ca-certificates`）。
-
-## git 配置（`git config --system`）
+## git 配置（`/etc/gitconfig`）
 
 ```ini
 [user]
-	name = SeekCloud
-	email = <SeekCloud 账号的邮箱>
-	signingkey = key::<SeekCloud 签名公钥，一行 ssh-ed25519 …>
+	name = <会话的提交身份：管理员关联的 GitHub 账号的显示名>
+	email = <编号>+<login>@users.noreply.github.com
+	signingkey = key::<宿主机的签名公钥，一行 ssh-ed25519 …>
 [gpg]
 	format = ssh
 [gpg "ssh"]
@@ -36,9 +49,13 @@
 [http]
 	# 第一次请求就带上代理凭据，省一个来回
 	proxyAuthMethod = basic
+[http "https://github.com/"]
+	proxy = http://session:<会话临时令牌>@<宿主机地址>:<代理端口>
 ```
 
-`seekcloud-sign` 是本目录下的脚本，装进通用镜像。克隆仓库时默认 `--depth 50`。
+主站没下发提交身份时（旧版本的主站），用宿主机配置的 `SEEKCLOUD_SIGNER_EMAIL`，名字是 SeekCloud；都没有时不写 `[user]`、不签名。
+
+`seekcloud-sign` 是本目录下的脚本，装进通用镜像。
 
 ## 提交说明里的 AI 标识
 

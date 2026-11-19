@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { AiLabels } from "@seekcloud/protocol";
 import { Docker, DockerError, isNotFound, type Runner, runProgram } from "./docker";
+import { provisionWorkspace, type SandboxGit, type WorkspaceSetup } from "./provision";
+
+/** 准备沙箱时要配好的工作区（sandbox/provision.ts）：宿主机这边的 Git 代理信息，加上这个会话的。 */
+export interface Workspace {
+  git: SandboxGit;
+  setup: WorkspaceSetup;
+}
 
 /** 容器上的标签：守护进程重启以后按它认出自己建的沙箱（#18 的边界情况），不靠进程里记的东西。 */
 export const SANDBOX_LABEL = "cn.seekcloud.sandbox";
@@ -69,7 +76,7 @@ export interface ExecResult {
 /** 守护进程处理主站的命令时用到的沙箱操作（commands.ts）。测试里可以换成假的。 */
 export interface SandboxHost {
   /** 沙箱不在就建，停着就启动；写好 AI 标识的开关。 */
-  prepare(sessionId: string, aiLabels: AiLabels): Promise<void>;
+  prepare(sessionId: string, aiLabels: AiLabels, workspace?: Workspace): Promise<void>;
   /** 沙箱开着时把新的开关写进去；没开着时什么也不做，下次准备沙箱时再写。 */
   setAiLabels(sessionId: string, aiLabels: AiLabels): Promise<void>;
   /** 停掉并删除沙箱和它的文件。沙箱不在时什么也不做。 */
@@ -268,9 +275,10 @@ export class Sandboxes implements SandboxHost {
 
   // ---- SandboxHost ----
 
-  async prepare(sessionId: string, aiLabels: AiLabels): Promise<void> {
+  async prepare(sessionId: string, aiLabels: AiLabels, workspace?: Workspace): Promise<void> {
     await this.ensure(sessionId);
     await this.#writeAiLabels(sessionId, aiLabels);
+    if (workspace) await provisionWorkspace(this, sessionId, workspace.git, workspace.setup);
   }
 
   async setAiLabels(sessionId: string, aiLabels: AiLabels): Promise<void> {

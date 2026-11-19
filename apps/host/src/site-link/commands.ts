@@ -2,12 +2,15 @@ import { randomBytes } from "node:crypto";
 import type { HostCommand, HostEvent } from "@seekcloud/protocol";
 import type { AgentHost } from "../agent/sandbox-agents";
 import type { GitSessions } from "../git-proxy/sessions";
+import { CloneError, type SandboxGit } from "../sandbox/provision";
 import type { SandboxHost } from "../sandbox/sandboxes";
 
 /**
  * 主站发来的命令怎么处理（#91、#18）。仓库、GitHub 令牌、AI 标识的开关登记进 Git 代理的会话表；
  * 有沙箱时（配了沙箱镜像，见 main.ts）准备沙箱就建、启动沙箱，回"沙箱好了"，建不了回"建不了沙箱"并带参考号，
  * 原始报错只写进宿主机的日志（ADR 0007）。没有沙箱时一律回"建不了沙箱"。
+ * 准备沙箱时顺带配好工作区（#27，sandbox/provision.ts）：装代理的 CA、写 git 配置、克隆仓库、切到会话分支；
+ * 克隆失败回"克隆仓库失败"。
  * 回合交给 Agent（#25，沙箱里的 dsh）：开始、插话、停止。没有 Agent 时回合照失败结束。
  * 不认识的命令（主站比宿主机新）记一笔、当作不支持（PROTOCOL_VERSION 的规矩）。
  *
@@ -18,8 +21,12 @@ export function handleCommands(deps: {
   sessions: GitSessions;
   send: (event: HostEvent) => void;
   sandboxes?: SandboxHost;
+  /** 沙箱里的 git 怎么连 Git 代理；不给就不配工作区（只建沙箱）。 */
+  git?: SandboxGit;
   agents?: AgentHost;
   log?: (message: string) => void;
+  /** 克隆之前等 GitHub 令牌下发的最长时间（主站紧跟着准备沙箱发）。 */
+  tokenWaitMs?: number;
 }): (command: HostCommand) => Promise<void> {
   const log = deps.log ?? ((message) => console.log(message));
   const queues = new Map<string, Promise<void>>();
@@ -29,14 +36,14 @@ export function handleCommands(deps: {
     sessionId: string,
     what: string,
     work: () => Promise<void>,
-    onError?: (ref: string) => void,
+    onError?: (ref: string, error: unknown) => void,
   ) => {
     const next = (queues.get(sessionId) ?? Promise.resolve()).then(work).catch((error) => {
       const ref = randomBytes(4).toString("hex");
       log(
         `[${ref}] 会话 ${sessionId} ${what}失败：${error instanceof Error ? error.message : String(error)}`,
       );
-      onError?.(ref);
+      onError?.(ref, error);
     });
     queues.set(sessionId, next);
     void next.then(() => {
@@ -44,14 +51,23 @@ export function handleCommands(deps: {
     });
   };
 
+  /** 克隆要用 GitHub 令牌：等它下发（一般紧跟着就到），等不到也照样克隆，失败了报出来。 */
+  const waitForToken = async (sessionId: string) => {
+    const deadline = Date.now() + (deps.tokenWaitMs ?? 30_000);
+    while (!deps.sessions.get(sessionId)?.githubToken && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  };
+
   return async (command) => {
     switch (command.type) {
       case "prepare_sandbox": {
         const { sessionId, aiLabels } = command;
+        // 会话临时令牌：沙箱用它向 Git 代理表明身份（ADR 0003）。沙箱停止时作废。
+        const sessionToken = randomBytes(32).toString("base64url");
         deps.sessions.register({
           sessionId,
-          // 会话临时令牌：沙箱用它向 Git 代理表明身份（ADR 0003）。沙箱停止时作废。
-          sessionToken: randomBytes(32).toString("base64url"),
+          sessionToken,
           repos: command.repos.map((r) => ({ fullName: r.fullName, access: r.access })),
           aiLabels,
           committer: command.committer,
@@ -65,14 +81,26 @@ export function handleCommands(deps: {
           sessionId,
           "准备沙箱",
           async () => {
-            await sandboxes.prepare(sessionId, aiLabels);
+            const git = deps.git;
+            if (git && command.repos.length > 0) await waitForToken(sessionId);
+            await sandboxes.prepare(
+              sessionId,
+              aiLabels,
+              git && {
+                git,
+                setup: { sessionToken, committer: command.committer, repos: command.repos },
+              },
+            );
             deps.send({ type: "sandbox.ready", sessionId });
           },
-          (ref) =>
+          (ref, error) =>
             deps.send({
               type: "sandbox.failed",
               sessionId,
-              error: { code: "sandbox_unavailable", ref },
+              error: {
+                code: error instanceof CloneError ? "repo_clone_failed" : "sandbox_unavailable",
+                ref,
+              },
             }),
         );
         return;

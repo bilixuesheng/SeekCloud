@@ -113,6 +113,7 @@ RUN bash /usr/local/lib/seekcloud/install-node.sh "${DSH_NODE_MAJOR}" /opt/seekc
 
 # SeekCloud 自己的文件：签名助手、git 钩子、dsh 的基线配置和 Claude Code 技能的插件（apps/host/sandbox/README.md）
 COPY seekcloud-sign /usr/local/bin/seekcloud-sign
+COPY gh /usr/local/bin/gh
 COPY git-hooks/ /usr/local/share/seekcloud/git-hooks/
 COPY dsh/ /usr/local/share/seekcloud/dsh/
 COPY image/seekcloud-init /usr/local/bin/seekcloud-init
