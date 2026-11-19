@@ -34,12 +34,20 @@ export function cleanGitEnv(home: string, extra: Record<string, string> = {}): N
 
 /**
  * 假 GitHub：git 部分是真的 git http-backend（裸仓库放在临时目录里），REST 部分记下收到的请求。
- * 只认一个用户令牌；不对就返回 401，和真的 GitHub 一样。
+ * 只认一个用户令牌（端到端测试里令牌是主站的假 GitHub 发的，传一个判断函数）；不对就返回 401，和真的 GitHub 一样。
  */
-export async function startFakeGitHub(userToken: string) {
+export async function startFakeGitHub(userToken: string | ((token: string) => boolean)) {
   const root = mkdtempSync(join(tmpdir(), "fake-github-"));
   const requests: RecordedRequest[] = [];
-  const expectedGitAuth = `Basic ${Buffer.from(`x-access-token:${userToken}`).toString("base64")}`;
+  const accepts = (authorization: string | undefined) => {
+    const prefix = "Basic ";
+    if (!authorization?.startsWith(prefix)) return false;
+    const [user, token = ""] = Buffer.from(authorization.slice(prefix.length), "base64")
+      .toString()
+      .split(":");
+    if (user !== "x-access-token") return false;
+    return typeof userToken === "string" ? token === userToken : userToken(token);
+  };
 
   const server = http.createServer(async (req, res) => {
     const chunks: Buffer[] = [];
@@ -62,7 +70,7 @@ export async function startFakeGitHub(userToken: string) {
       res.end(JSON.stringify({ ok: true, path }));
       return;
     }
-    if (req.headers.authorization !== expectedGitAuth) {
+    if (!accepts(req.headers.authorization)) {
       res.writeHead(401, { "www-authenticate": 'Basic realm="GitHub"' });
       res.end("bad credentials");
       return;

@@ -24,6 +24,9 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
+      '@seekcloud/site':
+        specifier: workspace:*
+        version: link:../site
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5

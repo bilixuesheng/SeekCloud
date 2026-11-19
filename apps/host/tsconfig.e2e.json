@@ -1,0 +1,10 @@
+{
+  // 端到端测试（src/e2e.sysbox.test.ts）连主站的代码一起检查，类型设置和主站一样
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["node"]
+  },
+  "include": ["src/e2e.sysbox.test.ts"]
+}

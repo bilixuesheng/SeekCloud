@@ -7,6 +7,9 @@ on:
   push:
     paths:
       - "apps/host/**"
+      # 端到端测试（apps/host/src/e2e.sysbox.test.ts）用真的主站
+      - "apps/site/src/server/**"
+      - "apps/site/src/testing/**"
       - "packages/protocol/**"
       - "scripts/test-machine.sh"
       - ".github/workflows/sandbox.yml"
@@ -52,6 +55,17 @@ jobs:
         with:
           node-version-file: .node-version
       - run: pnpm install --frozen-lockfile
+      # 端到端测试里主站要一个 PostgreSQL：起一个只监听本机的容器，跑完删掉
+      - name: 端到端测试用的 PostgreSQL
+        run: |
+          docker rm -f seekcloud-test-pg >/dev/null 2>&1 || true
+          docker run -d --name seekcloud-test-pg -e POSTGRES_PASSWORD=postgres \
+            -p 127.0.0.1:55432:5432 postgres:17-alpine >/dev/null
+          for _ in $(seq 1 60); do
+            docker exec seekcloud-test-pg pg_isready -U postgres -q && exit 0
+            sleep 1
+          done
+          echo "PostgreSQL 没有起来"; docker logs --tail 20 seekcloud-test-pg; exit 1
       - name: 真沙箱的测试
         env:
           SEEKCLOUD_DOCKER_TESTS: "1"
@@ -62,4 +76,8 @@ jobs:
           SEEKCLOUD_TEST_INTERNET: "1"
           # sandbox-image.yml 在测试机上构建的通用镜像：在真的沙箱里跑一个回合（turn.sysbox.test.ts）
           SEEKCLOUD_SANDBOX_TEST_IMAGE: seekcloud-sandbox:ci
-        run: pnpm --filter @seekcloud/host exec vitest run src/sandbox
+          TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:55432/postgres
+        run: pnpm --filter @seekcloud/host exec vitest run src/sandbox src/e2e.sysbox.test.ts
+      - name: 删掉测试用的 PostgreSQL
+        if: always()
+        run: docker rm -f seekcloud-test-pg >/dev/null 2>&1 || true
