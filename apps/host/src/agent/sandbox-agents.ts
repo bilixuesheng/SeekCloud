@@ -101,8 +101,8 @@ export class SandboxAgents implements AgentHost {
           args: [IMAGE.dsh, "--profile", "sdk", "--patch", IMAGE.baseline],
           cwd: IMAGE.cwd,
           env: {
-            // git、gh、签名助手经 Git 代理（sandbox/provision.ts）；dsh 跑的命令都继承这些
-            ...sandboxGitEnv(git, token),
+            // git 的钩子、代理的 CA（sandbox/provision.ts）；dsh 跑的命令都继承这些
+            ...sandboxGitEnv(git),
             DSH_HOME: IMAGE.dshHome,
             DSH_TELEMETRY_MODE: "DISABLED",
             DSH_PERMISSION_MODE: "danger-full-access",

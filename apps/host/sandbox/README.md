@@ -13,20 +13,26 @@
 
 出站代理做好之前（#47），沙箱只有 GitHub 的流量经过 Git 代理，别的出站直连：不给整个沙箱设 `HTTPS_PROXY`（Git 代理只放行 GitHub 的域名）。git 用 `/etc/gitconfig` 里 `github.com` 专用的 `http.proxy`，`gh` 用镜像里的包装脚本（`/usr/local/bin/gh`，本目录的 `gh`），只在它自己的进程里设 `HTTPS_PROXY`。
 
-## 环境变量
+## 环境变量和 `github.env`
 
-Agent（dsh）的进程带着这些，它跑的命令都继承：
+dsh 给它跑的命令去掉名字里带 KEY、PASSWORD、SECRET、TOKEN 的环境变量（dsh-subprocess 的 `SENSITIVE_ENV_PATTERN`，不分大小写）。所以 Agent 的进程只带名字躲得开的这几个，它跑的命令都继承：
 
 | 变量 | 值 | 用途 |
 |---|---|---|
-| `SEEKCLOUD_GITHUB_PROXY` | `http://session:<会话临时令牌>@<宿主机地址>:<代理端口>` | `gh` 的包装脚本把它设成 `HTTPS_PROXY` |
-| `GH_TOKEN`、`GITHUB_TOKEN` | `proxy-injected` | 占位符，代理换成用户的令牌 |
-| `SEEKCLOUD_SESSION_TOKEN` | 会话临时令牌 | 签名助手用它向宿主机表明身份 |
-| `SEEKCLOUD_SIGN_URL` | `http://<宿主机地址>:<代理端口>/sign` | 签名服务 |
+| `GIT_CONFIG_PARAMETERS` | `'core.hooksPath'='/usr/local/share/seekcloud/git-hooks'` | 提交说明加 AI 生成的尾注，见下面"提交说明里的 AI 标识"。和 `git -c` 同一级，盖过仓库自己的配置。不用 `GIT_CONFIG_KEY_0`：名字里有 KEY |
 | `NODE_EXTRA_CA_CERTS` | `/etc/seekcloud/proxy-ca.crt` | Node 不读系统的信任列表，单独告诉它 |
-| `GIT_CONFIG_COUNT`、`GIT_CONFIG_KEY_0`、`GIT_CONFIG_VALUE_0` | `1`、`core.hooksPath`、`/usr/local/share/seekcloud/git-hooks` | 提交说明加 AI 生成的尾注，见下面"提交说明里的 AI 标识" |
 | `GIT_TERMINAL_PROMPT` | `0` | git 要密码时直接失败，不卡住 |
 | `NO_PROXY`、`no_proxy` | 宿主机地址 | 签名、模型网关直连宿主机 |
+
+带着会话临时令牌的值写在 `/etc/seekcloud/github.env`（只有 root 能读），签名助手和 `gh` 的包装脚本 source 它：
+
+| 变量 | 值 | 用途 |
+|---|---|---|
+| `SEEKCLOUD_SESSION_TOKEN` | 会话临时令牌 | 签名助手用它向宿主机表明身份 |
+| `SEEKCLOUD_SIGN_URL` | `http://<宿主机地址>:<代理端口>/sign` | 签名服务 |
+| `SEEKCLOUD_GITHUB_PROXY` | `http://session:<会话临时令牌>@<宿主机地址>:<代理端口>` | `gh` 的包装脚本把它设成 `HTTPS_PROXY`，`GH_TOKEN` 没设时设成占位符 `proxy-injected`，代理换成用户的令牌 |
+
+环境变量里已经有这几个时（测试里），以环境变量为准。
 
 ## git 配置（`/etc/gitconfig`）
 
@@ -72,7 +78,7 @@ Generated-by: SeekCloud (AI)
 - 关着时不加，也不去掉说明里已有的尾注（压缩提交时各自的尾注原样留着）。
 
 - 本目录的 `git-hooks/` 整个装进通用镜像的 `/usr/local/share/seekcloud/git-hooks`，保留里面的符号链接（每个钩子都链接到 `_dispatch`）。
-- `core.hooksPath` 用上面的环境变量设，不写进 `git config --system`：环境变量里的配置盖过仓库自己的，用 husky 这类工具设了 `core.hooksPath` 的仓库也跑我们的钩子。`_dispatch` 先跑仓库原本会跑的同名钩子（`.git/hooks` 或仓库设的 `core.hooksPath`），所以仓库的检查照常生效。
+- `core.hooksPath` 用上面的 `GIT_CONFIG_PARAMETERS` 设，不写进 `git config --system`：它和 `git -c` 同一级，盖过仓库自己的配置，用 husky 这类工具设了 `core.hooksPath` 的仓库也跑我们的钩子。`_dispatch` 先跑仓库原本会跑的同名钩子（`.git/hooks` 或仓库设的 `core.hooksPath`），所以仓库的检查照常生效。
 - `prepare-commit-msg` 和 `commit-msg` 都加一次：`--no-verify` 会跳过 `commit-msg`，仓库的 `commit-msg` 又可能改写说明。合并、拣选、撤销、`rebase -i` 压缩出来的提交也带上；压缩时说明中间各自的尾注会去掉，只在末尾留一行。
 - 拣选别人的提交时也加：提交者是 SeekCloud 账号，宁可多标。
 - `git commit-tree` 这类底层命令不经过钩子，不会加。

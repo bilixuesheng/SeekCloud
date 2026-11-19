@@ -35,6 +35,9 @@ export class CloneError extends Error {}
 
 export const WORKSPACE = "/workspace";
 export const CA_PATH = "/etc/seekcloud/proxy-ca.crt";
+/** 签名助手和 gh 的包装脚本从这里读会话临时令牌、签名服务和代理的地址（只有 root 能读）。 */
+export const GITHUB_ENV_PATH = "/etc/seekcloud/github.env";
+export const HOOKS_DIR = "/usr/local/share/seekcloud/git-hooks";
 
 const REPO_NAME = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
@@ -105,20 +108,30 @@ export function gitConfig(git: SandboxGit, setup: WorkspaceSetup): string {
   return lines.join("\n");
 }
 
-/** 沙箱里跑 git、gh、签名助手时要的环境变量（准备工作区、Agent 的进程都用）。 */
-export function sandboxGitEnv(git: SandboxGit, sessionToken: string): Record<string, string> {
+/** /etc/seekcloud/github.env 的全文：签名助手和 gh 的包装脚本 source 它（sandbox/seekcloud-sign、sandbox/gh）。 */
+export function githubEnvFile(git: SandboxGit, sessionToken: string): string {
+  const line = (name: string, value: string) => `${name}='${value.replace(/'/g, "'\\''")}'`;
+  return `${[
+    line("SEEKCLOUD_SESSION_TOKEN", sessionToken),
+    line("SEEKCLOUD_SIGN_URL", `http://${git.proxy.host}:${git.proxy.port}/sign`),
+    line("SEEKCLOUD_GITHUB_PROXY", proxyUrl(git, sessionToken)),
+  ].join("\n")}\n`;
+}
+
+/**
+ * dsh 给它跑的命令去掉名字里带 KEY、PASSWORD、SECRET、TOKEN 的环境变量（dsh-subprocess 的
+ * SENSITIVE_ENV_PATTERN），所以会话临时令牌这类值不放环境变量，放 /etc/seekcloud/github.env；
+ * 这里的名字都不能带这几个词（provision.test.ts 守着）。
+ */
+export const DSH_SCRUBBED_ENV = /KEY|PASSWORD|SECRET|TOKEN/i;
+
+/** 沙箱里的进程要的环境变量（准备工作区、Agent 的进程都用）。 */
+export function sandboxGitEnv(git: SandboxGit): Record<string, string> {
   return {
-    SEEKCLOUD_SESSION_TOKEN: sessionToken,
-    SEEKCLOUD_SIGN_URL: `http://${git.proxy.host}:${git.proxy.port}/sign`,
-    // gh 只在调 GitHub 时走 Git 代理（镜像里的 gh 包装脚本读它）；令牌是占位符，代理换成用户的
-    SEEKCLOUD_GITHUB_PROXY: proxyUrl(git, sessionToken),
-    GH_TOKEN: "proxy-injected",
-    GITHUB_TOKEN: "proxy-injected",
     NODE_EXTRA_CA_CERTS: CA_PATH,
-    // 提交说明里的 AI 标识：用环境变量设 hooksPath，盖过仓库自己的（apps/host/sandbox/README.md）
-    GIT_CONFIG_COUNT: "1",
-    GIT_CONFIG_KEY_0: "core.hooksPath",
-    GIT_CONFIG_VALUE_0: "/usr/local/share/seekcloud/git-hooks",
+    // 提交说明里的 AI 标识：hooksPath 用命令行一级的配置设，盖过仓库自己的（apps/host/sandbox/README.md）。
+    // 不用 GIT_CONFIG_KEY_0：名字里有 KEY，dsh 不传给它跑的命令。
+    GIT_CONFIG_PARAMETERS: `'core.hooksPath'='${HOOKS_DIR}'`,
     GIT_TERMINAL_PROMPT: "0",
     // 宿主机本地的服务（模型网关的转发、签名）直连，不经过任何代理
     NO_PROXY: git.proxy.host,
@@ -161,8 +174,11 @@ export async function provisionWorkspace(
     },
   );
   await sandboxes.writeFile(sessionId, "/etc/gitconfig", gitConfig(git, setup));
+  await sandboxes.writeFile(sessionId, GITHUB_ENV_PATH, githubEnvFile(git, setup.sessionToken), {
+    mode: "600",
+  });
 
-  const env = sandboxGitEnv(git, setup.sessionToken);
+  const env = sandboxGitEnv(git);
   const dirs = workspaceDirs(setup.repos);
   const run = async (argv: string[], what: string, cwd?: string) => {
     const result = await sandboxes.exec(sessionId, argv, {

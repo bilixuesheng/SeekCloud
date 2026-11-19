@@ -1,12 +1,12 @@
 #!/bin/sh
-# 沙箱里所有 git 钩子的入口（见 ../README.md）。core.hooksPath 用环境变量指到这个目录，盖过仓库自己的设置，
+# 沙箱里所有 git 钩子的入口（见 ../README.md）。core.hooksPath 用环境变量 GIT_CONFIG_PARAMETERS 指到这个目录，盖过仓库自己的设置，
 # 所以每个钩子都先接着跑仓库原本会跑的同名钩子（.git/hooks，或仓库设的 core.hooksPath，比如 husky）。
 set -eu
 
 name=$(basename "$0")
 here=$(cd "$(dirname "$0")" && pwd)
 # 去掉环境变量里的配置，读到的就是仓库原本的 core.hooksPath
-own=$(GIT_CONFIG_COUNT=0 git config --get core.hooksPath 2>/dev/null || true)
+own=$(env -u GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT=0 git config --get core.hooksPath 2>/dev/null || true)
 # git init、clone 建仓库的过程中也会调 reference-transaction，那时 rev-parse 还认不出仓库，仓库自己也还没有钩子
 if [ -z "$own" ] && common=$(git rev-parse --git-common-dir 2>/dev/null); then own="$common/hooks"; fi
 if [ -n "$own" ] && [ "$(cd "$own" 2>/dev/null && pwd)" != "$here" ] && [ -x "$own/$name" ]; then

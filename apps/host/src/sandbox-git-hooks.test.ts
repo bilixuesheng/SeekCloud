@@ -14,9 +14,8 @@ function sandboxRepo() {
   // 宿主机写"提交尾注"开关的那个文件。放在仓库外面，一开始不存在（按开着处理）。
   const switchFile = join(mkdtempSync(join(tmpdir(), "hooks-switch-")), "commit-trailer");
   const env = cleanGitEnv(dir, {
-    GIT_CONFIG_COUNT: "1",
-    GIT_CONFIG_KEY_0: "core.hooksPath",
-    GIT_CONFIG_VALUE_0: HOOKS,
+    // 和沙箱里一样（sandbox/provision.ts 的 sandboxGitEnv）
+    GIT_CONFIG_PARAMETERS: `'core.hooksPath'='${HOOKS}'`,
     GIT_EDITOR: "true",
     SEEKCLOUD_COMMIT_TRAILER_FILE: switchFile,
   });

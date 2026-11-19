@@ -227,10 +227,22 @@ export class Sandboxes implements SandboxHost {
   }
 
   /** 在沙箱里写一个文件（目录不在就建）。内容从标准输入进去，路径是一个单独的参数。 */
-  async writeFile(sessionId: string, path: string, content: string): Promise<void> {
+  /** 写沙箱里的文件（root 的）。mode 给了就是新建时只有 root 能读写、写完再改成它（八进制，比如 "600"）。 */
+  async writeFile(
+    sessionId: string,
+    path: string,
+    content: string,
+    options: { mode?: string } = {},
+  ): Promise<void> {
+    if (options.mode !== undefined && !/^[0-7]{3,4}$/.test(options.mode)) {
+      throw new Error(`文件权限不对：${options.mode}`);
+    }
+    const script = options.mode
+      ? 'mkdir -p "$(dirname "$1")" && (umask 077 && cat > "$1") && chmod "$2" "$1"'
+      : 'mkdir -p "$(dirname "$1")" && cat > "$1"';
     const result = await this.exec(
       sessionId,
-      ["sh", "-c", 'mkdir -p "$(dirname "$1")" && cat > "$1"', "sh", path],
+      ["sh", "-c", script, "sh", path, ...(options.mode ? [options.mode] : [])],
       { input: content, user: "0", timeoutMs: 30_000 },
     );
     if (result.exitCode !== 0) {

@@ -6,6 +6,10 @@ set -eu
 
 if [ "${1:-}" = "-Y" ] && [ "${2:-}" = "sign" ]; then
   shift 2
+  # 会话临时令牌和签名服务的地址：宿主机准备沙箱时写在这个文件里（dsh 不把名字带 TOKEN 的环境变量传给命令）
+  if [ -z "${SEEKCLOUD_SESSION_TOKEN:-}" ] && [ -r /etc/seekcloud/github.env ]; then
+    . /etc/seekcloud/github.env
+  fi
   namespace=git
   file=
   while [ $# -gt 0 ]; do

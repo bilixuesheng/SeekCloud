@@ -1,7 +1,10 @@
+import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import {
   CloneError,
+  DSH_SCRUBBED_ENV,
   gitConfig,
+  githubEnvFile,
   isSafeBranch,
   provisionWorkspace,
   type SandboxGit,
@@ -111,17 +114,35 @@ describe("沙箱的工作区", () => {
     ).toThrow();
   });
 
-  it("环境变量：签名、gh 走代理、钩子、宿主机本地的服务不走代理", () => {
-    const env = sandboxGitEnv(git, "tok");
+  it("环境变量：钩子、CA、宿主机本地的服务不走代理；名字都躲开 dsh 的过滤", () => {
+    const env = sandboxGitEnv(git);
     expect(env).toMatchObject({
-      SEEKCLOUD_SESSION_TOKEN: "tok",
-      SEEKCLOUD_SIGN_URL: "http://10.88.0.1:8080/sign",
-      SEEKCLOUD_GITHUB_PROXY: "http://session:tok@10.88.0.1:8080",
-      GH_TOKEN: "proxy-injected",
-      GIT_CONFIG_KEY_0: "core.hooksPath",
+      GIT_CONFIG_PARAMETERS: "'core.hooksPath'='/usr/local/share/seekcloud/git-hooks'",
+      NODE_EXTRA_CA_CERTS: "/etc/seekcloud/proxy-ca.crt",
       NO_PROXY: "10.88.0.1",
     });
     expect(env.HTTPS_PROXY).toBeUndefined();
+    // dsh 不把名字带 KEY、TOKEN 这类词的环境变量传给它跑的命令
+    for (const name of Object.keys(env)) expect(name).not.toMatch(DSH_SCRUBBED_ENV);
+    // 会话临时令牌也不在环境变量里
+    expect(JSON.stringify(env)).not.toContain("tok");
+  });
+
+  it("github.env：签名助手和 gh 的包装脚本 source 它，拿到令牌、签名服务和代理的地址", () => {
+    const file = githubEnvFile(git, "it's-a-token");
+    const out = execFileSync(
+      "sh",
+      [
+        "-c",
+        'eval "$(cat)"; printf "%s\\n" "$SEEKCLOUD_SESSION_TOKEN" "$SEEKCLOUD_SIGN_URL" "$SEEKCLOUD_GITHUB_PROXY"',
+      ],
+      { input: file, encoding: "utf8" },
+    );
+    expect(out.split("\n").slice(0, 3)).toEqual([
+      "it's-a-token",
+      "http://10.88.0.1:8080/sign",
+      "http://session:it's-a-token@10.88.0.1:8080",
+    ]);
   });
 
   it("装 CA、写配置、克隆、切到会话分支：远端有会话分支就接着它，没有就新开", async () => {
@@ -141,6 +162,7 @@ describe("沙箱的工作区", () => {
     expect(files.get("/etc/seekcloud/proxy-ca.crt")).toBe(git.caPem);
     expect(files.get("/usr/local/share/ca-certificates/seekcloud-proxy.crt")).toBe(git.caPem);
     expect(files.get("/etc/gitconfig")).toContain('\temail = "bot@example.com"');
+    expect(files.get("/etc/seekcloud/github.env")).toContain("SEEKCLOUD_SESSION_TOKEN='tok'");
     const gits = runs.filter((r) => r.argv[0] === "git");
     expect(gits.map((r) => [r.argv.slice(1).join(" "), r.cwd])).toEqual([
       [
@@ -156,7 +178,7 @@ describe("沙箱的工作区", () => {
       ["fetch --depth 50 origin refs/heads/seekcloud/abc123", "/workspace/lib"],
       ["checkout -b seekcloud/abc123", "/workspace/lib"],
     ]);
-    expect(gits[0]?.env?.SEEKCLOUD_SESSION_TOKEN).toBe("tok");
+    expect(gits[0]?.env?.GIT_CONFIG_PARAMETERS).toContain("core.hooksPath");
   });
 
   it("已经克隆过的（休眠后唤醒）不再克隆；克隆失败、名字不对时报克隆失败", async () => {
