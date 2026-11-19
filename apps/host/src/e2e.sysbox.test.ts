@@ -6,7 +6,13 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RepoDiff, SessionEvent } from "@seekcloud/protocol";
-import { createTestApp, type TestApp, type TestBrowser } from "@seekcloud/site/testing";
+import {
+  createTemplateDatabase,
+  createTestApp,
+  dropTemplateDatabase,
+  type TestApp,
+  type TestBrowser,
+} from "@seekcloud/site/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { SandboxAgents } from "./agent/sandbox-agents";
 import { GitSessions } from "./git-proxy/sessions";
@@ -70,7 +76,9 @@ describe.skipIf(!enabled)("端到端：真的主站、宿主机、沙箱和 dsh"
     await docker.ensureImage(HELPER);
     dir = await mkdtemp(join(tmpdir(), "seekcloud-e2e-"));
 
-    // 主站：真的 HTTP 服务和宿主机连接；模型请求发到按脚本回复的假模型
+    // 主站：真的 HTTP 服务和宿主机连接；模型请求发到按脚本回复的假模型。
+    // 测试库从迁移好的模板库复制（主站自己的测试由 vitest 的全局准备建模板库，这里自己建）
+    await createTemplateDatabase();
     const modelUrl = await model.start();
     t = await createTestApp({
       hosts: true,
@@ -173,6 +181,7 @@ describe.skipIf(!enabled)("端到端：真的主站、宿主机、沙箱和 dsh"
     await github?.close();
     await model.close();
     await t?.close();
+    await dropTemplateDatabase();
     if (dir) await rm(dir, { recursive: true, force: true });
   }, 300_000);
 
