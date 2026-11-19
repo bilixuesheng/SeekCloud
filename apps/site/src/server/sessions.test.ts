@@ -1,5 +1,5 @@
 import type { SessionEvent } from "@seekcloud/protocol";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { StreamedEvent } from "../testing/event-stream";
 import { createTestApp, type TestApp } from "../testing/test-app";
 import type { TestBrowser } from "../testing/test-browser";
@@ -121,6 +121,21 @@ describe("发起会话，宿主机按脚本跑完一个回合", () => {
       text: "修个 bug",
       // 这个会话还没有回合到过 Agent
       firstTurn: true,
+    });
+    // Git 代理要的 GitHub 令牌：准备沙箱之后、开始回合之后各下发一份（ADR 0003）
+    await vi.waitFor(() => {
+      const kinds = t.host.commands
+        .filter((c) => "sessionId" in c && c.sessionId === prepare.sessionId)
+        .map((c) => c.type);
+      expect(kinds.indexOf("set_github_token")).toBeGreaterThan(kinds.indexOf("prepare_sandbox"));
+      expect(kinds.filter((k) => k === "set_github_token").length).toBeGreaterThanOrEqual(2);
+    });
+    const token = t.host.commands.find(
+      (c) => c.type === "set_github_token" && c.sessionId === prepare.sessionId,
+    );
+    expect(token).toMatchObject({
+      sessionId: prepare.sessionId,
+      token: expect.stringMatching(/.+/),
     });
   });
 

@@ -48,6 +48,8 @@ export function apply(ctx, config = {}) {
       try {
         for (const [dir, before] of seen) {
           const now = await signature(dir);
+          // 停掉以后（dsh 撤下这个提供方）还在跑的那一轮不再报
+          if (control.signal.aborted) return;
           if (now !== before) {
             seen.set(dir, now);
             control.invalidate();
