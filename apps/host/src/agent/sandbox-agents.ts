@@ -1,5 +1,6 @@
 import type { HostEvent } from "@seekcloud/protocol";
 import type { GitSessions } from "../git-proxy/sessions";
+import { type SandboxGit, sandboxGitEnv, WORKSPACE, workspaceDirs } from "../sandbox/provision";
 import type { Sandboxes } from "../sandbox/sandboxes";
 import { DshAgent, type TurnInput } from "./dsh-agent";
 
@@ -22,7 +23,6 @@ const IMAGE = {
   dshHome: "/root/.seekcloud/dsh",
   /** dsh 的启动目录：不放在仓库里。 */
   cwd: "/root",
-  workspace: "/workspace",
 };
 
 /**
@@ -37,8 +37,8 @@ export class SandboxAgents implements AgentHost {
     readonly deps: {
       sandboxes: Sandboxes;
       sessions: GitSessions;
-      /** 沙箱连宿主机服务的地址（网桥上的 Git 代理）。 */
-      gateway: { host: string; port: number };
+      /** 沙箱连宿主机服务的地址（网桥上的 Git 代理，模型网关也在这个端口）、代理的 CA、签名公钥。 */
+      git: SandboxGit;
       emit: (event: HostEvent) => void;
       log?: (message: string) => void;
     },
@@ -82,7 +82,7 @@ export class SandboxAgents implements AgentHost {
   #agent(sessionId: string): DshAgent {
     const existing = this.#agents.get(sessionId);
     if (existing) return existing;
-    const { sandboxes, sessions, gateway } = this.deps;
+    const { sandboxes, sessions, git } = this.deps;
     const agent = new DshAgent({
       sessionId,
       bridge: () => [
@@ -94,19 +94,25 @@ export class SandboxAgents implements AgentHost {
         IMAGE.runner,
         "connect",
       ],
-      launch: () => ({
-        args: [IMAGE.dsh, "--profile", "sdk", "--patch", IMAGE.baseline],
-        cwd: IMAGE.cwd,
-        env: {
-          DSH_HOME: IMAGE.dshHome,
-          DSH_TELEMETRY_MODE: "DISABLED",
-          DSH_PERMISSION_MODE: "danger-full-access",
-          DEEPSEEK_BASE_URL: `http://${gateway.host}:${gateway.port}`,
-          DEEPSEEK_API_KEY: sessions.get(sessionId)?.sessionToken ?? "",
-        },
-        // 克隆仓库以后指到主仓库（克隆在另一张工单里做）
-        workingDirectory: IMAGE.workspace,
-      }),
+      launch: () => {
+        const session = sessions.get(sessionId);
+        const token = session?.sessionToken ?? "";
+        return {
+          args: [IMAGE.dsh, "--profile", "sdk", "--patch", IMAGE.baseline],
+          cwd: IMAGE.cwd,
+          env: {
+            // git 的钩子、代理的 CA（sandbox/provision.ts）；dsh 跑的命令都继承这些
+            ...sandboxGitEnv(git),
+            DSH_HOME: IMAGE.dshHome,
+            DSH_TELEMETRY_MODE: "DISABLED",
+            DSH_PERMISSION_MODE: "danger-full-access",
+            DEEPSEEK_BASE_URL: `http://${git.proxy.host}:${git.proxy.port}`,
+            DEEPSEEK_API_KEY: token,
+          },
+          // 主仓库（第一个仓库）；没有仓库的会话在 /workspace
+          workingDirectory: workspaceDirs(session?.repos ?? [])[0] ?? WORKSPACE,
+        };
+      },
       protect: (pid) => sandboxes.protect(sessionId, pid),
       emit: this.deps.emit,
       log: this.deps.log,

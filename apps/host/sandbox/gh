@@ -1,0 +1,19 @@
+#!/bin/sh
+# 沙箱里的 gh（装在 /usr/local/bin，排在 /usr/bin/gh 前面，见 README.md）。
+# gh 只在调 GitHub 时经过宿主机的 Git 代理：代理把占位的 GH_TOKEN 换成用户的令牌。
+# 别的出站在出站代理做好之前直连（#47），所以不给整个沙箱设 HTTPS_PROXY。
+# 代理的地址带着会话临时令牌，宿主机准备沙箱时写在 /etc/seekcloud/github.env 里
+# （dsh 不把名字带 TOKEN 的环境变量传给命令，所以不放环境变量）。
+if [ -z "${SEEKCLOUD_GITHUB_PROXY:-}" ] && [ -r /etc/seekcloud/github.env ]; then
+  . /etc/seekcloud/github.env
+fi
+if [ -n "${SEEKCLOUD_GITHUB_PROXY:-}" ]; then
+  HTTPS_PROXY=$SEEKCLOUD_GITHUB_PROXY
+  https_proxy=$SEEKCLOUD_GITHUB_PROXY
+  export HTTPS_PROXY https_proxy
+  # 占位符：管理员没在环境里设自己的令牌时，gh 也当作已登录，由代理换成用户的令牌
+  GH_TOKEN=${GH_TOKEN:-proxy-injected}
+  export GH_TOKEN
+fi
+unset SEEKCLOUD_SESSION_TOKEN SEEKCLOUD_SIGN_URL SEEKCLOUD_GITHUB_PROXY
+exec /usr/bin/gh "$@"

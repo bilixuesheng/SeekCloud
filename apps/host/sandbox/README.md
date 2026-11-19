@@ -1,27 +1,46 @@
 # 沙箱里的 Git 配置
 
-宿主机建沙箱时，按下面配好 git 和 `gh`，沙箱里就不需要任何 GitHub 凭据。规则见 ADR 0003。
+宿主机准备沙箱时（`prepare_sandbox`），按下面配好 git 和 `gh`、克隆仓库，沙箱里就不需要任何 GitHub 凭据。规则见 ADR 0003，代码在 `apps/host/src/sandbox/provision.ts`。
 
-## 环境变量
+1. 代理的 CA 证书写到 `/etc/seekcloud/proxy-ca.crt`，再装进系统的信任列表（`/usr/local/share/ca-certificates/` 再 `update-ca-certificates`）。
+2. 写 `/etc/gitconfig`（下面的"git 配置"）。会话临时令牌每次准备沙箱都换新的，所以每次都重写。
+3. 每个仓库克隆到 `/workspace/<名字>`（名字重了的用 `<owner>-<名字>`），`--depth 50`，从基础分支克隆。已经克隆过的（休眠后唤醒）跳过。
+4. 切到会话分支：远端已经有（沙箱被回收后重建）就接着它，没有就从基础分支新开。
+5. 克隆失败时会话以"克隆仓库失败"结束，git 的原始报错只写进宿主机的日志。
+6. Agent 的工作目录是第一个仓库（主仓库）；没有仓库的会话在 `/workspace`。
+
+仓库名和分支名先检查一遍再交给 git：分支名不能以 `-` 开头（会被当成选项），不能有 git 不认的字符。
+
+出站代理做好之前（#47），沙箱只有 GitHub 的流量经过 Git 代理，别的出站直连：不给整个沙箱设 `HTTPS_PROXY`（Git 代理只放行 GitHub 的域名）。git 用 `/etc/gitconfig` 里 `github.com` 专用的 `http.proxy`，`gh` 用镜像里的包装脚本（`/usr/local/bin/gh`，本目录的 `gh`），只在它自己的进程里设 `HTTPS_PROXY`。
+
+## 环境变量和 `github.env`
+
+dsh 给它跑的命令去掉名字里带 KEY、PASSWORD、SECRET、TOKEN 的环境变量（dsh-subprocess 的 `SENSITIVE_ENV_PATTERN`，不分大小写）。所以 Agent 的进程只带名字躲得开的这几个，它跑的命令都继承：
 
 | 变量 | 值 | 用途 |
 |---|---|---|
-| `HTTPS_PROXY`、`https_proxy` | `http://session:<会话临时令牌>@<宿主机地址>:<代理端口>` | 所有 HTTPS 出站都经过宿主机；GitHub 的请求由 Git 代理处理 |
-| `GH_TOKEN`、`GITHUB_TOKEN` | `proxy-injected` | 占位符，代理换成用户的令牌。用户在环境里自己设了的，原样传入 |
+| `GIT_CONFIG_PARAMETERS` | `'core.hooksPath'='/usr/local/share/seekcloud/git-hooks'` | 提交说明加 AI 生成的尾注，见下面"提交说明里的 AI 标识"。和 `git -c` 同一级，盖过仓库自己的配置。不用 `GIT_CONFIG_KEY_0`：名字里有 KEY |
+| `NODE_EXTRA_CA_CERTS` | `/etc/seekcloud/proxy-ca.crt` | Node 不读系统的信任列表，单独告诉它 |
+| `GIT_TERMINAL_PROMPT` | `0` | git 要密码时直接失败，不卡住 |
+| `NO_PROXY`、`no_proxy` | 宿主机地址 | 签名、模型网关直连宿主机 |
+
+带着会话临时令牌的值写在 `/etc/seekcloud/github.env`（只有 root 能读），签名助手和 `gh` 的包装脚本 source 它：
+
+| 变量 | 值 | 用途 |
+|---|---|---|
 | `SEEKCLOUD_SESSION_TOKEN` | 会话临时令牌 | 签名助手用它向宿主机表明身份 |
 | `SEEKCLOUD_SIGN_URL` | `http://<宿主机地址>:<代理端口>/sign` | 签名服务 |
-| `NODE_EXTRA_CA_CERTS`、`GIT_SSL_CAINFO` 等 | 代理 CA 证书的路径 | 让各种工具信任代理解密 GitHub 流量用的证书 |
-| `GIT_CONFIG_COUNT`、`GIT_CONFIG_KEY_0`、`GIT_CONFIG_VALUE_0` | `1`、`core.hooksPath`、`/usr/local/share/seekcloud/git-hooks` | 提交说明加 AI 生成的尾注，见下面"提交说明里的 AI 标识" |
+| `SEEKCLOUD_GITHUB_PROXY` | `http://session:<会话临时令牌>@<宿主机地址>:<代理端口>` | `gh` 的包装脚本把它设成 `HTTPS_PROXY`，`GH_TOKEN` 没设时设成占位符 `proxy-injected`，代理换成用户的令牌 |
 
-代理的 CA 证书还要装进系统的信任列表（`/usr/local/share/ca-certificates/` 再 `update-ca-certificates`）。
+环境变量里已经有这几个时（测试里），以环境变量为准。
 
-## git 配置（`git config --system`）
+## git 配置（`/etc/gitconfig`）
 
 ```ini
 [user]
-	name = SeekCloud
-	email = <SeekCloud 账号的邮箱>
-	signingkey = key::<SeekCloud 签名公钥，一行 ssh-ed25519 …>
+	name = <会话的提交身份：管理员关联的 GitHub 账号的显示名>
+	email = <编号>+<login>@users.noreply.github.com
+	signingkey = key::<宿主机的签名公钥，一行 ssh-ed25519 …>
 [gpg]
 	format = ssh
 [gpg "ssh"]
@@ -36,9 +55,13 @@
 [http]
 	# 第一次请求就带上代理凭据，省一个来回
 	proxyAuthMethod = basic
+[http "https://github.com/"]
+	proxy = http://session:<会话临时令牌>@<宿主机地址>:<代理端口>
 ```
 
-`seekcloud-sign` 是本目录下的脚本，装进通用镜像。克隆仓库时默认 `--depth 50`。
+主站没下发提交身份时（旧版本的主站），用宿主机配置的 `SEEKCLOUD_SIGNER_EMAIL`，名字是 SeekCloud；都没有时不写 `[user]`、不签名。
+
+`seekcloud-sign` 是本目录下的脚本，装进通用镜像。
 
 ## 提交说明里的 AI 标识
 
@@ -55,7 +78,7 @@ Generated-by: SeekCloud (AI)
 - 关着时不加，也不去掉说明里已有的尾注（压缩提交时各自的尾注原样留着）。
 
 - 本目录的 `git-hooks/` 整个装进通用镜像的 `/usr/local/share/seekcloud/git-hooks`，保留里面的符号链接（每个钩子都链接到 `_dispatch`）。
-- `core.hooksPath` 用上面的环境变量设，不写进 `git config --system`：环境变量里的配置盖过仓库自己的，用 husky 这类工具设了 `core.hooksPath` 的仓库也跑我们的钩子。`_dispatch` 先跑仓库原本会跑的同名钩子（`.git/hooks` 或仓库设的 `core.hooksPath`），所以仓库的检查照常生效。
+- `core.hooksPath` 用上面的 `GIT_CONFIG_PARAMETERS` 设，不写进 `git config --system`：它和 `git -c` 同一级，盖过仓库自己的配置，用 husky 这类工具设了 `core.hooksPath` 的仓库也跑我们的钩子。`_dispatch` 先跑仓库原本会跑的同名钩子（`.git/hooks` 或仓库设的 `core.hooksPath`），所以仓库的检查照常生效。
 - `prepare-commit-msg` 和 `commit-msg` 都加一次：`--no-verify` 会跳过 `commit-msg`，仓库的 `commit-msg` 又可能改写说明。合并、拣选、撤销、`rebase -i` 压缩出来的提交也带上；压缩时说明中间各自的尾注会去掉，只在末尾留一行。
 - 拣选别人的提交时也加：提交者是 SeekCloud 账号，宁可多标。
 - `git commit-tree` 这类底层命令不经过钩子，不会加。

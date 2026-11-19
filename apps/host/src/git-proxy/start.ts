@@ -17,6 +17,8 @@ export interface GitProxyConfig {
   /** 只监听沙箱网桥上的地址，不对外。 */
   host: string;
   port: number;
+  /** 只给测试用：把 github.com、api.github.com 换成假 GitHub 的地址。 */
+  upstreams?: Partial<Record<string, string>>;
 }
 
 /**
@@ -27,14 +29,19 @@ export function startGitProxy(
   config: GitProxyConfig,
   sessions: GitSessions = new GitSessions(),
   modelGateway?: ModelGatewayLink,
-): { sessions: GitSessions; server: Server } {
+): { sessions: GitSessions; server: Server; caPem: string; signingPublicKey: string } {
+  const ca = new ProxyCa(join(config.dataDir, "proxy-ca"));
+  const signingKey = loadSigningKey(readFileSync(config.signingKeyPath, "utf8"), "seekcloud");
   const server = createGitProxy({
     sessions,
     modelGateway,
-    ca: new ProxyCa(join(config.dataDir, "proxy-ca")),
-    signingKey: loadSigningKey(readFileSync(config.signingKeyPath, "utf8"), "seekcloud"),
+    ca,
+    signingKey,
+    upstreams: config.upstreams,
     signerEmail: config.signerEmail,
   });
   server.listen(config.port, config.host);
-  return { sessions, server };
+  // 沙箱要的：信任代理的 CA，git 配置里写签名公钥（sandbox/provision.ts）
+  const signingPublicKey = signingKey.publicLine.split(" ").slice(0, 2).join(" ");
+  return { sessions, server, caPem: ca.certPem, signingPublicKey };
 }

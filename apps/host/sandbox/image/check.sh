@@ -35,7 +35,7 @@ printf 'public class Main { public static void main(String[] a) { System.out.pri
 check "Java 编译运行" sh -c 'javac Main.java && java Main | grep -q "java ok"'
 check "Maven" mvn --version
 check "git、Git LFS" sh -c 'git --version && git lfs version'
-check "gh" gh --version
+check "gh（经 Git 代理的包装）" sh -c '[ "$(command -v gh)" = /usr/local/bin/gh ] && gh --version'
 check "常用命令行工具" sh -c 'for c in curl wget jq rg fd tree file unzip zip xz zstd rsync sqlite3 make cmake gcc g++ nc dig ssh less; do command -v "$c" >/dev/null || { echo "没有 $c"; exit 1; }; done'
 
 echo "== 沙箱里的 Docker"
