@@ -28,6 +28,8 @@ export interface DshAgentOptions {
   log?: (message: string) => void;
   /** 等 dsh 回一个请求最多等多久。 */
   requestTimeoutMs?: number;
+  /** 开始回合时等运行器打招呼最多等多久（默认 30 秒）。 */
+  connectTimeoutMs?: number;
 }
 
 export interface TurnInput {
@@ -102,7 +104,7 @@ export class DshAgent {
   async startTurn(input: TurnInput): Promise<void> {
     this.#mapper.beginTurn(input.turnId);
     try {
-      await this.#welcomed;
+      await this.#untilWelcomed();
       await this.#ensureDsh(input);
       await this.#request("session/prompt", {
         sessionId: this.#options.sessionId,
@@ -141,6 +143,24 @@ export class DshAgent {
   }
 
   // ---- 内部 ----
+
+  /** 等运行器打完招呼。运行器没了（沙箱里的进程被杀、连不上）时不一直等：到时间回合以内部错误失败。 */
+  async #untilWelcomed(): Promise<void> {
+    const timeoutMs = this.#options.connectTimeoutMs ?? 30_000;
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`连不上沙箱里的运行器（等了 ${timeoutMs} 毫秒）`)),
+        timeoutMs,
+      );
+      timer.unref();
+    });
+    try {
+      await Promise.race([this.#welcomed, late]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
   async #ensureDsh(input: TurnInput): Promise<void> {
     const route = { model: input.model, effort: input.effort };

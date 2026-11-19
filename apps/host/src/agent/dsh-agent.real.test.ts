@@ -24,12 +24,18 @@ describe.skipIf(!DSH)("Agent 适配接口（dsh）", { timeout: 120_000 }, () =>
   let runner: ChildProcess;
   let url: string;
   const agents: DshAgent[] = [];
+  const runnerLog: string[] = [];
 
   beforeAll(async () => {
     url = await model.start();
     root = await mkdtemp(join(tmpdir(), "seekcloud-agent-"));
     socket = join(root, "runner.sock");
-    runner = spawn(process.execPath, [RUNNER, "serve", "--socket", socket], { stdio: "ignore" });
+    runner = spawn(process.execPath, [RUNNER, "serve", "--socket", socket], {
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    // 运行器出事时（CI 上偶尔连不上它）留个底：退出码和它的报错
+    runner.stderr?.on("data", (d: Buffer) => runnerLog.push(String(d).trim()));
+    runner.on("exit", (code, signal) => runnerLog.push(`运行器退出了：${code ?? signal}`));
     await mkdir(join(root, "repo"));
     await promisify(execFile)("git", ["init", "-q", join(root, "repo")]);
     // 仓库的 .env 里写了代理变量：dsh 在这样的目录里启动会拒绝（#25），所以启动目录不放在仓库里
@@ -89,7 +95,9 @@ describe.skipIf(!DSH)("Agent 适配接口（dsh）", { timeout: 120_000 }, () =>
     for (;;) {
       const value = check();
       if (value) return value;
-      if (Date.now() > deadline) throw new Error("等不到");
+      if (Date.now() > deadline) {
+        throw new Error(`等不到；运行器：${runnerLog.join("\n") || "（没有输出）"}`);
+      }
       await new Promise((r) => setTimeout(r, 50));
     }
   };
@@ -241,12 +249,15 @@ describe.skipIf(!DSH)("Agent 适配接口（dsh）", { timeout: 120_000 }, () =>
   it("resume 被拒（dsh 那边没有这个会话）：回合以内部错误失败，不悄悄开一个新会话", async () => {
     const s = agentFor(randomUUID());
     await s.agent.startTurn(turn("t9", "不是第一个回合，但 dsh 没见过", false));
-    expect(await s.ended("t9")).toMatchObject({
+    expect(await s.ended("t9"), [...s.logs, ...runnerLog].join("\n")).toMatchObject({
       type: "turn.ended",
       reason: "failed",
       error: { code: "internal" },
     });
-    expect(s.logs.some((l) => l.includes("session/resume"))).toBe(true);
+    expect(
+      s.logs.some((l) => l.includes("session/resume")),
+      [...s.logs, ...runnerLog].join("\n"),
+    ).toBe(true);
   });
 
   it("dsh 起不来：回合以内部错误失败，原始报错只进日志", async () => {
