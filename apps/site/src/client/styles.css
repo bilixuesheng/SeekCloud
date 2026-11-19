@@ -4615,3 +4615,144 @@ a.button:active,
   font-size: 13.5px;
   color: var(--muted);
 }
+
+/* 改动卡片（#27，照 Claude）：回合结束时在复制和时间那一行上面 */
+.changes-card {
+  margin: 10px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.changes-files {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.changes-file,
+.changes-all {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.changes-file + .changes-file,
+.changes-all {
+  border-top: 1px solid var(--border);
+}
+
+.changes-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--fg-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.changes-repo {
+  color: var(--faint);
+}
+
+.changes-counts {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.changes-counts.muted {
+  color: var(--faint);
+}
+
+.changes-counts .added {
+  color: var(--success);
+}
+
+.changes-counts .deleted {
+  color: var(--danger);
+}
+
+.changes-undo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.changes-undo:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.changes-undo:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.changes-all {
+  width: 100%;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  background: var(--surface-2);
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.changes-all > span:first-child {
+  flex: 1;
+}
+
+.changes-all:hover {
+  background: var(--hover);
+}
+
+.changes-chevron {
+  display: inline-flex;
+  color: var(--faint);
+  transition: transform 200ms ease;
+}
+
+.changes-chevron.open {
+  transform: rotate(180deg);
+}
+
+.changes-note {
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.changes-note.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}

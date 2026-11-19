@@ -1,4 +1,4 @@
-import type { SessionEvent, SessionRepo } from "@seekcloud/protocol";
+import { MAX_PUSH_FOLLOW_UPS, type SessionEvent, type SessionRepo } from "@seekcloud/protocol";
 
 /** 导出用的会话信息。 */
 export interface ExportedSession {
@@ -65,7 +65,32 @@ export function sessionMarkdown(session: ExportedSession, events: SessionEvent[]
   for (const event of events) {
     switch (event.type) {
       case "user.message":
-        lines.push(`## 用户 · ${utcTime(event.at)}`, "", event.text, "");
+        lines.push(
+          event.followUp
+            ? `## SeekCloud（推送失败，自动跟进） · ${utcTime(event.at)}`
+            : `## 用户 · ${utcTime(event.at)}`,
+          "",
+          event.text,
+          "",
+        );
+        break;
+      case "workspace":
+        for (const repo of event.repos) {
+          const files = repo.files.length + (repo.omittedFiles ?? 0);
+          const push = { pushed: "已推送", read_only: "只读，未推送", failed: "推送失败" }[
+            repo.push
+          ];
+          lines.push(
+            `> ${repo.fullName}：本回合改了 ${files} 个文件，${push}（${repo.head.slice(0, 7)}）`,
+          );
+        }
+        lines.push("");
+        break;
+      case "push.gave_up":
+        lines.push(
+          `> 推送失败，已自动跟进 ${MAX_PUSH_FOLLOW_UPS} 次仍未推送：${event.repos.join("、")}`,
+          "",
+        );
         break;
       case "message":
         lines.push(AGENT_HEADING, "");

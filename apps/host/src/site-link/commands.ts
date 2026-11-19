@@ -69,6 +69,7 @@ export function handleCommands(deps: {
           sessionId,
           sessionToken,
           repos: command.repos.map((r) => ({ fullName: r.fullName, access: r.access })),
+          workspace: command.repos,
           aiLabels,
           committer: command.committer,
         });
@@ -136,6 +137,7 @@ export function handleCommands(deps: {
               model,
               effort,
               firstTurn: command.firstTurn ?? false,
+              turnNumber: command.turnNumber,
             }),
           );
           return;

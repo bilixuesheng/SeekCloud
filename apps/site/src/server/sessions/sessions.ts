@@ -16,7 +16,7 @@ import type {
   SessionState,
   ThinkingEffort,
 } from "@seekcloud/protocol";
-import { fitEffort } from "@seekcloud/protocol";
+import { fitEffort, MAX_PUSH_FOLLOW_UPS } from "@seekcloud/protocol";
 import { and, asc, desc, eq, gt, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import type { AppDeps } from "../app";
 import type { Tx } from "../db/client";
@@ -724,7 +724,13 @@ export class Sessions {
   async #startTurn(
     tx: Tx,
     session: SessionRow,
-    input: { text: string; model?: string; effort?: ThinkingEffort; queued?: string[] },
+    input: {
+      text: string;
+      model?: string;
+      effort?: ThinkingEffort;
+      queued?: string[];
+      followUp?: "push_failed";
+    },
   ): Promise<HostCommand> {
     const [last] = await tx
       .select({ number: turns.number })
@@ -753,6 +759,7 @@ export class Sessions {
       type: "user.message",
       text: input.text,
       ...(input.queued && { queued: input.queued }),
+      ...(input.followUp && { followUp: input.followUp }),
     });
     await this.#setStatus(tx, session.id, number, { status: "running", detail: null });
     return {
@@ -763,6 +770,7 @@ export class Sessions {
       model,
       effort,
       firstTurn: !(await this.#reachedAgent(tx, session.id)),
+      turnNumber: number,
     };
   }
 
@@ -874,6 +882,7 @@ export class Sessions {
       model: session.model,
       effort: session.effort,
       firstTurn: !(await this.#reachedAgent(tx, session.id)),
+      turnNumber: turn.number,
     };
   }
 
@@ -926,7 +935,18 @@ export class Sessions {
       .select()
       .from(turns)
       .where(and(eq(turns.id, turnId), eq(turns.sessionId, session.id)));
-    if (turn?.status !== "running") return;
+    if (!turn) return;
+    if (turn.status !== "running") {
+      // 停止的回合：宿主机照样补提交、推送，整理工作区的结果在"已停止"之后才到，照样记下（改动卡片、检查点）
+      if (
+        event.type === "workspace" &&
+        turn.status === "stopped" &&
+        !(await this.#workspaceOf(tx, session.id, turn.number))
+      ) {
+        await this.#append(tx, session.id, turn.number, event);
+      }
+      return;
+    }
     await this.#append(
       tx,
       session.id,
@@ -941,11 +961,79 @@ export class Sessions {
       .set({ status: event.reason, endedAt: this.#deps.clock.now() })
       .where(eq(turns.id, turn.id));
     await this.#markUnreadIfAway(tx, session.id);
+    // 推送失败：先自动跟进，把错误交给 Agent；管理员排队的消息等跟进回合结束再处理
+    if (event.reason === "completed") {
+      const followUp = await this.#pushFollowUp(tx, session, turn.number);
+      if (followUp) return followUp;
+    }
     // 有排队的消息就直接开始下一个回合。
     const next = await this.#startQueued(tx, session);
     if (next) return next;
     await this.#setStatus(tx, session.id, turn.number, { status: "waiting", detail: null });
     return undefined;
+  }
+
+  /** 这个回合整理工作区的结果（宿主机在回合结束时发的 workspace 事件）。 */
+  async #workspaceOf(
+    tx: Tx,
+    sessionId: string,
+    turn: number,
+  ): Promise<Extract<SessionEventBody, { type: "workspace" }> | undefined> {
+    const [row] = await tx
+      .select({ body: sessionEvents.body })
+      .from(sessionEvents)
+      .where(
+        and(
+          eq(sessionEvents.sessionId, sessionId),
+          eq(sessionEvents.turn, turn),
+          sql`${sessionEvents.body}->>'type' = 'workspace'`,
+        ),
+      )
+      .orderBy(desc(sessionEvents.seq))
+      .limit(1);
+    return row?.body as Extract<SessionEventBody, { type: "workspace" }> | undefined;
+  }
+
+  /**
+   * 回合结束时有仓库推送失败：开一个跟进回合，把 git 的原话交给 Agent（#27）。同一条管理员消息最多跟进
+   * MAX_PUSH_FOLLOW_UPS 次（从最近往前数连着的跟进回合），之后不再跟进，在会话里告诉管理员。
+   */
+  async #pushFollowUp(tx: Tx, session: SessionRow, turn: number): Promise<HostCommand | undefined> {
+    const failed = (await this.#workspaceOf(tx, session.id, turn))?.repos.filter(
+      (repo) => repo.push === "failed",
+    );
+    if (!failed?.length) return undefined;
+    const recent = await tx
+      .select({ body: sessionEvents.body })
+      .from(sessionEvents)
+      .where(
+        and(
+          eq(sessionEvents.sessionId, session.id),
+          sql`${sessionEvents.body}->>'type' = 'user.message'`,
+        ),
+      )
+      .orderBy(desc(sessionEvents.seq))
+      .limit(MAX_PUSH_FOLLOW_UPS + 1);
+    let followUps = 0;
+    for (const { body } of recent) {
+      if (body.type !== "user.message" || !body.followUp) break;
+      followUps++;
+    }
+    if (followUps >= MAX_PUSH_FOLLOW_UPS) {
+      await this.#append(tx, session.id, turn, {
+        type: "push.gave_up",
+        repos: failed.map((repo) => repo.fullName),
+      });
+      return undefined;
+    }
+    return this.#startTurn(tx, session, {
+      text: [
+        "回合结束时推送会话分支失败。请找出原因并处理（比如先拉取远端的提交再合并），处理完提交即可，回合结束时平台会再推送一次。",
+        "",
+        ...failed.map((repo) => `- ${repo.fullName}：${repo.error ?? "推送失败"}`),
+      ].join("\n"),
+      followUp: "push_failed",
+    });
   }
 
   /** 有宿主机能接新会话了：把排队中的会话按先来后到派出去。 */

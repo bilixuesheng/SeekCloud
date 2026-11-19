@@ -3,6 +3,7 @@ import {
   type HostEvent,
   type HostHello,
   type HostReport,
+  MAX_LISTED_FILES,
   TURN_END_REASONS,
 } from "@seekcloud/protocol";
 import { z } from "zod";
@@ -46,6 +47,35 @@ const AgentEventShape = z.discriminatedUnion("type", [
         status: z.enum(["pending", "in_progress", "completed"]),
       }),
     ),
+  }),
+  z.object({
+    type: z.literal("workspace"),
+    repos: z
+      .array(
+        z.object({
+          fullName: z.string().max(200),
+          head: z.string().regex(/^[0-9a-f]{40,64}$/),
+          savedCommit: z
+            .string()
+            .regex(/^[0-9a-f]{40,64}$/)
+            .optional(),
+          push: z.enum(["pushed", "read_only", "failed"]),
+          error: z.string().max(4000).optional(),
+          files: z
+            .array(
+              z.object({
+                path: z.string().max(4096),
+                from: z.string().max(4096).optional(),
+                additions: Count,
+                deletions: Count,
+                binary: z.boolean().optional(),
+              }),
+            )
+            .max(MAX_LISTED_FILES),
+          omittedFiles: Count.optional(),
+        }),
+      )
+      .max(50),
   }),
   z.object({
     type: z.literal("turn.ended"),

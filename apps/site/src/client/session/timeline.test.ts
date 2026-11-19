@@ -1,4 +1,4 @@
-import type { SessionEvent, SessionEventBody } from "@seekcloud/protocol";
+import type { FileChange, SessionEvent, SessionEventBody } from "@seekcloud/protocol";
 import { describe, expect, it } from "vitest";
 import { buildTimeline, summarizeTools, toolSummary } from "./timeline";
 
@@ -196,5 +196,90 @@ describe("会话事件整理成界面内容", () => {
     // 回合结束、下一个回合开始时都清掉
     expect(activity(...start, call, { type: "turn.ended", reason: "stopped" })).toBeUndefined();
     expect(activity(...start, call, { type: "turn.started" })).toBeUndefined();
+  });
+
+  describe("改动卡片（#27）", () => {
+    const head = "a".repeat(40);
+    const files: FileChange[] = [
+      { path: "src/a.ts", additions: 3, deletions: 1 },
+      { path: "logo.png", additions: 0, deletions: 0, binary: true },
+    ];
+    const workspace = (
+      push: "pushed" | "read_only" | "failed" = "pushed",
+      changed: FileChange[] = files,
+    ): SessionEventBody => ({
+      type: "workspace",
+      repos: [
+        { fullName: "octo/app", head, push, files: changed },
+        { fullName: "octo/lib", head, push: "pushed", files: [] },
+      ],
+    });
+
+    it("挂在这一回合最后一条回复上（复制和时间那一行上面）；没改文件的仓库不列，都没改就没有卡片", () => {
+      const timeline = buildTimeline(
+        events(
+          { type: "user.message", text: "改一下" },
+          { type: "turn.started" },
+          { type: "message", text: "先看看" },
+          { type: "message", text: "改好了" },
+          workspace(),
+          { type: "turn.ended", reason: "completed" },
+        ),
+      );
+      const replies = timeline.items.filter((i) => i.kind === "assistant");
+      expect(replies[0]?.kind === "assistant" && replies[0].turnEnd).toBeUndefined();
+      expect(replies[1]?.kind === "assistant" && replies[1].turnEnd?.changes).toEqual({
+        repos: [{ fullName: "octo/app", files, omittedFiles: 0, push: "pushed" }],
+      });
+
+      const nothing = buildTimeline(
+        events(
+          { type: "turn.started" },
+          { type: "message", text: "没什么要改的" },
+          workspace("pushed", []),
+          { type: "turn.ended", reason: "completed" },
+        ),
+      );
+      const [only] = nothing.items;
+      expect(only?.kind === "assistant" && only.turnEnd?.changes).toBeUndefined();
+    });
+
+    it("回合里没有回复：卡片单独放；停止的回合晚到的结果挂回那个回合", () => {
+      const silent = buildTimeline(
+        events({ type: "turn.started" }, workspace(), { type: "turn.ended", reason: "completed" }),
+      );
+      expect(silent.items.map((i) => i.kind)).toEqual(["changes"]);
+
+      const stopped = buildTimeline(
+        events(
+          { type: "turn.started" },
+          { type: "message", text: "改到一半" },
+          { type: "turn.ended", reason: "stopped" },
+          workspace(),
+        ),
+      );
+      const [reply, notice] = stopped.items;
+      expect(reply?.kind === "assistant" && reply.turnEnd?.changes?.repos[0]?.files).toEqual(files);
+      expect(notice).toMatchObject({ kind: "notice", text: "回合已停止" });
+    });
+
+    it("跟进回合的开头写成一行提示，不是用户的消息；跟进用完了告诉管理员", () => {
+      const timeline = buildTimeline(
+        events(
+          { type: "user.message", text: "推送失败……", followUp: "push_failed" },
+          { type: "turn.started" },
+          { type: "turn.ended", reason: "completed" },
+          { type: "push.gave_up", repos: ["octo/app"] },
+        ),
+      );
+      expect(timeline.items).toEqual([
+        expect.objectContaining({ kind: "notice", tone: "info" }),
+        expect.objectContaining({
+          kind: "notice",
+          tone: "error",
+          text: expect.stringContaining("octo/app"),
+        }),
+      ]);
+    });
   });
 });

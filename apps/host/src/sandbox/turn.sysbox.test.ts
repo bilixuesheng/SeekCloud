@@ -219,6 +219,7 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
       sessionId: repoSession,
       sessionToken,
       repos: [repo],
+      workspace: [repo],
       aiLabels: { signature: true, commitTrailer: true },
       committer,
     });
@@ -244,6 +245,8 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
                 'git commit -q -m "加一个文件"',
                 "git push -q origin HEAD 2>&1",
                 "echo 推送完成",
+                // 留一个没提交的：回合结束时平台补提交、推送
+                "echo 草稿 > draft.txt",
               ].join(" && "),
               description: "提交并推送",
             },
@@ -278,12 +281,29 @@ describe.skipIf(!enabled)("在沙箱里跑一个回合", { timeout: 300_000 }, (
 
     // 推到了假 GitHub：会话分支上是 Agent 的提交，提交者是会话的提交身份，带签名和 AI 尾注
     expect(github.refs("acme/app")).toContain("refs/heads/seekcloud/t2");
-    const commit = execFileSync("git", ["cat-file", "commit", "refs/heads/seekcloud/t2"], {
+    const commit = execFileSync("git", ["cat-file", "commit", "refs/heads/seekcloud/t2~1"], {
       cwd: join(github.root, "acme/app.git"),
     }).toString();
+    expect(commit).toContain("加一个文件");
     expect(commit).toContain(`committer ${committer.name} <${committer.email}>`);
     expect(commit).toContain("-----BEGIN SSH SIGNATURE-----");
     expect(commit).toContain("Generated-by: SeekCloud (AI)");
+    // 回合结束时平台补提交了草稿、推送了会话分支；workspace 在 turn.ended 前面
+    const workspace = mine().find((e) => e.type === "workspace") as AgentEvent & {
+      type: "workspace";
+    };
+    expect(mine().indexOf(workspace)).toBe(mine().indexOf(end) - 1);
+    const [outcome] = workspace.repos;
+    expect(outcome).toMatchObject({ fullName: "acme/app", push: "pushed" });
+    expect(outcome?.savedCommit).toBe(outcome?.head);
+    expect(outcome?.files.map((f) => f.path).sort()).toEqual(["draft.txt", "hello.txt"]);
+    const saved = execFileSync("git", ["cat-file", "commit", "refs/heads/seekcloud/t2"], {
+      cwd: join(github.root, "acme/app.git"),
+    }).toString();
+    expect(saved).toContain("SeekCloud：保存这一回合未提交的改动");
+    expect(saved).toContain("-----BEGIN SSH SIGNATURE-----");
+    expect(saved).toContain("Generated-by: SeekCloud (AI)");
+
     // 推送请求带的是代理换上的用户令牌，沙箱里没有它
     const push = github.requests.find((r) => r.path.endsWith("/git-receive-pack"));
     expect(push?.authorization).toBe(

@@ -117,7 +117,49 @@ export type AgentEvent =
   | { type: "tool.result"; callId: string; output: string; isError: boolean }
   /** 待办清单的整表快照。 */
   | { type: "todo"; items: TodoItem[] }
+  /**
+   * 回合结束时宿主机整理工作区的结果（#27），紧挨在 turn.ended 前面：每个仓库补提交、推送了没有，
+   * 回合结束时会话分支在哪个提交（检查点，和这个事件自己的序号一起记下），这一回合改了哪些文件（改动卡片）。
+   * 回合被停止时宿主机照样补提交、推送，这个事件在已停止的回合之后才到，主站照样收。
+   */
+  | { type: "workspace"; repos: RepoOutcome[] }
   | { type: "turn.ended"; reason: TurnEndReason; error?: SafeError };
+
+/** 一个仓库在一个回合结束时的情况。 */
+export interface RepoOutcome {
+  /** owner/name */
+  fullName: string;
+  /** 回合结束时会话分支的提交（补提交以后）。 */
+  head: string;
+  /** Agent 没提交的改动由平台补的那个提交；没有要补的不填。 */
+  savedCommit?: string;
+  /**
+   * pushed：推上去了（包括本来就是最新的）；read_only：只读挂载的仓库，不推送；
+   * failed：推送失败（被拒、分支保护、网络），error 里是 git 的原话，跟进回合交给 Agent。
+   */
+  push: "pushed" | "read_only" | "failed";
+  error?: string;
+  /** 这一回合改了的文件：回合开始时的提交到 head。没改就是空的。最多列 MAX_LISTED_FILES 个。 */
+  files: FileChange[];
+  /** 改的文件太多、没列出来的个数（行数也不算进 files 里）。 */
+  omittedFiles?: number;
+}
+
+/** 推送失败时，同一条管理员消息最多自动跟进几次（#27）。 */
+export const MAX_PUSH_FOLLOW_UPS = 2;
+
+/** 一个仓库一个回合最多列多少个改了的文件。 */
+export const MAX_LISTED_FILES = 500;
+
+export interface FileChange {
+  path: string;
+  /** 改名的原路径。 */
+  from?: string;
+  /** 二进制文件没有行数：都是 0，binary 为真。 */
+  additions: number;
+  deletions: number;
+  binary?: boolean;
+}
 
 /** push：装了 App，可以推送；read：只读挂载的公开仓库。 */
 export const REPO_ACCESS = ["push", "read"] as const;
@@ -202,6 +244,8 @@ export type HostCommand =
        * 为假时 Agent 必须接着原来的会话，接不上就让回合失败，不悄悄开一个新的（#25）。旧版本的主站不填，按假处理。
        */
       firstTurn?: boolean;
+      /** 这是会话的第几个回合（从 1 数），平台补提交的说明里用。旧版本的主站不填。 */
+      turnNumber?: number;
     };
 
 /** 宿主机发给主站的事件。 */
@@ -279,8 +323,18 @@ export type SessionEventBody =
   /**
    * 用户的消息。queued：由这几条排队的消息变来（回合结束后合成下一回合的开头，或者立即发送）；
    * injected：Agent 工作时"立即发送"的插话。
+   * followUp：不是管理员发的，是平台自动开的跟进回合（push_failed：推送失败，把错误交给 Agent），
+   * 界面上显示成一行提示。
    */
-  | { type: "user.message"; text: string; queued?: string[]; injected?: boolean }
+  | {
+      type: "user.message";
+      text: string;
+      queued?: string[];
+      injected?: boolean;
+      followUp?: "push_failed";
+    }
+  /** 推送失败已经自动跟进了 MAX_PUSH_FOLLOW_UPS 次还没推上去：不再跟进，告诉管理员。 */
+  | { type: "push.gave_up"; repos: string[] }
   /** Agent 工作时发的消息先排队，回合结束后作为下一回合的开头。处理之前可以撤回或立即发送。 */
   | { type: "message.queued"; id: string; text: string }
   /** 用户撤回了一条排队的消息。 */

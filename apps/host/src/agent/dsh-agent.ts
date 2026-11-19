@@ -39,6 +39,8 @@ export interface TurnInput {
   effort: ThinkingEffort;
   /** 会话的第一个回合：dsh 那边还没有这个会话，不用 resume。 */
   firstTurn: boolean;
+  /** 会话的第几个回合，回合结束时补提交的说明里用（agent/turn-end.ts）。 */
+  turnNumber?: number;
 }
 
 /** 内部错误：原始报错只记宿主机日志，给平台的只有类别和参考号（ADR 0007）。 */
