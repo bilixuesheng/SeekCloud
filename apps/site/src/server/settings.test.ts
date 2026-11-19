@@ -142,3 +142,41 @@ describe("设置：新会话默认的思考强度", () => {
     });
   });
 });
+
+describe("设置：平台调用的模型（#140）", () => {
+  let t: TestApp;
+  let browser: TestBrowser;
+
+  beforeAll(async () => {
+    t = await createTestApp();
+    browser = await t.admin();
+  });
+  afterAll(() => t.close());
+
+  const put = (b: TestBrowser, body: unknown) =>
+    b.request("/api/settings/platform-model", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("没改过是自动（auto）；可以选模型列表里的、再改回自动；不在列表里的不行；没登录不能看也不能改", async () => {
+    expect(await (await browser.get("/api/settings/platform-model")).json()).toEqual({
+      model: "auto",
+    });
+    const res = await put(browser, { model: "deepseek-v4-pro" });
+    expect(res.status).toBe(200);
+    expect(await (await browser.get("/api/settings/platform-model")).json()).toEqual({
+      model: "deepseek-v4-pro",
+    });
+    const bad = await put(browser, { model: "gpt-x" });
+    expect(bad.status).toBe(400);
+    expect(((await bad.json()) as { error: { code: string } }).error.code).toBe("unknown_model");
+    expect((await put(browser, { model: "auto" })).status).toBe(200);
+    expect(await (await browser.get("/api/settings/platform-model")).json()).toEqual({
+      model: "auto",
+    });
+    expect((await t.browser().get("/api/settings/platform-model")).status).toBe(401);
+    expect((await put(t.browser(), { model: "auto" })).status).toBe(401);
+  });
+});

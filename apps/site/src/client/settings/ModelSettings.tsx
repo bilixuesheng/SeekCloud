@@ -1,9 +1,12 @@
 import { type FormEvent, useState } from "react";
 import { type ApiError, api } from "../api";
 import { setCached, useCached } from "../cached";
+import { SparkIcon } from "../Icons";
 import { shortDateTime } from "../session/relative-time";
+import { useModels } from "../session/useModels";
 
 export const MODEL_PROVIDER = "/api/settings/model-provider";
+export const PLATFORM_MODEL = "/api/settings/platform-model";
 
 interface ProviderStatus {
   name: string;
@@ -12,12 +15,75 @@ interface ProviderStatus {
   keyRejectedAt: string | null;
 }
 
-/** 设置里的"模型"一类：模型服务的 API key（#26）。 */
+/** 设置里的"模型"一类：模型服务的 API key（#26），平台自己发起的调用用哪个模型（#140）。 */
 export function ModelSettings() {
   return (
-    <section className="settings-section">
-      <h2>模型服务</h2>
-      <ApiKeyRow />
+    <>
+      <section className="settings-section">
+        <h2>模型服务</h2>
+        <ApiKeyRow />
+      </section>
+      <PlatformModel />
+    </>
+  );
+}
+
+/**
+ * 平台自己发起的模型调用（判断会话是否在等你输入这些）用哪个模型：自动（最省的）加上每个模型一排，
+ * 点了当场保存，没存上就拨回去并说明原因。
+ */
+function PlatformModel() {
+  const loaded = useCached<{ model: string }>(PLATFORM_MODEL);
+  const models = useModels()?.models;
+  const current = loaded.data?.model;
+  const [failed, setError] = useState<string>();
+  const error = failed ?? loaded.error;
+
+  const choose = async (next: string) => {
+    if (current === undefined || next === current) return;
+    setCached(PLATFORM_MODEL, { model: next });
+    setError(undefined);
+    try {
+      await api(PLATFORM_MODEL, { model: next }, "PUT");
+    } catch (e) {
+      setCached(PLATFORM_MODEL, { model: current });
+      setError((e as ApiError).message);
+    }
+  };
+
+  const choices = [
+    { id: "auto", label: "自动" },
+    ...(models ?? []).map((m) => ({ id: m.id, label: m.name })),
+  ];
+  return (
+    <section className="settings-group">
+      <div className="settings-group-head">
+        <SparkIcon size={16} />
+        <h2>平台调用的模型</h2>
+      </div>
+      <fieldset className="segmented" disabled={current === undefined || !models}>
+        <legend className="visually-hidden">平台调用的模型</legend>
+        {choices.map((c) => (
+          <label key={c.id} className={`segment${current === c.id ? " current" : ""}`}>
+            <input
+              type="radio"
+              name="platform-model"
+              value={c.id}
+              checked={current === c.id}
+              onChange={() => void choose(c.id)}
+            />
+            <span className="segment-label">{c.label}</span>
+          </label>
+        ))}
+      </fieldset>
+      <p className="settings-group-hint">
+        回合结束后判断会话是否在等待你的输入时，会调用一次模型（不开启思考），用量照常记录。选择“自动”时使用最省的模型。
+      </p>
+      {error && (
+        <p className="alert" role="alert">
+          {error}
+        </p>
+      )}
     </section>
   );
 }
