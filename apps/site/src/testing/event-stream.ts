@@ -35,11 +35,14 @@ export class EventStreamReader {
     return this.#queue.shift() as StreamedEvent;
   }
 
-  /** 读到满足条件的那条为止，返回一路读到的所有事件（含那一条）。 */
-  async until(match: (event: StreamedEvent) => boolean): Promise<StreamedEvent[]> {
+  /**
+   * 读到满足条件的那条为止，返回一路读到的所有事件（含那一条）。gapMs 是两条事件之间最多等多久
+   * （端到端测试里建沙箱、克隆要更久）。
+   */
+  async until(match: (event: StreamedEvent) => boolean, gapMs = 2000): Promise<StreamedEvent[]> {
     const seen: StreamedEvent[] = [];
     for (;;) {
-      const event = await this.next();
+      const event = await this.next(gapMs);
       seen.push(event);
       if (match(event)) return seen;
     }

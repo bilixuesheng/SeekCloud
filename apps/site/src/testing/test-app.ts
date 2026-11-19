@@ -16,6 +16,7 @@ import {
   usageAdmission,
 } from "../server/gateway/trunk";
 import { HostHub } from "../server/hosts/hub";
+import { createHost } from "../server/hosts/keys";
 import { runMaintenance } from "../server/maintenance";
 import type { OutboundNetwork } from "../server/network/address";
 import type {
@@ -60,6 +61,11 @@ export interface TestAppOptions {
   errorPresentation?: ErrorPresentation;
   /** false：还没填模型服务的 key。默认填好了一个假的，模型请求发到假的提供方 t.model。 */
   modelKey?: false;
+  /**
+   * 模型请求不发给 t.model，用这个 fetch 发到 modelBaseUrl（端到端测试：发到宿主机测试里按脚本回复的假模型）。
+   */
+  modelFetch?: typeof fetch;
+  modelBaseUrl?: string;
   /** 网页抓取怎么解析域名、哪些地址能连。默认是真的（只连公网）。 */
   outboundNetwork?: OutboundNetwork;
   webFetchTimeoutMs?: number;
@@ -98,14 +104,16 @@ export async function createTestApp(options: TestAppOptions = {}) {
     modelAdmission: options.modelAdmission ?? usageAdmission(base),
     providerRouting: options.providerRouting ?? deepseekRouting(base),
     errorPresentation: options.errorPresentation ?? transparentErrors,
-    modelFetch: model.fetch,
+    modelFetch: options.modelFetch ?? model.fetch,
     outboundNetwork: options.outboundNetwork,
     webFetchTimeoutMs: options.webFetchTimeoutMs,
   };
   if (options.modelKey !== false) {
     try {
       await setProviderKey(deps, MODEL_KEY);
-      await db.update(modelProviders).set({ baseUrl: "https://model.test/anthropic" });
+      await db
+        .update(modelProviders)
+        .set({ baseUrl: options.modelBaseUrl ?? "https://model.test/anthropic" });
     } catch (error) {
       // 测数据库连不上的情况（databaseUrl 指向一个不存在的库）：填不了 key，也用不着。
       if (!options.databaseUrl) throw error;
@@ -183,6 +191,8 @@ export async function createTestApp(options: TestAppOptions = {}) {
     hub: hub as HostHub,
     /** 宿主机连主站的地址，比如 ws://127.0.0.1:端口（只在 hosts: true 时有）。 */
     hostUrl,
+    /** 添加一台宿主机，返回它的密钥（pnpm host:create 做的事）。 */
+    addHost: (name: string) => createHost(db, name, clock.now()),
     close: async () => {
       await hub?.stop();
       if (server) await new Promise((resolve) => server?.close(resolve));
