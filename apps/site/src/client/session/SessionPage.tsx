@@ -30,6 +30,7 @@ import { BlurText, Collapse, usePresence } from "../Motion";
 import { Slot } from "../registry";
 import { Whale } from "../Whale";
 import { catchUpBubble } from "./bubble-in";
+import { ChangesCard } from "./ChangesCard";
 import { Composer } from "./Composer";
 import { firstMessageOf } from "./first-message";
 import { contentKey, ScrollFollower } from "./follow-scroll";
@@ -882,6 +883,9 @@ function TimelineEntry({
             </details>
           )}
           <PacedReply text={item.text} live={live}>
+            {item.turnEnd?.changes && (
+              <ChangesCard changes={item.turnEnd.changes} onUndo={onRetry} />
+            )}
             {item.turnEnd && (
               <ReplyMeta
                 reply={item.turnEnd.reply}
@@ -896,6 +900,12 @@ function TimelineEntry({
       );
     case "tools":
       return <Tools calls={item.calls} motion={motion} />;
+    case "changes":
+      return (
+        <div className={`assistant-message${live ? "" : motion}`} data-seq={item.key}>
+          <ChangesCard changes={item.changes} onUndo={onRetry} />
+        </div>
+      );
     case "model":
       return (
         <p className={`timeline-notice${motion}`}>

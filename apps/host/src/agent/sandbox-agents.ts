@@ -3,6 +3,7 @@ import type { GitSessions } from "../git-proxy/sessions";
 import { type SandboxGit, sandboxGitEnv, WORKSPACE, workspaceDirs } from "../sandbox/provision";
 import type { Sandboxes } from "../sandbox/sandboxes";
 import { DshAgent, type TurnInput } from "./dsh-agent";
+import { finishTurn, type SandboxExec, turnStart } from "./turn-end";
 
 /** 守护进程处理主站的命令时用到的 Agent 操作（commands.ts）。测试里可以换成假的。 */
 export interface AgentHost {
@@ -32,6 +33,13 @@ const IMAGE = {
  */
 export class SandboxAgents implements AgentHost {
   readonly #agents = new Map<string, DshAgent>();
+  /** 正在跑的回合：开始时各仓库会话分支的提交（回合结束时算改了哪些文件）。 */
+  readonly #turns = new Map<
+    string,
+    { turnId: string; starts: Map<string, string>; turnNumber?: number }
+  >();
+  /** 每个会话的事件按顺序交给主站：回合结束要先整理完工作区，turn.ended 才发出去。 */
+  readonly #emitting = new Map<string, Promise<void>>();
 
   constructor(
     readonly deps: {
@@ -63,7 +71,60 @@ export class SandboxAgents implements AgentHost {
       });
       return;
     }
+    const repos = this.deps.sessions.get(sessionId)?.workspace ?? [];
+    const starts =
+      repos.length > 0
+        ? await turnStart(this.#exec(sessionId), repos).catch((error) => {
+            this.deps.log?.(`会话 ${sessionId} 读不到回合开始时的提交：${String(error)}`);
+            return new Map<string, string>();
+          })
+        : new Map<string, string>();
+    this.#turns.set(sessionId, { turnId: input.turnId, starts, turnNumber: input.turnNumber });
     await this.#agent(sessionId).startTurn(input);
+  }
+
+  #exec(sessionId: string): SandboxExec {
+    return (argv, options) => this.deps.sandboxes.exec(sessionId, argv, { ...options, user: "0" });
+  }
+
+  /** Agent 的事件：回合结束时先整理工作区（补提交、推送、改了哪些文件），发 workspace，再发 turn.ended。 */
+  #emit(sessionId: string, event: HostEvent): void {
+    const previous = this.#emitting.get(sessionId) ?? Promise.resolve();
+    const next = previous
+      .then(async () => {
+        const turn = this.#turns.get(sessionId);
+        if (
+          event.type === "agent" &&
+          event.event.type === "turn.ended" &&
+          turn?.turnId === event.turnId
+        ) {
+          this.#turns.delete(sessionId);
+          const repos = this.deps.sessions.get(sessionId)?.workspace ?? [];
+          if (repos.length > 0) {
+            try {
+              const outcomes = await finishTurn(this.#exec(sessionId), this.deps.git, {
+                repos,
+                starts: turn.starts,
+                turnNumber: turn.turnNumber,
+              });
+              this.deps.emit({
+                type: "agent",
+                sessionId,
+                turnId: event.turnId,
+                event: { type: "workspace", repos: outcomes },
+              });
+            } catch (error) {
+              this.deps.log?.(`会话 ${sessionId} 回合结束时整理工作区失败：${String(error)}`);
+            }
+          }
+        }
+        this.deps.emit(event);
+      })
+      .catch((error) => this.deps.log?.(`会话 ${sessionId} 的事件没发出去：${String(error)}`));
+    this.#emitting.set(sessionId, next);
+    void next.then(() => {
+      if (this.#emitting.get(sessionId) === next) this.#emitting.delete(sessionId);
+    });
   }
 
   inject(sessionId: string, turnId: string, text: string): Promise<void> {
@@ -77,6 +138,7 @@ export class SandboxAgents implements AgentHost {
   close(sessionId: string): void {
     this.#agents.get(sessionId)?.close();
     this.#agents.delete(sessionId);
+    this.#turns.delete(sessionId);
   }
 
   #agent(sessionId: string): DshAgent {
@@ -114,7 +176,7 @@ export class SandboxAgents implements AgentHost {
         };
       },
       protect: (pid) => sandboxes.protect(sessionId, pid),
-      emit: this.deps.emit,
+      emit: (event) => this.#emit(sessionId, event),
       log: this.deps.log,
     });
     this.#agents.set(sessionId, agent);

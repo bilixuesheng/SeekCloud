@@ -1,4 +1,12 @@
-import type { SessionEvent, SessionState, ThinkingEffort, TodoItem } from "@seekcloud/protocol";
+import {
+  type FileChange,
+  MAX_PUSH_FOLLOW_UPS,
+  type RepoOutcome,
+  type SessionEvent,
+  type SessionState,
+  type ThinkingEffort,
+  type TodoItem,
+} from "@seekcloud/protocol";
 import { errorText } from "./errors";
 
 export interface ToolCall {
@@ -6,6 +14,17 @@ export interface ToolCall {
   name: string;
   input: unknown;
   result?: { output: string; isError: boolean };
+}
+
+/** 一个回合改了的文件（改动卡片，#27）：只有改了文件的仓库。 */
+export interface TurnChanges {
+  repos: Array<{
+    fullName: string;
+    files: FileChange[];
+    /** 没列出来的文件个数。 */
+    omittedFiles: number;
+    push: RepoOutcome["push"];
+  }>;
 }
 
 export type TimelineItem =
@@ -23,8 +42,10 @@ export type TimelineItem =
       key: number;
       text: string;
       thinking?: string;
-      turnEnd?: { reply: string; at: string };
+      turnEnd?: { reply: string; at: string; changes?: TurnChanges };
     }
+  /** 回合里没有回复、但改了文件：改动卡片单独放。 */
+  | { kind: "changes"; key: number; changes: TurnChanges }
   /** 连续的工具调用合成一组，界面上先显示一行摘要。 */
   | { kind: "tools"; key: number; calls: ToolCall[] }
   | { kind: "notice"; key: number; tone: "info" | "error"; text: string }
@@ -69,10 +90,23 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
   // 还没出结果的工具调用：callId → 一句话的描述
   let running = new Map<string, string>();
   let plan: Timeline["plan"];
+  // 改动卡片：workspace 在 turn.ended 前面到，先记下；停止的回合晚到，挂回那个回合
+  const pendingChanges = new Map<number, TurnChanges>();
+  const endedTurns = new Map<number, Extract<TimelineItem, { kind: "assistant" }> | undefined>();
 
   for (const event of events) {
     switch (event.type) {
       case "user.message": {
+        if (event.followUp) {
+          // 平台自动开的跟进回合：不是管理员说的话，写一行提示
+          items.push({
+            kind: "notice",
+            key: event.seq,
+            tone: "info",
+            text: "推送会话分支失败，SeekCloud 已把错误交给 Agent 处理",
+          });
+          break;
+        }
         // 由排队的消息合成的回合开头：排队的那几条换成这一条。
         if (event.queued) queued = queued.filter((q) => !event.queued?.includes(q.id));
         const item = {
@@ -132,18 +166,41 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
       case "todo":
         plan = { items: event.items, stale: false };
         break;
+      case "workspace": {
+        const changes = turnChanges(event.repos);
+        if (!changes || event.turn === null) break;
+        if (!endedTurns.has(event.turn)) {
+          pendingChanges.set(event.turn, changes);
+          break;
+        }
+        const reply = endedTurns.get(event.turn);
+        if (reply?.turnEnd) reply.turnEnd.changes = changes;
+        else items.push({ kind: "changes", key: event.seq, changes });
+        break;
+      }
+      case "push.gave_up":
+        items.push({
+          kind: "notice",
+          key: event.seq,
+          tone: "error",
+          text: `推送失败，已自动跟进 ${MAX_PUSH_FOLLOW_UPS} 次仍未推送（${event.repos.join("、")}）。请查看原因后再发消息。`,
+        });
+        break;
       case "model.changed":
         items.push({ kind: "model", key: event.seq, model: event.model, effort: event.effort });
         break;
       case "turn.ended": {
         const last = replies.at(-1);
+        const changes = event.turn === null ? undefined : pendingChanges.get(event.turn);
         if (last) {
           const reply = replies
             .map((r) => r.text)
             .filter((text) => text.trim())
             .join("\n\n");
-          if (reply) last.turnEnd = { reply, at: event.at };
+          if (reply) last.turnEnd = { reply, at: event.at, ...(changes && { changes }) };
         }
+        if (changes && !last?.turnEnd) items.push({ kind: "changes", key: event.seq, changes });
+        if (event.turn !== null) endedTurns.set(event.turn, last?.turnEnd ? last : undefined);
         replies = [];
         running = new Map();
         plan = undefined;
@@ -165,6 +222,19 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
     }
   }
   return { items, state, since, queued, activity: [...running.values()].at(-1), plan };
+}
+
+/** 改动卡片的内容：只留改了文件的仓库；都没改就没有卡片。 */
+function turnChanges(repos: RepoOutcome[]): TurnChanges | undefined {
+  const changed = repos
+    .filter((r) => r.files.length > 0 || (r.omittedFiles ?? 0) > 0)
+    .map((r) => ({
+      fullName: r.fullName,
+      files: r.files,
+      omittedFiles: r.omittedFiles ?? 0,
+      push: r.push,
+    }));
+  return changed.length > 0 ? { repos: changed } : undefined;
 }
 
 /** 第一个不是空白的行（多行的命令只写第一行）。 */

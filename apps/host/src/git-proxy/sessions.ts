@@ -1,4 +1,4 @@
-import type { AiLabels, Committer } from "@seekcloud/protocol";
+import type { AiLabels, Committer, SessionRepo } from "@seekcloud/protocol";
 import type { MountedRepo } from "./rules";
 
 export interface GitSession {
@@ -12,6 +12,8 @@ export interface GitSession {
   aiLabels?: AiLabels;
   /** 提交身份（管理员关联的 GitHub 账号），主站下发（#27）。签名服务只签提交者是它的提交。 */
   committer?: Committer;
+  /** 仓库的完整信息（基础分支、会话分支）：回合开始、结束时整理工作区用（agent/turn-end.ts）。 */
+  workspace?: SessionRepo[];
 }
 
 /** 正在运行的会话。全部在内存里：宿主机重启后由主站重新下发。 */
