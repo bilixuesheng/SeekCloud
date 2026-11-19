@@ -104,7 +104,10 @@ export class RunnerLink {
         this.#retry.unref();
       }
     });
-    createInterface({ input: child.stdout }).on("line", (line) => this.#onLine(child, line));
+    // 读的时候出的错 readline 会再抛一次，没人接就是整个守护进程退出；断开由上面的 close 处理
+    createInterface({ input: child.stdout })
+      .on("line", (line) => this.#onLine(child, line))
+      .on("error", () => {});
     child.stdin.write(`${JSON.stringify({ op: "hello", since: this.#lastSeq })}\n`);
   }
 

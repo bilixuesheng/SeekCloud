@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -200,5 +201,38 @@ describe("运行器", { timeout: 30_000 }, () => {
     link.send({ op: "start", args: ["/no/such/dsh"] });
     await until(() => entries.some((e) => e.type === "error" || e.type === "exit"), "错误");
     expect(entries.some((e) => e.type === "error")).toBe(true);
+  });
+
+  it("连接被对面重置（守护进程那头没读完就断了）：运行器不退出，照样能连", async () => {
+    const { daemon, until, socket, server, startFake } = await setup();
+    const first = daemon();
+    await until(() => first.link.connected, "连上");
+    startFake(first.link);
+    first.link.send({ op: "send", line: "起来了" });
+    await until(() => rpc(first.entries).length === 1, "回显");
+    first.link.stop();
+    // 一个不读的连接：打完招呼让 dsh 回很多行，堆在它的读缓冲里，然后直接断。
+    // 对面断开时还有没读的数据，运行器这头读的时候收到 ECONNRESET（Linux 的 Unix 套接字就是这样）
+    await new Promise<void>((resolve) => {
+      const raw = connect(socket);
+      raw.on("error", () => resolve());
+      raw.on("connect", () => {
+        raw.pause();
+        raw.write(`${JSON.stringify({ op: "hello", since: 0 })}\n`);
+        for (let i = 0; i < 400; i++) {
+          raw.write(`${JSON.stringify({ op: "send", line: `第 ${i} 行${"字".repeat(200)}` })}\n`);
+        }
+        setTimeout(() => {
+          raw.destroy();
+          resolve();
+        }, 500);
+      });
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(server.exitCode).toBeNull();
+    const again = daemon();
+    await until(() => again.link.connected, "重新连上");
+    again.link.send({ op: "send", line: "还在" });
+    await until(() => rpc(again.entries).some((r) => r.echo === "还在"), "回显");
   });
 });
