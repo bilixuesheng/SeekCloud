@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { AiLabels } from "@seekcloud/protocol";
+import {
+  DiskQuota,
+  projectOf,
+  QUOTA_PROJECT_LABEL,
+  type QuotaSupport,
+  type SandboxStorage,
+} from "./disk-quota";
 import { Docker, DockerError, isNotFound, type Runner, runProgram } from "./docker";
 import { provisionWorkspace, type SandboxGit, type WorkspaceSetup } from "./provision";
 
@@ -43,6 +50,11 @@ export interface SandboxSpec {
    * 测试每次用一个新的，和宿主机上别的沙箱互不干扰。
    */
   pool?: string;
+  /**
+   * 沙箱自己的 /var/lib/docker 放在宿主机哪里、每个沙箱的磁盘上限（disk-quota.ts，#168）。
+   * 不给时沙箱里的 Docker 用 Sysbox 自动给的那块，不限磁盘（本机测试用 runc 时就是这样）。
+   */
+  storage?: SandboxStorage;
 }
 
 export type SandboxState = "running" | "stopped";
@@ -97,6 +109,7 @@ export class Sandboxes implements SandboxHost {
   readonly #spec: SandboxSpec;
   readonly #pool: string;
   readonly #queues = new Map<string, Promise<unknown>>();
+  readonly #quota: DiskQuota | undefined;
 
   /** root：要宿主机 root 的操作（调 OOM 的优先级）怎么跑；测试机上借特权容器（network.ts 的 rootViaDocker）。 */
   constructor(spec: SandboxSpec, docker = new Docker(), root: Runner = runProgram) {
@@ -104,6 +117,12 @@ export class Sandboxes implements SandboxHost {
     this.#spec = spec;
     this.#docker = docker;
     this.#pool = spec.pool ?? "default";
+    this.#quota = spec.storage && new DiskQuota(spec.storage, root);
+  }
+
+  /** 单个沙箱的磁盘上限生效不生效（上报给主站的运行状况）。 */
+  async diskQuota(): Promise<QuotaSupport> {
+    return this.#quota ? this.#quota.support() : { ok: false, reason: "没有配沙箱的存储目录" };
   }
 
   /** 容器名。会话 ID 不是 UUID 的一律不认（它会进 docker 的命令行）。 */
@@ -149,7 +168,10 @@ export class Sandboxes implements SandboxHost {
       const name = this.containerName(sessionId);
       let container = await this.#inspect(sessionId);
       if (!container) {
-        await this.#docker.ok(this.#createArgs(sessionId));
+        const project = this.#quota
+          ? await this.#quota.prepare(sessionId, await this.#takenProjects())
+          : undefined;
+        await this.#docker.ok(this.#createArgs(sessionId, project));
         container = await this.#inspect(sessionId);
         if (!container) throw new Error(`沙箱 ${name} 建了以后找不到`);
       }
@@ -167,6 +189,7 @@ export class Sandboxes implements SandboxHost {
         default:
           throw new Error(`沙箱 ${name} 的状态是 ${container.State.Status}，启动不了`);
       }
+      await this.#applyQuota(sessionId, container);
       return { sessionId, containerId: container.Id, state: "running" };
     });
   }
@@ -183,9 +206,12 @@ export class Sandboxes implements SandboxHost {
   /** 删掉沙箱和它的文件（包括沙箱里 Docker 的镜像和卷）。沙箱不在时什么也不做。 */
   remove(sessionId: string): Promise<void> {
     return this.#serial(sessionId, async () => {
+      const project = projectOf((await this.#inspect(sessionId))?.Config.Labels);
       const args = ["rm", "--force", "--volumes", this.containerName(sessionId)];
       const result = await this.#docker.raw(args);
       if (result.code !== 0 && !isNotFound(result)) throw new DockerError(args, result);
+      // 沙箱自己的 /var/lib/docker 在宿主机的目录里，docker rm 不删它
+      await this.#quota?.release(sessionId, project);
     });
   }
 
@@ -313,8 +339,51 @@ export class Sandboxes implements SandboxHost {
     );
   }
 
-  #createArgs(sessionId: string): string[] {
+  /** 沙箱开着以后设磁盘上限（存储不支持时什么也不做）。 */
+  async #applyQuota(sessionId: string, container: Container): Promise<void> {
+    const project = projectOf(container.Config.Labels);
+    // 配存储目录之前建的沙箱：没有自己的 /var/lib/docker，也就没法限
+    if (!this.#quota || project === undefined) return;
+    const pid = Number(
+      (
+        await this.#docker.ok([
+          "container",
+          "inspect",
+          "--format",
+          "{{.State.Pid}}",
+          this.containerName(sessionId),
+        ])
+      ).trim(),
+    );
+    if (!pid) throw new Error(`沙箱 ${this.containerName(sessionId)} 没有开着`);
+    await this.#quota.apply(sessionId, project, pid);
+  }
+
+  /** 宿主机上所有沙箱（所有组）已经用了的项目编号。 */
+  async #takenProjects(): Promise<Set<number>> {
+    const out = await this.#docker.ok([
+      "ps",
+      "--all",
+      "--filter",
+      `label=${QUOTA_PROJECT_LABEL}`,
+      "--format",
+      `{{.Label "${QUOTA_PROJECT_LABEL}"}}`,
+    ]);
+    return new Set(out.split("\n").map(Number).filter(Number.isInteger));
+  }
+
+  #createArgs(sessionId: string, project?: number): string[] {
     const spec = this.#spec;
+    const storage =
+      this.#quota && project !== undefined
+        ? [
+            "--label",
+            `${QUOTA_PROJECT_LABEL}=${project}`,
+            // 沙箱里 Docker 的数据：放宿主机上这个沙箱自己的目录，算进它的磁盘上限；休眠再启动时还在
+            "--volume",
+            `${this.#quota.dockerDir(sessionId)}:/var/lib/docker`,
+          ]
+        : [];
     return [
       "create",
       "--name",
@@ -323,6 +392,7 @@ export class Sandboxes implements SandboxHost {
       `${SANDBOX_LABEL}=${this.#pool}`,
       "--label",
       `${SESSION_LABEL}=${sessionId}`,
+      ...storage,
       "--runtime",
       spec.runtime,
       "--network",

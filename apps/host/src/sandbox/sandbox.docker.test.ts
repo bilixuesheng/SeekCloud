@@ -89,6 +89,35 @@ describe.skipIf(!enabled)("沙箱（真的 Docker）", { timeout: 120_000 }, () 
     await sandboxes.remove(id);
   });
 
+  it("配了存储目录：沙箱的 /var/lib/docker 是宿主机上它自己的目录，删沙箱时一起删；不是 XFS 时上报不限", async () => {
+    // 放在 /var/lib/seekcloud 下面：测试机开了磁盘配额以后，这里在那块 XFS 上
+    const dir = `/var/lib/seekcloud/test-${pool}`;
+    const withStorage = new Sandboxes({ ...spec, storage: { dir, limitGb: 1 } }, docker, root);
+    const id = randomUUID();
+    try {
+      await withStorage.ensure(id);
+      expect(
+        (await withStorage.exec(id, ["sh", "-c", "echo 在宿主机上 > /var/lib/docker/marker"]))
+          .exitCode,
+      ).toBe(0);
+      expect((await root("cat", [`${dir}/${id}/docker/marker`])).stdout.trim()).toBe("在宿主机上");
+      // 停了再启动还在（休眠）
+      await withStorage.stop(id);
+      await withStorage.ensure(id);
+      expect((await withStorage.exec(id, ["cat", "/var/lib/docker/marker"])).stdout.trim()).toBe(
+        "在宿主机上",
+      );
+      const quota = await withStorage.diskQuota();
+      if (!quota.ok) expect(quota.reason).toMatch(/XFS|xfsprogs|prjquota/);
+      await withStorage.remove(id);
+      expect(await withStorage.find(id)).toBeUndefined();
+      expect((await root("test", ["-e", `${dir}/${id}`])).code).not.toBe(0);
+    } finally {
+      await withStorage.remove(id);
+      await root("rm", ["-rf", "--", dir]);
+    }
+  });
+
   it("同一个会话同时准备两次只建一个", async () => {
     const id = randomUUID();
     const [a, b] = await Promise.all([sandboxes.ensure(id), sandboxes.ensure(id)]);
