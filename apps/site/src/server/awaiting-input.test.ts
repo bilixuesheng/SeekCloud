@@ -144,7 +144,7 @@ describe("回合结束后问模型：是不是在等输入", () => {
   let browser: TestBrowser;
 
   beforeAll(async () => {
-    t = await createTestApp({ waitingCheck: { timeoutMs: 300 } });
+    t = await createTestApp({ platformCalls: { timeoutMs: 300 } });
     ({ browser } = await t.adminWithGitHub("octo", "octo/app"));
   });
   afterAll(() => t.close());

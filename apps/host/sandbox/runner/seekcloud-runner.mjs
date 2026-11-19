@@ -46,6 +46,16 @@ function option(name) {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
+/**
+ * 按行读一个流。读的时候出的错（对面没读完就断了，收到 ECONNRESET 这类）readline 会再抛一次：
+ * 没人接就是整个运行器退出，连带 dsh 一起停。流自己的 close 照常处理断开，这里只把错吞掉。
+ */
+function lines(input) {
+  const reader = createInterface({ input });
+  reader.on("error", () => {});
+  return reader;
+}
+
 if (command === "serve") await serve();
 else if (command === "connect") bridge();
 else {
@@ -128,11 +138,9 @@ async function serve() {
     proc.on("error", (error) => emit({ type: "error", text: `dsh 起不来：${error.message}` }));
     proc.stdin.on("error", () => {});
     if (proc.pid !== undefined) emit({ type: "started", pid: proc.pid });
-    createInterface({ input: proc.stdout }).on("line", (line) => emit({ type: "rpc", line }));
-    createInterface({ input: proc.stdio[3] }).on("line", (line) => emit({ type: "live", line }));
-    createInterface({ input: proc.stderr }).on("line", (line) =>
-      emit({ type: "stderr", text: clip(line) }),
-    );
+    lines(proc.stdout).on("line", (line) => emit({ type: "rpc", line }));
+    lines(proc.stdio[3]).on("line", (line) => emit({ type: "live", line }));
+    lines(proc.stderr).on("line", (line) => emit({ type: "stderr", text: clip(line) }));
     proc.on("exit", (code, signal) => {
       if (child === proc) child = undefined;
       emit({ type: "exit", code, signal });
@@ -203,7 +211,7 @@ async function serve() {
   const server = createServer((socket) => {
     socket.on("error", () => {});
     let greeted = false;
-    createInterface({ input: socket }).on("line", (line) => {
+    lines(socket).on("line", (line) => {
       let op;
       try {
         op = JSON.parse(line);
