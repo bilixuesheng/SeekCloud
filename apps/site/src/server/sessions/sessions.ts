@@ -31,7 +31,7 @@ import {
   turns,
 } from "../db/schema";
 import { githubNotConnected } from "../errors";
-import { withGitHubToken } from "../github/tokens";
+import { githubAccessToken, withGitHubToken } from "../github/tokens";
 import { readSetting } from "../settings";
 import { DEFAULT_MODEL, findModel } from "./models";
 import { pinTitle } from "./pin-title";
@@ -408,7 +408,7 @@ export class Sessions {
     if (!done) return { ok: false, error: "session_not_found" };
     if (done.changed) {
       this.#notify(done.session);
-      this.#deps.host?.send({ type: "destroy_sandbox", sessionId: done.session.id });
+      this.#send({ type: "destroy_sandbox", sessionId: done.session.id });
     }
     return { ok: true, value: (await this.#view(done.session.id)) as Session };
   }
@@ -436,7 +436,7 @@ export class Sessions {
     });
     if (!session) return { ok: false, error: "session_not_found" };
     this.#notify(session);
-    this.#deps.host?.send({ type: "destroy_sandbox", sessionId: session.id });
+    this.#send({ type: "destroy_sandbox", sessionId: session.id });
     return { ok: true, value: undefined };
   }
 
@@ -510,8 +510,8 @@ export class Sessions {
     });
     if (typeof outcome === "string") return { ok: false, error: outcome };
     this.#notify(outcome.session);
-    this.#deps.host?.send(outcome.stop);
-    if (outcome.next) this.#deps.host?.send(outcome.next);
+    this.#send(outcome.stop);
+    if (outcome.next) this.#send(outcome.next);
     return { ok: true, value: undefined };
   }
 
@@ -586,10 +586,10 @@ export class Sessions {
     }
     if (outcome.kind === "queued") return { ok: true, value: { queued: outcome.queued } };
     if (outcome.kind === "injected") {
-      if (outcome.command) this.#deps.host?.send(outcome.command);
+      if (outcome.command) this.#send(outcome.command);
       return { ok: true, value: { injected: true } };
     }
-    this.#deps.host?.send(outcome.command);
+    this.#send(outcome.command);
     return { ok: true, value: { started: (await this.#view(outcome.session.id)) as Session } };
   }
 
@@ -667,7 +667,7 @@ export class Sessions {
     if (typeof outcome === "string") return { ok: false, error: outcome };
     this.#notify(outcome.session);
     if ("wake" in outcome) await this.#dispatch(outcome.session.id);
-    else if (outcome.command) this.#deps.host?.send(outcome.command);
+    else if (outcome.command) this.#send(outcome.command);
     return { ok: true, value: undefined };
   }
 
@@ -825,7 +825,7 @@ export class Sessions {
     if (!handled) return;
     this.#notify(handled.session);
     // 事务提交之后再发命令，免得宿主机回得太快、读到还没提交的状态。
-    if (handled.next) this.#deps.host?.send(handled.next);
+    if (handled.next) this.#send(handled.next);
   }
 
   /** 模型进度、文字增量原样转给打开着这个会话的浏览器；不是正在跑的回合的（晚到的）丢掉。不落库。 */
@@ -986,7 +986,7 @@ export class Sessions {
     });
     if (!session) return;
     this.#notify(session);
-    host.send({
+    this.#send({
       type: "prepare_sandbox",
       sessionId,
       repos: await this.#repos(sessionId),
@@ -997,6 +997,37 @@ export class Sessions {
       aiLabels: await readSetting(this.#deps, "ai_labels", { userId: session.userId }),
       committer: await this.#committer(session.userId),
     });
+  }
+
+  /**
+   * 发命令给宿主机。Git 代理要用户的 GitHub 令牌（ADR 0003，只放在宿主机的内存里），所以准备沙箱、
+   * 开始回合之后各下发一份新鲜的（快过期的先刷新）：宿主机重启过、令牌过期了都能接上。
+   * 令牌跟在命令后面发：宿主机收到准备沙箱才登记这个会话；回合开始以后 Agent 要过好几秒才用得上 git。
+   */
+  #send(command: HostCommand): void {
+    this.#deps.host?.send(command);
+    if (command.type === "prepare_sandbox" || command.type === "start_turn") {
+      void this.#sendGitHubToken(command.sessionId).catch((error) =>
+        console.warn(`会话 ${command.sessionId} 下发 GitHub 令牌失败`, error),
+      );
+    }
+  }
+
+  async #sendGitHubToken(sessionId: string): Promise<void> {
+    const [row] = await this.#deps.db
+      .select({ userId: sessions.userId })
+      .from(sessions)
+      .where(eq(sessions.id, sessionId));
+    if (!row) return;
+    let token: string | undefined;
+    try {
+      token = await githubAccessToken(this.#deps, row.userId);
+    } catch (error) {
+      // 连不上 GitHub：公开仓库照样能克隆，推送会在宿主机那边失败并报给 Agent
+      console.warn(`会话 ${sessionId} 取不到 GitHub 令牌`, error);
+      return;
+    }
+    if (token) this.#deps.host?.send({ type: "set_github_token", sessionId, token });
   }
 
   /** 提交作者：管理员关联的 GitHub 账号（#27）。没关联、或者关联得早没存编号时为 undefined。 */
@@ -1027,7 +1058,7 @@ export class Sessions {
       .select({ id: sessions.id })
       .from(sessions)
       .where(inArray(sessions.status, ["running", "waiting"]));
-    for (const { id } of live) host.send({ type: "set_ai_labels", sessionId: id, aiLabels });
+    for (const { id } of live) this.#send({ type: "set_ai_labels", sessionId: id, aiLabels });
   }
 
   /** 追加一条会话事件。在会话这一行上加锁取号，同一个会话的序号连续、不重复。 */
