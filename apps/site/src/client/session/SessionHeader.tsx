@@ -20,7 +20,7 @@ import {
 import { Pages, Sheet, usePresence } from "../Motion";
 import { navigate } from "../router";
 import { PullRequestBadge, pullRequestText } from "./PullRequestBadge";
-import type { Session } from "./types";
+import { type Session, statusWithDetail } from "./types";
 
 /** 标题菜单里的几页：菜单本身、打开方式、重命名、确认删除。 */
 type MenuPage = "menu" | "open" | "rename" | "delete";
@@ -128,6 +128,9 @@ function SessionInfo({
       role="dialog"
       aria-label="会话信息"
     >
+      <InfoRow icon={<DotIcon />} label="状态">
+        {statusWithDetail(session)}
+      </InfoRow>
       <InfoRow icon={<BoxIcon />} label="环境">
         {session.environmentName ?? "已删除"}
       </InfoRow>

@@ -40,7 +40,8 @@ describe("回合结束时整理工作区的结果（#27）", () => {
     const all = (
       await stream.until((e) => {
         const ev = parse(e);
-        if (ev.type === "status" && ev.status === "waiting") seen++;
+        // 回合结束时的那条（判断完补的附加说明是另一条，#139）
+        if (ev.type === "status" && ev.status === "waiting" && ev.detail === null) seen++;
         return seen >= waits;
       })
     ).map(parse);

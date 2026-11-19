@@ -36,6 +36,7 @@ import { githubNotConnected } from "../errors";
 import { githubAccessToken, withGitHubToken } from "../github/tokens";
 import { readSetting } from "../settings";
 import { readAgentArchive, removeAgentArchive, saveAgentArchive } from "./agent-archive";
+import { judgeTurnEnd } from "./awaiting-input";
 import { DEFAULT_MODEL, findModel } from "./models";
 import { pinTitle } from "./pin-title";
 import { toSafeError } from "./safe-error";
@@ -137,6 +138,8 @@ export class Sessions {
   readonly #live = new Topic<LiveEvent>();
   /** 某个用户的某个会话有变化。键是用户 id，值是会话短 ID。 */
   readonly #changes = new Topic<string>();
+  /** 后台还没做完的"等你输入"判断（#judgeLater）。 */
+  readonly #judging = new Set<Promise<void>>();
 
   constructor(deps: AppDeps) {
     this.#deps = deps;
@@ -584,6 +587,7 @@ export class Sessions {
     this.#notify(outcome.session);
     this.#send(outcome.stop);
     if (outcome.next) this.#send(outcome.next);
+    else this.#judgeLater(outcome.session.id, outcome.stop.turnId);
     return { ok: true, value: undefined };
   }
 
@@ -914,6 +918,73 @@ export class Sessions {
     this.#notify(handled.session);
     // 事务提交之后再发命令，免得宿主机回得太快、读到还没提交的状态。
     if (handled.next) this.#send(handled.next);
+    if (event.type === "agent" && event.event.type === "turn.ended") {
+      this.#judgeLater(event.sessionId, event.turnId);
+    }
+  }
+
+  /**
+   * 回合结束以后判断"等你输入"还是"已完成"（#139，awaiting-input.ts）。在后台做：不拖住回合结束后的
+   * 通知和下一条命令（#140 换成模型调用以后要一两秒）。判断完再核对一遍：会话还在等待回复、还没有附加说明、
+   * 最新的回合就是这一个（这期间管理员发了消息就作废），再补一条状态事件。
+   * 变成"等你输入"时发通知：多渠道通知（#102）做好以后在这里调。
+   */
+  #judgeLater(sessionId: string, turnId: string): void {
+    const job = this.#judgeTurn(sessionId, turnId).catch((error) =>
+      console.error(`会话 ${sessionId} 判断是否在等输入失败：${String(error)}`),
+    );
+    this.#judging.add(job);
+    void job.finally(() => this.#judging.delete(job));
+  }
+
+  /** 等后台的判断都做完（测试用）。 */
+  async settled(): Promise<void> {
+    while (this.#judging.size > 0) await Promise.all([...this.#judging]);
+  }
+
+  async #judgeTurn(sessionId: string, turnId: string): Promise<void> {
+    if (!UUID.test(turnId)) return;
+    const [turn] = await this.#deps.db
+      .select({ number: turns.number, status: turns.status })
+      .from(turns)
+      .where(and(eq(turns.id, turnId), eq(turns.sessionId, sessionId)));
+    if (!turn || turn.status === "running") return;
+    const [reply] = await this.#deps.db
+      .select({ body: sessionEvents.body })
+      .from(sessionEvents)
+      .where(
+        and(
+          eq(sessionEvents.sessionId, sessionId),
+          eq(sessionEvents.turn, turn.number),
+          sql`${sessionEvents.body}->>'type' = 'message'`,
+        ),
+      )
+      .orderBy(desc(sessionEvents.seq))
+      .limit(1);
+    const detail = await judgeTurnEnd({
+      reason: turn.status,
+      reply: reply?.body.type === "message" ? reply.body.text : "",
+    });
+    const session = await this.#deps.db.transaction(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(sessions)
+        .where(eq(sessions.id, sessionId))
+        .for("update");
+      if (!row || row.status !== "waiting" || row.statusDetail !== null) return undefined;
+      const [latest] = await tx
+        .select({ number: turns.number })
+        .from(turns)
+        .where(eq(turns.sessionId, sessionId))
+        .orderBy(desc(turns.number))
+        .limit(1);
+      if (latest?.number !== turn.number) return undefined;
+      await this.#setStatus(tx, sessionId, turn.number, { status: "waiting", detail });
+      // 补上附加说明不算新的动静：会话列表的排序和"多久以前"不变
+      await tx.update(sessions).set({ updatedAt: row.updatedAt }).where(eq(sessions.id, sessionId));
+      return row;
+    });
+    if (session) this.#notify(session);
   }
 
   /** 模型进度、文字增量原样转给打开着这个会话的浏览器；不是正在跑的回合的（晚到的）丢掉。不落库。 */
