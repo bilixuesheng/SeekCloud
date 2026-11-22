@@ -27,6 +27,8 @@ export interface CatalogProvider {
     contextWindow: number | null;
     maxTokens: number | null;
     efforts: ThinkingEffort[];
+    /** 各档位发给接口的参数值里和档位名不一样的（比如 off 发 "none"）。 */
+    wire?: Partial<Record<ThinkingEffort, string>>;
     cost: [number, number] | null;
   }>;
 }

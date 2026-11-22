@@ -445,6 +445,8 @@ export const providerModels = pgTable(
     reasoningEfforts: jsonb("reasoning_efforts").$type<ReasoningEfforts>(),
     // 请求兼容性开关（dsh 的 compat）。
     compat: jsonb("compat").$type<ModelCompat>(),
+    // 管理员填的价格：每百万 token 的输入、输出（美元）。平台调用选"自动"时按它比较；目录里的模型用目录的价格。
+    cost: jsonb("cost").$type<[number, number]>(),
     position: integer("position").notNull(),
   },
   (t) => [primaryKey({ columns: [t.providerId, t.modelId] })],

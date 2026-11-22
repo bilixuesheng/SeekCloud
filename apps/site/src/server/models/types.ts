@@ -50,4 +50,6 @@ export interface ModelSpec {
   input: ModelInput[];
   reasoningEfforts?: ReasoningEfforts | null;
   compat?: ModelCompat | null;
+  /** 管理员填的价格：每百万 token 的输入、输出（美元）。 */
+  cost?: [number, number] | null;
 }

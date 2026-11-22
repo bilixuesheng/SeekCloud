@@ -161,25 +161,44 @@ describe("设置：平台调用的模型（#140）", () => {
     });
 
   it("没改过是自动（auto）；可以选模型列表里的、再改回自动；不在列表里的不行；没登录不能看也不能改", async () => {
-    expect(await (await browser.get("/api/settings/platform-model")).json()).toEqual({
+    expect(await (await browser.get("/api/settings/platform-model")).json()).toMatchObject({
       model: "auto",
+      // 自动：按 dsh 内置目录的价格挑最省的，说明现在用的是哪个、为什么
+      resolved: "deepseek/deepseek-flash",
+      basis: "price",
     });
     const res = await put(browser, { model: "deepseek/deepseek-v4-pro" });
     expect(res.status).toBe(200);
-    expect(await (await browser.get("/api/settings/platform-model")).json()).toEqual({
+    expect(await (await browser.get("/api/settings/platform-model")).json()).toMatchObject({
       model: "deepseek/deepseek-v4-pro",
+      resolved: "deepseek/deepseek-v4-pro",
+      basis: "chosen",
     });
     // #113 之前的写法（只有模型 ID）当作 DeepSeek 官方的
-    expect(await (await put(browser, { model: "deepseek-flash" })).json()).toEqual({
+    expect(await (await put(browser, { model: "deepseek-flash" })).json()).toMatchObject({
       model: "deepseek/deepseek-flash",
     });
     const bad = await put(browser, { model: "gpt-x" });
     expect(bad.status).toBe(400);
     expect(((await bad.json()) as { error: { code: string } }).error.code).toBe("unknown_model");
     expect((await put(browser, { model: "auto" })).status).toBe(200);
-    expect(await (await browser.get("/api/settings/platform-model")).json()).toEqual({
-      model: "auto",
-    });
+    const state = (await (await browser.get("/api/settings/platform-model")).json()) as {
+      model: string;
+      candidates: Array<{
+        ref: string;
+        cost: number[];
+        callCost: number;
+        canSkipThinking: boolean;
+      }>;
+    };
+    expect(state.model).toBe("auto");
+    // 每个能选的模型都带价格和估出来的一次平台调用的价钱（约 2000 个输入 token、20 个输出 token）
+    expect(state.candidates.map((c) => c.ref)).toEqual([
+      "deepseek/deepseek-flash",
+      "deepseek/deepseek-v4-pro",
+    ]);
+    expect(state.candidates[0]).toMatchObject({ cost: [0.3, 1.2], canSkipThinking: true });
+    expect(state.candidates[0]?.callCost).toBeCloseTo((0.3 * 2000 + 1.2 * 20) / 1e6, 10);
     expect((await t.browser().get("/api/settings/platform-model")).status).toBe(401);
     expect((await put(t.browser(), { model: "auto" })).status).toBe(401);
   });

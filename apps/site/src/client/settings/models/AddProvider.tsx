@@ -8,7 +8,7 @@ import { Modal } from "../../ui/modal";
 import { Select } from "../../ui/select";
 import { toast, useErrorToast } from "../../ui/toast";
 import { KeyField } from "./KeyField";
-import { type DraftModel, ModelEditor } from "./ModelEditor";
+import { type DraftModel, fitDrafts, ModelEditor, specOfDraft } from "./ModelEditor";
 import {
   CATALOG,
   type CatalogEntry,
@@ -233,7 +233,7 @@ function CustomForm({
           baseUrl: baseUrl.trim(),
           ...(apiKey ? { apiKey } : {}),
           ...(apiKeyEnv.trim() ? { apiKeyEnv: apiKeyEnv.trim() } : {}),
-          models: models.map(({ key: _key, ...spec }) => spec),
+          models: models.map((m) => specOfDraft(m, "custom")),
         }),
       );
     } catch (e) {
@@ -296,7 +296,11 @@ function CustomForm({
           label="API 协议"
           value={protocol}
           options={MODEL_PROTOCOLS.map((p) => ({ value: p, label: PROTOCOL_LABELS[p] }))}
-          onChange={(v) => setProtocol(v as ModelProtocol)}
+          onChange={(v) => {
+            setProtocol(v as ModelProtocol);
+            // 已经加的模型的思考档位按新协议调整
+            setModels(fitDrafts(models, v as ModelProtocol));
+          }}
         />
       </div>
       <p className="settings-hint">
@@ -319,7 +323,14 @@ function CustomForm({
           onChange={(e) => setApiKeyEnv(e.target.value)}
         />
       </label>
-      <ModelEditor models={models} onChange={setModels} probe={probe} allowReasoning />
+      <div className="field">
+        <span>模型</span>
+        <ModelEditor
+          models={models}
+          onChange={setModels}
+          context={{ kind: "custom", protocol, probe }}
+        />
+      </div>
       <div className="settings-form-actions">
         <button type="button" className="secondary" onClick={onCancel}>
           取消

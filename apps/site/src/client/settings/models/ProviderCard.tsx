@@ -7,14 +7,13 @@ import { Modal } from "../../ui/modal";
 import { Select } from "../../ui/select";
 import { toast } from "../../ui/toast";
 import { KeyField } from "./KeyField";
-import { type DraftModel, draftOf, ModelEditor } from "./ModelEditor";
+import { type DraftModel, draftOf, fitDrafts, ModelEditor, specOfDraft } from "./ModelEditor";
 import {
   type KeyDraft,
   keyPatch,
   MODEL_PROVIDERS,
   PROTOCOL_LABELS,
   type ProviderView,
-  specOf,
 } from "./types";
 import { urlWarnings } from "./url-check";
 
@@ -207,7 +206,7 @@ function ModelsForm({
 }) {
   const custom = provider.kind === "custom";
   const [models, setModels] = useState<DraftModel[]>(() =>
-    provider.models.map((m) => draftOf(specOf(m))),
+    provider.models.map((m) => draftOf(m, provider.kind)),
   );
   const [busy, setBusy] = useState(false);
 
@@ -224,15 +223,7 @@ function ModelsForm({
   };
 
   const save = () =>
-    patch(
-      {
-        // 内置的、目录里的模型的推理等级由目录给（和 dsh 一样不在表单里改）
-        models: models.map(({ key: _key, ...spec }) =>
-          custom ? spec : { ...spec, reasoningEfforts: null },
-        ),
-      },
-      "模型列表已保存。",
-    );
+    patch({ models: models.map((m) => specOfDraft(m, provider.kind)) }, "模型列表已保存。");
 
   const reset = async () => {
     const ok = await confirmDialog({
@@ -259,8 +250,13 @@ function ModelsForm({
       <ModelEditor
         models={models}
         onChange={setModels}
-        probe={{ id: provider.id }}
-        allowReasoning={custom}
+        context={{
+          kind: provider.kind,
+          providerId: provider.id,
+          protocol: provider.api ?? "openai-completions",
+          probe: { id: provider.id },
+          efforts: provider.models[0]?.efforts,
+        }}
       />
       <div className="settings-form-actions spread">
         {!custom && provider.customModels ? (
@@ -342,12 +338,27 @@ function ConnectionForm({
       patch.apiKeyEnv = apiKeyEnv.trim() || null;
     }
     if (url !== (provider.baseUrl ?? "")) patch.baseUrl = url || null;
-    if (custom && protocol !== provider.api) patch.api = protocol;
+    let refitted = 0;
+    if (custom && protocol !== provider.api) {
+      patch.api = protocol;
+      // 换协议时已有模型的思考档位跟着调整（比如换成 Gemini 时去掉"关闭"），不然保存不了
+      const before = provider.models.map((m) => draftOf(m, "custom"));
+      const after = fitDrafts(before, protocol);
+      refitted = after.filter(
+        (m, i) =>
+          JSON.stringify(m.reasoningEfforts) !== JSON.stringify(before[i]?.reasoningEfforts),
+      ).length;
+      if (refitted > 0) patch.models = after.map((m) => specOfDraft(m, "custom"));
+    }
     if (Object.keys(patch).length === 0) return onCancel();
     setBusy(true);
     try {
       onSaved(await api<ProviderView>(`${MODEL_PROVIDERS}/${provider.id}`, patch, "PATCH"));
-      toast("连接设置已保存，下一次请求时生效。");
+      toast(
+        refitted > 0
+          ? `连接设置已保存；按 ${PROTOCOL_LABELS[protocol]} 调整了 ${refitted} 个模型的思考档位。`
+          : "连接设置已保存，下一次请求时生效。",
+      );
     } catch (e) {
       toast((e as ApiError).message, "error");
     } finally {

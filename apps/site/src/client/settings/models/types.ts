@@ -3,6 +3,7 @@ import type { ModelProtocol, ThinkingEffort } from "@seekcloud/protocol";
 /** 设置的"模型"用到的接口和形状（server/routes/model.ts）。 */
 export const MODEL_PROVIDERS = "/api/settings/model-providers";
 export const CATALOG = "/api/settings/model-providers/catalog";
+export const KNOWN_MODELS = "/api/settings/model-providers/known-models";
 
 export type ModelInput = "text" | "image";
 export type ReasoningEfforts = Partial<Record<ThinkingEffort, string | null>>;
@@ -16,6 +17,8 @@ export interface ModelSpec {
   input: ModelInput[];
   reasoningEfforts?: ReasoningEfforts | null;
   compat?: Record<string, string | number | boolean> | null;
+  /** 管理员填的价格：每百万 token 的输入、输出（美元）。 */
+  cost?: [number, number] | null;
 }
 
 /** 设置接口回来的一个模型：没填的项是用上的默认值。 */
@@ -24,6 +27,35 @@ export interface ModelSpecView extends ModelSpec {
   contextWindow: number;
   maxTokens: number;
   efforts: ThinkingEffort[];
+  cost: [number, number] | null;
+  /** 目录（或 DeepSeek 内置）里的价格。 */
+  listedCost: [number, number] | null;
+  /** 上下文窗口没填、目录里也没有，contextWindow 是默认值。 */
+  unsized: boolean;
+}
+
+/** dsh 内置目录里认得出来的模型（添加模型的候选、获取可用模型时认出来的）。 */
+export interface KnownModel {
+  id: string;
+  name: string;
+  provider: string;
+  providerName: string;
+  api: ModelProtocol;
+  contextWindow: number | null;
+  maxTokens: number | null;
+  input: ModelInput[];
+  efforts: ThinkingEffort[];
+  wire?: Partial<Record<ThinkingEffort, string>>;
+  cost: [number, number] | null;
+}
+
+/** 获取可用模型时端点列出的一个模型。 */
+export interface ProbedModel {
+  id: string;
+  name?: string;
+  contextWindow?: number;
+  maxTokens?: number;
+  known?: KnownModel;
 }
 
 export interface ProviderView {
@@ -81,10 +113,12 @@ export function specOf(view: ModelSpecView): ModelSpec {
   return {
     id: view.id,
     name: view.name && view.name !== view.id ? view.name : null,
-    contextWindow: view.contextWindow,
+    // 没填的上下文窗口还是没填（不把默认值当成填了的写回去）
+    contextWindow: view.unsized ? null : view.contextWindow,
     maxTokens: view.maxTokens,
     input: view.input,
     reasoningEfforts: view.reasoningEfforts ?? null,
     compat: view.compat ?? null,
+    cost: view.cost ?? null,
   };
 }

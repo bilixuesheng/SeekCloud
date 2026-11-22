@@ -153,6 +153,46 @@ describe("获取可用模型的接口", () => {
     );
   });
 
+  it("认得出来的模型带上 dsh 内置目录里的资料（上下文窗口、思考档位、价格），认不出来的不带", async () => {
+    t.model.reply({
+      json: {
+        data: [{ id: "anthropic/claude-sonnet-4.5", context_length: 1_000_000 }, { id: "m-a" }],
+      },
+    });
+    const res = await browser.post(PROBE, {
+      api: "openai-completions",
+      baseUrl: "https://gw.example/v1",
+    });
+    const { models } = (await res.json()) as {
+      models: Array<{ id: string; contextWindow?: number; known?: Record<string, unknown> }>;
+    };
+    // 端点自己报的上下文窗口照样带着（以它为准），目录的资料另放在 known 里
+    expect(models[0]).toMatchObject({
+      id: "anthropic/claude-sonnet-4.5",
+      contextWindow: 1_000_000,
+      known: { id: "claude-sonnet-4-5", provider: "anthropic", contextWindow: 200_000 },
+    });
+    expect(models[1]).toEqual({ id: "m-a" });
+  });
+
+  it("搜内置目录：全部的（去重）或者一个提供方的；没登录不能搜", async () => {
+    const all = (await (
+      await browser.get("/api/settings/model-providers/known-models?q=gpt-5.1")
+    ).json()) as { models: Array<{ id: string; provider: string; wire?: unknown }> };
+    expect(all.models[0]).toMatchObject({
+      id: "gpt-5.1",
+      provider: "openai",
+      wire: { off: "none" },
+    });
+    const groq = (await (
+      await browser.get("/api/settings/model-providers/known-models?provider=groq&limit=500")
+    ).json()) as { models: Array<{ provider: string }> };
+    expect(groq.models.length).toBe(CATALOG.providers.find((p) => p.id === "groq")?.models.length);
+    expect((await t.browser().get("/api/settings/model-providers/known-models?q=gpt")).status).toBe(
+      401,
+    );
+  });
+
   it("缺协议、缺地址、没有这个提供方", async () => {
     expect((await browser.post(PROBE, { baseUrl: "https://x.example" })).status).toBe(400);
     expect((await browser.post(PROBE, { api: "openai-completions" })).status).toBe(400);

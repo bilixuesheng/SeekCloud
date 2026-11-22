@@ -273,7 +273,7 @@ a.ghost:hover {
   gap: 6px;
 }
 
-.field > span {
+.field > span:not(.field-hint) {
   font-size: 13px;
   font-weight: 550;
   color: var(--fg-2);
@@ -5522,19 +5522,11 @@ button.changes-path:hover {
   font-size: 14px;
 }
 
+/* ---- 模型列表（settings/models/ModelEditor.tsx）：每行名字下面写清能力，点一行打开编辑弹窗 ---- */
 .model-editor {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.model-editor-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-  font-weight: 550;
-  color: var(--fg-2);
 }
 
 .model-rows {
@@ -5548,27 +5540,28 @@ button.changes-path:hover {
   overflow: hidden;
 }
 
-.model-rows:empty {
-  display: none;
+.model-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  transition: background 0.15s;
 }
 
 .model-row + .model-row {
   border-top: 1px solid var(--border);
 }
 
-.model-row-head {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 44px;
-  padding: 0 6px;
+.model-row:hover {
+  background: var(--hover);
 }
 
 .model-row-handle {
   display: grid;
+  flex-shrink: 0;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 36px;
   border: 0;
   border-radius: 8px;
   background: none;
@@ -5581,21 +5574,30 @@ button.changes-path:hover {
   cursor: grabbing;
 }
 
-.model-row-title {
+.model-row-main {
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 4px;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 6px;
   border: 0;
   background: none;
+  color: inherit;
   text-align: left;
+}
+
+.model-row-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
 }
 
 .model-row-name {
   overflow: hidden;
   font-size: 14px;
+  font-weight: 500;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -5603,133 +5605,77 @@ button.changes-path:hover {
 .model-row-id {
   overflow: hidden;
   color: var(--muted);
-  font-size: 12.5px;
+  font-family: var(--mono);
+  font-size: 12px;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.model-row-chevron {
-  display: grid;
-  flex-shrink: 0;
-  margin-left: auto;
-  color: var(--muted);
-  transition: transform 0.2s var(--ease-out);
-}
-
-.model-row.open .model-row-chevron {
-  transform: rotate(180deg);
-}
-
-.model-options {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 4px 14px 14px;
-  animation: rise-in 0.2s var(--ease-out);
-}
-
-.model-options-pair {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
-}
-
-.model-inputs {
+/* 能力一行：用中点隔开，放不下就换行 */
+.model-facts {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-  margin: 0;
-  padding: 0;
-  border: 0;
+  gap: 2px 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
-.model-inputs legend {
-  width: 100%;
-  margin-bottom: 6px;
-  font-size: 13px;
-  font-weight: 550;
-  color: var(--fg-2);
+.model-facts > span + span::before {
+  content: "·";
+  margin: 0 6px;
+  color: var(--border-strong);
 }
 
-.checkbox {
+.model-facts > .warn {
+  color: var(--warning);
+}
+
+.model-row-edit {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 28px;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.model-row:hover .model-row-edit {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .model-row-edit {
+    display: none;
+  }
+}
+
+.model-empty {
+  padding: 4px 2px;
+}
+
+.add-model-button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.checkbox input {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.reasoning {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.reasoning-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-  font-weight: 550;
-  color: var(--fg-2);
-}
-
-.reasoning-rows {
-  display: flex;
-  flex-direction: column;
+  justify-content: center;
   gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.reasoning-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.reasoning-level {
-  width: 3.5em;
-  flex-shrink: 0;
-  font-size: 14px;
-}
-
-.reasoning-rows input {
-  flex: 1;
-  min-width: 0;
-  height: 38px;
-}
-
-.model-add {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.model-add input {
-  flex: 1;
-  min-width: 0;
-  height: 38px;
-  font-size: 14px;
-}
-
-.probe-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid var(--border-strong);
+  height: 40px;
+  border: 1px dashed var(--border-strong);
   border-radius: 12px;
-  background: var(--surface-2);
-  animation: rise-in 0.2s var(--ease-out);
+  background: none;
+  color: var(--fg-2);
+  font-size: 14px;
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
+}
+
+.add-model-button:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-fg);
 }
 
 .probe-search {
@@ -5754,9 +5700,46 @@ button.changes-path:hover {
   font-size: 14px;
 }
 
-.probe-list,
+/* ---- 添加模型（弹窗）：搜索框加"从接口获取"，下面是候选，点一下加入或移出 ---- */
+.add-models {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.add-models-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.add-models-search .probe-search {
+  flex: 1;
+}
+
+.add-models-search .pill-button {
+  height: 40px;
+}
+
+.candidates h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0 0 6px;
+  color: var(--fg-2);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.candidates-note {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.candidates ul,
 .catalog-list {
-  max-height: 280px;
+  max-height: 320px;
   margin: 0;
   padding: 0;
   overflow-y: auto;
@@ -5764,18 +5747,393 @@ button.changes-path:hover {
   overscroll-behavior: contain;
 }
 
-.probe-row {
-  padding: 6px 4px;
+.candidate {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  transition: background 0.15s;
 }
 
-.probe-name {
+.candidate:hover {
+  background: var(--hover);
+}
+
+.candidate-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* 选中的打勾：圆框里一个勾，和侧栏、下拉框的选中一个样子 */
+.candidate-check {
+  position: relative;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.candidate.chosen .candidate-check {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.candidate.chosen .candidate-check::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 5.5px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 1.8px 1.8px 0;
+  transform: rotate(45deg);
+}
+
+.candidate.custom-id {
+  align-items: center;
+  border: 1px dashed var(--border-strong);
+  color: var(--fg-2);
   font-size: 14px;
 }
 
-.probe-id {
-  margin-left: 6px;
+.candidate.custom-id code {
+  font-family: var(--mono);
+  color: var(--fg);
+}
+
+/* ---- 一个模型的编辑弹窗 ---- */
+.model-form {
+  gap: 14px;
+}
+
+.model-known {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent-fg);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.model-options-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.field-hint {
   color: var(--muted);
   font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.field-hint.warn {
+  color: var(--warning);
+}
+
+.token-field > label {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--fg-2);
+}
+
+.token-field input {
+  height: 40px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.token-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.token-preset {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.token-preset:hover {
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+
+.token-preset.current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-fg);
+}
+
+.price-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.price-field legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--fg-2);
+}
+
+.price-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.price-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+.price-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.price-box input {
+  width: 84px;
+  height: 38px;
+  padding: 0 10px 0 0;
+  border: 0;
+  box-shadow: none;
+  background: none;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-unit {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.model-listed {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 13.5px;
+}
+
+.model-listed dt {
+  color: var(--muted);
+}
+
+.model-listed dd {
+  margin: 0;
+}
+
+.model-listed .model-listed-note {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* ---- 思考（只有自定义接口的模型要声明） ---- */
+.reasoning {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reasoning-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--fg);
+}
+
+.reasoning-head > span,
+.reasoning-adaptive > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reasoning-sub {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.reasoning-adaptive {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.reasoning-adaptive input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.reasoning-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.reasoning-level {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg-2);
+  font-size: 13.5px;
+  line-height: 30px;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.reasoning-level.current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-fg);
+}
+
+.reasoning-level:disabled {
+  cursor: default;
+}
+
+.reasoning-budget {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--fg-2);
+  font-size: 13px;
+}
+
+.disclosure-chevron {
+  display: grid;
+  transform: rotate(-90deg);
+  transition: transform 0.2s var(--ease-out);
+}
+
+.disclosure[aria-expanded="true"] .disclosure-chevron {
+  transform: none;
+}
+
+.reasoning-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  animation: rise-in 0.2s var(--ease-out);
+}
+
+.reasoning-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reasoning-level-name {
+  width: 3em;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.reasoning-row input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  font-family: var(--mono);
+  font-size: 13.5px;
+}
+
+/* 平台调用的模型选"自动"时，现在实际用的是哪个 */
+.platform-resolved {
+  margin: 8px 0 0;
+  color: var(--fg-2);
+  font-size: 13px;
+}
+
+.modal-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.modal-subtitle {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .catalog-item {
@@ -6290,23 +6648,6 @@ button.model-chip {
 
 .model-chip.more {
   color: var(--accent-fg);
-}
-
-.model-chip.add {
-  border-style: dashed;
-  background: none;
-  color: var(--muted);
-}
-
-.model-chip.add:hover {
-  border-color: var(--accent);
-  color: var(--accent-fg);
-}
-
-.reasoning-add {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
 }
 
 .provider-actions {

@@ -91,6 +91,19 @@ function efforts(model: PiModel): string[] {
   });
 }
 
+/**
+ * 各档位发给接口的参数值里和档位名不一样的（比如 off 发 "none"）。和档位名一样的不记：设置页和 dsh 都默认用档位名。
+ * 自定义接口添加一个认得出来的模型时，照这个填推理等级。
+ */
+function wire(model: PiModel, offered: string[]): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const level of offered) {
+    const mapped = model.thinkingLevelMap?.[level];
+    if (typeof mapped === "string" && mapped !== level) out[level] = mapped;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 const isProtocol = (api: string): api is ModelProtocol =>
   (MODEL_PROTOCOLS as readonly string[]).includes(api);
 
@@ -115,6 +128,8 @@ for (const file of readdirSync(dataDir).sort()) {
       throw new Error(`${id} 的 ${model.api} 有两个地址：${known}、${model.baseUrl}`);
     }
     endpoints[model.api] = model.baseUrl;
+    const offered = efforts(model);
+    const spelled = model.reasoning ? wire(model, offered) : undefined;
     models.push({
       id: model.id,
       name: model.name ?? model.id,
@@ -122,7 +137,8 @@ for (const file of readdirSync(dataDir).sort()) {
       input: model.input?.length ? model.input : ["text"],
       contextWindow: model.contextWindow ?? null,
       maxTokens: model.maxTokens ?? null,
-      efforts: efforts(model),
+      efforts: offered,
+      ...(spelled ? { wire: spelled } : {}),
       cost:
         model.cost?.input !== undefined && model.cost?.output !== undefined
           ? [model.cost.input, model.cost.output]
