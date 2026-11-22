@@ -5598,19 +5598,30 @@ button.changes-path:hover {
   text-overflow: ellipsis;
 }
 
-/* 能力一行：用中点隔开，放不下就换行 */
+/*
+ * 能力一行：用中点隔开，放不下就换行。中点画在每一项左边的空隙里，整行往左多伸出一截再裁掉，
+ * 换行后行首的中点正好被裁掉，不会以"·"开头。
+ */
 .model-facts {
   display: flex;
   flex-wrap: wrap;
   gap: 2px 0;
+  margin-left: -14px;
+  clip-path: inset(0 0 0 14px);
   color: var(--muted);
   font-size: 12.5px;
   line-height: 1.5;
 }
 
-.model-facts > span + span::before {
+.model-facts > span {
+  position: relative;
+  margin-left: 14px;
+}
+
+.model-facts > span::before {
   content: "·";
-  margin: 0 6px;
+  position: absolute;
+  left: -10px;
   color: var(--border-strong);
 }
 
