@@ -1,4 +1,4 @@
-import type { Session } from "@seekcloud/protocol";
+import type { Session, SessionGroup } from "@seekcloud/protocol";
 import { createContext, useContext } from "react";
 
 export interface Me {
@@ -16,6 +16,8 @@ export interface ShellValue {
   notice?: string;
   /** 侧栏里的会话列表。 */
   sessions: Session[];
+  /** 侧栏的分组（#153），按顺序。 */
+  groups: SessionGroup[];
   /** 新建或更新了一个会话，先放进侧栏，不等列表的事件流。 */
   upsert: (session: Session) => void;
   /** 手机上打开会话列表（会话页自己的顶栏用）。 */

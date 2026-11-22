@@ -12,6 +12,7 @@ import { registerTrunk } from "./trunk";
 const shell: ShellValue = {
   me: { id: "u1", githubLogin: null, nickname: "管理员" },
   sessions: [],
+  groups: [],
   upsert: () => undefined,
   openDrawer: () => undefined,
   overlayOpen: true,

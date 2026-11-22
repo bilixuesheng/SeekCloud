@@ -1,3 +1,4 @@
+import { MAX_GROUP_NAME } from "@seekcloud/protocol";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { type ApiError, api } from "../api";
 import { copyText } from "../copy";
@@ -6,6 +7,7 @@ import {
   ArchiveIcon,
   BoxIcon,
   BranchIcon,
+  CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   DotIcon,
@@ -15,16 +17,18 @@ import {
   MenuIcon,
   PencilIcon,
   PinIcon,
+  PlusIcon,
   TrashIcon,
 } from "../Icons";
 import { Pages, Sheet, usePresence } from "../Motion";
 import { navigate } from "../router";
+import { useShell } from "../shell";
 import { PullRequestBadge, pullRequestText } from "./PullRequestBadge";
 import { type Session, statusWithDetail } from "./types";
 
-/** 标题菜单里的几页：菜单本身、打开方式、重命名、确认删除。 */
-type MenuPage = "menu" | "open" | "rename" | "delete";
-const MENU_PAGES: MenuPage[] = ["menu", "open", "rename", "delete"];
+/** 标题菜单里的几页：菜单本身、打开方式、重命名、确认删除、移到分组、新分组。 */
+type MenuPage = "menu" | "open" | "rename" | "delete" | "group" | "new-group";
+const MENU_PAGES: MenuPage[] = ["menu", "open", "rename", "delete", "group", "new-group"];
 
 /**
  * 会话页的顶栏（照 Claude Code 手机版）：侧栏按钮（只在手机上）、会话标题和 ⌄、会话信息。
@@ -195,7 +199,8 @@ function InfoRow({
 /**
  * 会话的菜单（底部弹层），照 Claude：顶上是标题，下面是打开 PR、置顶、标为未读、打开方式、重命名、复制链接、归档，最后是删除。
  * 会话页的标题和侧栏里会话右边的"⋯"打开的是同一个。已归档的会话没有"置顶"（归档时自动取消置顶）。
- * Claude 还有移到分组、分享：分享不做（2026-11-11 定的），移到分组还没做。
+ * "移到分组"（#153）列出已有的分组和"新分组"，在分组里时还有"移出分组"；键盘和读屏都能用它代替拖动。
+ * Claude 还有分享：不做（2026-11-11 定的）。
  */
 export function SessionMenu({
   id,
@@ -213,6 +218,7 @@ export function SessionMenu({
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const archived = session.status === "archived";
+  const { groups } = useShell();
 
   const close = () => {
     onClose();
@@ -245,6 +251,24 @@ export function SessionMenu({
   };
   const togglePin = async () => {
     const ok = await run(() => api(`/api/sessions/${id}/pin`, { pinned: !pinned }));
+    if (ok) close();
+  };
+
+  /** 放进分组（最上面），或者移出分组回到"最近"。 */
+  const moveTo = async (groupId: string | null) => {
+    const ok = await run(() =>
+      api(
+        `/api/sessions/${id}/place`,
+        groupId ? { section: "group", groupId, after: null } : { section: "recent", after: null },
+      ),
+    );
+    if (ok) close();
+  };
+  const moveToNewGroup = async (name: string) => {
+    const ok = await run(async () => {
+      const group = await api<{ id: string }>("/api/session-groups", { name });
+      await api(`/api/sessions/${id}/place`, { section: "group", groupId: group.id, after: null });
+    });
     if (ok) close();
   };
 
@@ -292,6 +316,11 @@ export function SessionMenu({
               onClick={() => void togglePin()}
             >
               {pinned ? "取消置顶" : "置顶"}
+            </MenuItem>
+          )}
+          {!archived && (
+            <MenuItem icon={<ListIcon />} onClick={() => setPage("group")} more>
+              移到分组
             </MenuItem>
           )}
           <MenuItem icon={<DotIcon />} disabled={busy} onClick={() => void toggleUnread()}>
@@ -384,8 +413,98 @@ export function SessionMenu({
             </button>
           </div>
         </div>
+
+        <div className="sheet-menu" role="menu">
+          <SheetBack onClick={() => setPage("menu")}>移到分组</SheetBack>
+          {groups.map((g) => (
+            <MenuItem
+              key={g.id}
+              icon={g.id === session.groupId ? <CheckIcon /> : <ListIcon />}
+              disabled={busy || g.id === session.groupId}
+              onClick={() => void moveTo(g.id)}
+            >
+              {g.name}
+            </MenuItem>
+          ))}
+          <MenuItem icon={<PlusIcon size={14} />} onClick={() => setPage("new-group")} more>
+            新分组
+          </MenuItem>
+          {session.groupId && (
+            <>
+              <div className="popover-divider" />
+              <MenuItem icon={<DotIcon />} disabled={busy} onClick={() => void moveTo(null)}>
+                移出分组
+              </MenuItem>
+            </>
+          )}
+          {error && page === "group" && (
+            <p className="alert sheet-alert" role="alert">
+              {error}
+            </p>
+          )}
+        </div>
+
+        <NewGroupForm
+          key={open ? "open-group" : "closed-group"}
+          busy={busy}
+          error={page === "new-group" ? error : undefined}
+          onBack={() => {
+            setError(undefined);
+            setPage("group");
+          }}
+          onSubmit={moveToNewGroup}
+        />
       </Pages>
     </Sheet>
+  );
+}
+
+/** 新建一个分组并把会话放进去。名字默认是"新分组"，打开时全选，直接输入就是改名。 */
+function NewGroupForm({
+  busy,
+  error,
+  onBack,
+  onSubmit,
+}: {
+  busy: boolean;
+  error?: string;
+  onBack: () => void;
+  onSubmit: (name: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState("新分组");
+  const trimmed = value.trim();
+  return (
+    <form
+      className="sheet-menu"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (trimmed) void onSubmit(trimmed);
+      }}
+    >
+      <SheetBack onClick={onBack}>新分组</SheetBack>
+      <label className="field sheet-field">
+        <span className="visually-hidden">分组名</span>
+        <input
+          value={value}
+          maxLength={MAX_GROUP_NAME}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => setValue(e.target.value)}
+        />
+      </label>
+      {error && (
+        <p className="alert sheet-alert" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="sheet-actions">
+        <button type="button" className="pill-button" onClick={onBack}>
+          取消
+        </button>
+        <button type="submit" className="pill-button accent" disabled={busy || !trimmed}>
+          创建并移入
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -449,7 +568,7 @@ function MenuLink({
   );
 }
 
-function SheetBack({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+export function SheetBack({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
     <div className="sheet-back">
       <button type="button" className="icon-button small" aria-label="返回" onClick={onClick}>
@@ -462,18 +581,23 @@ function SheetBack({ onClick, children }: { onClick: () => void; children: React
   );
 }
 
-function RenameForm({
+export function RenameForm({
   title,
   busy,
   error,
   onBack,
   onSubmit,
+  label = "会话标题",
+  maxLength = 100,
 }: {
   title: string;
   busy: boolean;
   error?: string;
   onBack: () => void;
   onSubmit: (title: string) => Promise<void>;
+  /** 读屏念的输入框名字。 */
+  label?: string;
+  maxLength?: number;
 }) {
   const [value, setValue] = useState(title);
   const trimmed = value.trim();
@@ -485,8 +609,8 @@ function RenameForm({
     <form className="sheet-menu" onSubmit={submit}>
       <SheetBack onClick={onBack}>重命名</SheetBack>
       <label className="field sheet-field">
-        <span className="visually-hidden">会话标题</span>
-        <input value={value} maxLength={100} onChange={(e) => setValue(e.target.value)} />
+        <span className="visually-hidden">{label}</span>
+        <input value={value} maxLength={maxLength} onChange={(e) => setValue(e.target.value)} />
       </label>
       {error && (
         <p className="alert sheet-alert" role="alert">

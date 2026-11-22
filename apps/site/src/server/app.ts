@@ -25,6 +25,7 @@ import { modelRoutes } from "./routes/model";
 import { newRouter } from "./routes/router";
 import { sessionRoutes } from "./routes/sessions";
 import { settingsRoutes } from "./routes/settings";
+import { sidebarRoutes } from "./routes/sidebar";
 import type { SecretBox } from "./secrets";
 import type { HostLink } from "./sessions/host";
 import { PinTitles } from "./sessions/pin-title";
@@ -202,6 +203,7 @@ export function createApp(deps: AppDeps) {
   app.route("/api/github", githubRoutes(deps, sessions));
   app.route("/api/settings", settingsRoutes(deps, sessions));
   app.route("/api", sessionRoutes(deps, sessions));
+  app.route("/api", sidebarRoutes(deps, sessions));
   app.route("/api", meRoutes(deps));
   app.route("/api", modelRoutes(deps));
 

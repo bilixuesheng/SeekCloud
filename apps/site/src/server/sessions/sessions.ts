@@ -18,7 +18,7 @@ import type {
   ThinkingEffort,
 } from "@seekcloud/protocol";
 import { fitEffort, MAX_PUSH_FOLLOW_UPS } from "@seekcloud/protocol";
-import { and, asc, desc, eq, gt, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, notInArray, or, sql } from "drizzle-orm";
 import type { AppDeps } from "../app";
 import type { Database, Tx } from "../db/client";
 import {
@@ -40,6 +40,7 @@ import { judgeTurnEnd } from "./awaiting-input";
 import { DEFAULT_MODEL, findModel } from "./models";
 import { type PinTitles, pinTitle } from "./pin-title";
 import { toSafeError } from "./safe-error";
+import { naturalKey, Sidebar } from "./sidebar";
 import { Topic } from "./topic";
 import type { WaitingCheck } from "./waiting-check";
 
@@ -139,6 +140,10 @@ export class Sessions {
   readonly #live = new Topic<LiveEvent>();
   /** 某个用户的某个会话有变化。键是用户 id，值是会话短 ID。 */
   readonly #changes = new Topic<string>();
+  /** 某个用户的侧栏分组有变化（#153）。键是用户 id。 */
+  readonly #groupChanges = new Topic<void>();
+  /** 侧栏的分组和顺序（#153，sidebar.ts）。 */
+  readonly sidebar: Sidebar;
   /** 后台还没做完的"等你输入"判断（#judgeLater）。 */
   readonly #judging = new Set<Promise<void>>();
 
@@ -150,6 +155,12 @@ export class Sessions {
     this.#deps = deps;
     this.#waitingCheck = options.waitingCheck;
     this.#pinTitles = options.pinTitles;
+    this.sidebar = new Sidebar(deps, {
+      sessions: (userId, shortIds) => {
+        for (const shortId of shortIds) this.#changes.emit(userId, shortId);
+      },
+      groups: (userId) => this.#groupChanges.emit(userId, undefined),
+    });
     deps.host?.connect(
       (event) => this.handleHostEvent(event),
       () => void this.dispatchQueued(),
@@ -208,6 +219,7 @@ export class Sessions {
             effort,
             createdAt: now,
             updatedAt: now,
+            sortKey: now.getTime(),
           })
           .returning();
         const id = (session as SessionRow).id;
@@ -232,7 +244,10 @@ export class Sessions {
     return { ok: true, value: (await this.#view(created.id)) as Session };
   }
 
-  /** 最近有动静的 200 个，加上所有置顶的（置顶的再久没动也要在侧栏里），最近有动静的在前。 */
+  /**
+   * 最近有动静的 200 个，加上所有置顶的和分组里的（再久没动也要在侧栏里），最近有动静的在前。
+   * 侧栏自己按 pinnedAt、groupId、sortKey 分类排序。
+   */
   async list(userId: string): Promise<Session[]> {
     const { db } = this.#deps;
     const recent = await db
@@ -252,7 +267,7 @@ export class Sessions {
               .where(
                 and(
                   eq(sessions.userId, userId),
-                  isNotNull(sessions.pinnedAt),
+                  or(isNotNull(sessions.pinnedAt), isNotNull(sessions.groupId)),
                   notInArray(
                     sessions.id,
                     recent.map((r) => r.id),
@@ -302,9 +317,19 @@ export class Sessions {
       if (!session) return "session_not_found" as const;
       if (pinned && session.status === "archived") return "session_archived" as const;
       if (pinned === (session.pinnedAt !== null)) return session;
+      const now = this.#deps.clock.now();
+      // 置顶：放在置顶的最上面（后置顶的在前），离开分组；取消置顶：回到"最近"，按最近有动静的时间排
       const [row] = await tx
         .update(sessions)
-        .set({ pinnedAt: pinned ? this.#deps.clock.now() : null })
+        .set(
+          pinned
+            ? {
+                pinnedAt: now,
+                groupId: null,
+                sortKey: await this.sidebar.pinKey(tx, userId, session.id, now),
+              }
+            : { pinnedAt: null, sortKey: naturalKey },
+        )
         .where(eq(sessions.id, session.id))
         .returning();
       return row as SessionRow;
@@ -511,8 +536,11 @@ export class Sessions {
       if (session.status === "archived") return { session, changed: false };
       const number = await this.#stopRunningTurn(tx, session.id);
       await this.#setStatus(tx, session.id, number, { status: "archived", detail: null });
-      // 归档的会话收在列表最下面的一组里，不再留在置顶里
-      await tx.update(sessions).set({ pinnedAt: null }).where(eq(sessions.id, session.id));
+      // 归档的会话收在列表最下面的一组里，不再留在置顶和分组里
+      await tx
+        .update(sessions)
+        .set({ pinnedAt: null, groupId: null, sortKey: naturalKey })
+        .where(eq(sessions.id, session.id));
       return { session, changed: true };
     });
     if (!done) return { ok: false, error: "session_not_found" };
@@ -628,6 +656,11 @@ export class Sessions {
   }
 
   /** 订阅这个用户的会话列表变化：listener 收到变了的会话的短 ID。 */
+  /** 侧栏的分组有变化（建、改名、删）。 */
+  subscribeGroups(userId: string, listener: () => void): () => void {
+    return this.#groupChanges.on(userId, listener);
+  }
+
   subscribeChanges(userId: string, listener: (shortId: string) => void): () => void {
     return this.#changes.on(userId, listener);
   }
@@ -1026,7 +1059,10 @@ export class Sessions {
       if (latest?.number !== turn.number) return undefined;
       await this.#setStatus(tx, sessionId, turn.number, { status: "waiting", detail });
       // 补上附加说明不算新的动静：会话列表的排序和"多久以前"不变
-      await tx.update(sessions).set({ updatedAt: row.updatedAt }).where(eq(sessions.id, sessionId));
+      await tx
+        .update(sessions)
+        .set({ updatedAt: row.updatedAt, sortKey: row.sortKey })
+        .where(eq(sessions.id, sessionId));
       return row;
     });
     if (session) this.#notify(session);
@@ -1351,7 +1387,13 @@ export class Sessions {
     const now = this.#deps.clock.now();
     const [row] = await tx
       .update(sessions)
-      .set({ lastSeq: sql`${sessions.lastSeq} + 1`, updatedAt: now })
+      .set({
+        lastSeq: sql`${sessions.lastSeq} + 1`,
+        updatedAt: now,
+        // 有新动静："最近"里的回到最上面；置顶和分组里的不动（#153）
+        sortKey: sql`case when ${sessions.pinnedAt} is null and ${sessions.groupId} is null
+          then ${now.getTime()}::double precision else ${sessions.sortKey} end`,
+      })
       .where(eq(sessions.id, sessionId))
       .returning({ seq: sessions.lastSeq });
     await tx
@@ -1455,6 +1497,8 @@ export class Sessions {
       effort: r.effort,
       environmentName: (r.environmentId && environmentNames.get(r.environmentId)) || null,
       pinnedAt: r.pinnedAt?.toISOString() ?? null,
+      groupId: r.groupId,
+      sortKey: r.sortKey,
       unread: r.unread,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),

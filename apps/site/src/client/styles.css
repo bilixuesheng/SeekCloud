@@ -541,6 +541,109 @@ input:not([type="range"]):focus {
   margin-top: 12px;
 }
 
+/* 能折叠的一类（置顶、每个分组，#153）：标题点了折叠，指上去时出现箭头；分组右边有"⋯" */
+.sidebar-group:not(:first-child) {
+  margin-top: 12px;
+}
+
+.sidebar-section-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sidebar-section-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--faint);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-section-toggle:hover {
+  color: var(--muted);
+}
+
+.sidebar-section-toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.sidebar-section-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-section-chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  opacity: 0;
+  transform: rotate(90deg);
+  transition:
+    transform 0.2s var(--ease-out),
+    opacity 0.15s;
+}
+
+.sidebar-section-toggle[aria-expanded="false"] .sidebar-section-chevron {
+  transform: none;
+  opacity: 1;
+}
+
+.sidebar-section-toggle:focus-visible .sidebar-section-chevron {
+  opacity: 1;
+}
+
+.sidebar-section-more {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.sidebar-section-more:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.sidebar-section-more:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .sidebar-section-head:hover .sidebar-section-chevron {
+    opacity: 1;
+  }
+
+  .sidebar-section-more {
+    opacity: 0;
+  }
+
+  .sidebar-section-head:hover .sidebar-section-more,
+  .sidebar-section-more:focus-visible {
+    opacity: 1;
+  }
+}
+
 /* 已归档的会话：列表最下面一组，默认收起 */
 .sidebar-archived {
   margin-top: 10px;
