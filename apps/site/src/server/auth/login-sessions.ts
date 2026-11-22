@@ -15,7 +15,7 @@ const TOUCH_EVERY_MS = 60_000;
 export const MAX_DEVICE_NAME = 100;
 
 /** 管理员登录用到的几样依赖。 */
-export type LoginDeps = Pick<AppDeps, "db" | "clock" | "secureCookies">;
+export type LoginDeps = Pick<AppDeps, "db" | "clock" | "secureCookies" | "secrets">;
 
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 

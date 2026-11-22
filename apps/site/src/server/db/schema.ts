@@ -10,6 +10,7 @@ import type {
 } from "@seekcloud/protocol";
 import { SESSION_STATUSES, TURN_END_REASONS } from "@seekcloud/protocol";
 import {
+  bigint,
   boolean,
   doublePrecision,
   index,
@@ -36,8 +37,28 @@ export const users = pgTable("users", {
   // 昵称：SeekCloud 称呼管理员时用（侧栏、首页的问候语，以后还有 Agent 的系统提示词）。
   // 首次设置时填；这一列加上之前就设置好的部署是 null。
   nickname: text("nickname"),
+  // 两步验证（TOTP，#100）：密钥用 SecretBox 加密；开启的时间，没开是 null；最近用过的时间步，
+  // 同一个验证码（同一个时间步或更早的）不能再用。
+  totpSecret: text("totp_secret"),
+  totpEnabledAt: timestamp("totp_enabled_at", { withTimezone: true }),
+  totpLastStep: bigint("totp_last_step", { mode: "number" }),
   createdAt: createdAt(),
 });
+
+/** 两步验证的恢复码（#100）：开启时给 10 个，只显示一次；库里只存哈希，每个只能用一次。 */
+export const recoveryCodes = pgTable(
+  "recovery_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("recovery_codes_user").on(t.userId)],
+);
 
 /** 网页的登录状态。Cookie 里放随机令牌，这里只存它的哈希。（"会话"专指和 Agent 的对话，这里不用这个词。） */
 /**
@@ -314,7 +335,14 @@ export const workspaceDiffs = pgTable(
   (t) => [primaryKey({ columns: [t.sessionId, t.repo] })],
 );
 
-export const accessEvent = pgEnum("access_event", ["login", "session_start", "message"]);
+export const accessEvent = pgEnum("access_event", [
+  "login",
+  "session_start",
+  "message",
+  // 开启、关闭两步验证（#100）
+  "two_factor_on",
+  "two_factor_off",
+]);
 
 /**
  * 登录、发起会话、发消息时的客户端网络。《网络安全法》要求网络日志留存不少于 6 个月，保存 180 天。

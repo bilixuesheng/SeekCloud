@@ -111,6 +111,14 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     usage: "数据导出的 zip 打包",
   },
   {
+    name: "uqr",
+    packages: ["uqr"],
+    license: "MIT",
+    copyright: "Copyright (c) Project Nayuki; Copyright (c) 2023 Anthony Fu",
+    url: "https://github.com/unjs/uqr",
+    usage: "开启两步验证时显示的二维码",
+  },
+  {
     name: "Drizzle ORM",
     packages: ["drizzle-orm"],
     license: "Apache-2.0",

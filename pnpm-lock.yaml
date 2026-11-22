@@ -93,6 +93,9 @@ importers:
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
+      uqr:
+        specifier: 0.1.2
+        version: 0.1.2
       ws:
         specifier: ^8.23.0
         version: 8.23.0
@@ -3157,6 +3160,9 @@ packages:
     hasBin: true
     peerDependencies:
       browserslist: '>= 4.21.0'
+
+  uqr@0.1.2:
+    resolution: {integrity: sha512-MJu7ypHq6QasgF5YRTjqscSzQp/W11zoUk6kvmlH+fmWEs63Y0Eib13hYFwAzagRJcVY8WVnlV+eBDUGMJ5IbA==}
 
   vfile-location@5.0.4:
     resolution: {integrity: sha512-vEvxatYZCIpNvzGk2UD+u4I/sZkSKoOsdRCbkOIsN73QpJbriJ1qvvBAL1PeI0y55Leoqf7pORbaSPpG/smmOg==}
@@ -6570,6 +6576,8 @@ snapshots:
       browserslist: 4.29.5
       escalade: 3.2.0
       picocolors: 1.1.1
+
+  uqr@0.1.2: {}
 
   vfile-location@5.0.4:
     dependencies:

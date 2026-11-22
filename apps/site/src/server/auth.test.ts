@@ -315,15 +315,17 @@ describe("在服务器上重置密码", () => {
     const laptop = await t.admin();
     const phone = await t.admin();
 
-    const password = await resetAdminPassword(t.db);
+    const reset = await resetAdminPassword(t.db);
+    const password = reset?.password as string;
 
     expect(password).toMatch(/^[\w-]{16}$/);
+    expect(reset?.twoFactorWasOn).toBe(false);
     expect((await laptop.get("/api/me")).status).toBe(401);
     expect((await phone.get("/api/me")).status).toBe(401);
     expect((await t.browser().post("/api/auth/login", { password: t.adminPassword })).status).toBe(
       400,
     );
     expect((await t.browser().post("/api/auth/login", { password })).status).toBe(204);
-    expect(await resetAdminPassword(t.db)).not.toBe(password);
+    expect((await resetAdminPassword(t.db))?.password).not.toBe(password);
   });
 });

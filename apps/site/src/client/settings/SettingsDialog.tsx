@@ -15,6 +15,7 @@ import { reloadModels, useModels } from "../session/useModels";
 import { currentTheme, setTheme, type Theme } from "../theme";
 import { MODEL_PROVIDERS } from "./ModelSettings";
 import { HOST_OFFLINE_GRACE } from "./SessionSettings";
+import { CodeField, TwoFactorRow, useTwoFactor } from "./TwoFactorSettings";
 
 /** 设置窗口里各分类用到的接口。 */
 const AI_LABELS = "/api/settings/ai-labels";
@@ -361,10 +362,11 @@ function SwitchRow({
   );
 }
 
-/** 账户：密码、导出数据、登录状态、开源声明。 */
+/** 账户：昵称、密码、两步验证、登录状态、开源声明。 */
 export function AccountSettings({ notice, onSignedOut, onProfileChanged }: SettingsSectionProps) {
   const error = notice;
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [twoFactor, refreshTwoFactor] = useTwoFactor();
 
   return (
     <>
@@ -381,8 +383,15 @@ export function AccountSettings({ notice, onSignedOut, onProfileChanged }: Setti
 
       <section className="settings-section">
         <h2>密码</h2>
-        <PasswordRow />
+        <PasswordRow twoFactor={twoFactor?.enabled ?? false} />
       </section>
+
+      {twoFactor && (
+        <section className="settings-section">
+          <h2>两步验证</h2>
+          <TwoFactorRow state={twoFactor} onChanged={refreshTwoFactor} />
+        </section>
+      )}
 
       <section className="settings-section">
         <h2>登录状态</h2>
@@ -431,7 +440,6 @@ export function AccountSettings({ notice, onSignedOut, onProfileChanged }: Setti
   );
 }
 
-/** 修改密码：先输当前密码，新密码填两遍。改完后当前设备保持登录，其他设备退出。 */
 /**
  * 昵称：SeekCloud 称呼管理员时用的名字（照 Claude 的"希望 Claude 怎么称呼你"）。
  * 现在显示在侧栏底部和首页的问候语里；以后的系统提示词也带上它，Agent 称呼你时用（#59）。
@@ -598,9 +606,11 @@ function NicknameRow({ onChanged }: { onChanged: () => void }) {
   );
 }
 
-function PasswordRow() {
+/** 修改密码：先输当前密码（开了两步验证的再输验证码），新密码填两遍。改完后当前设备保持登录，其他设备退出。 */
+function PasswordRow({ twoFactor }: { twoFactor: boolean }) {
   const [editing, setEditing] = useState(false);
   const [current, setCurrent] = useState("");
+  const [code, setCode] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
@@ -609,6 +619,7 @@ function PasswordRow() {
   const close = () => {
     setEditing(false);
     setCurrent("");
+    setCode("");
     setNext("");
     setConfirm("");
   };
@@ -622,7 +633,11 @@ function PasswordRow() {
     setBusy(true);
     setMessage(undefined);
     try {
-      await api("/api/auth/password", { currentPassword: current, newPassword: next });
+      await api("/api/auth/password", {
+        currentPassword: current,
+        newPassword: next,
+        ...(twoFactor ? { code } : {}),
+      });
       close();
       setMessage({ tone: "notice", text: "密码已修改，其他设备已退出登录。" });
     } catch (e) {
@@ -673,6 +688,7 @@ function PasswordRow() {
               onChange={(e) => setCurrent(e.target.value)}
             />
           </label>
+          {twoFactor && <CodeField value={code} onChange={setCode} label="验证码或恢复码" />}
           <label className="field">
             <span>新密码（至少 8 位）</span>
             <input
