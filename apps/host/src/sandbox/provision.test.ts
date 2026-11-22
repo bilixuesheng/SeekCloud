@@ -9,6 +9,7 @@ import {
   provisionWorkspace,
   type SandboxGit,
   sandboxGitEnv,
+  WORKSPACE,
   workspaceDirs,
 } from "./provision";
 import type { ExecOptions, ExecResult, Sandboxes } from "./sandboxes";
@@ -179,6 +180,15 @@ describe("沙箱的工作区", () => {
       ["checkout -b seekcloud/abc123", "/workspace/lib"],
     ]);
     expect(gits[0]?.env?.GIT_CONFIG_PARAMETERS).toContain("core.hooksPath");
+  });
+
+  it("不使用仓库（#191）：照常装 CA、写 git 配置（Agent 自己 git init 时用），不克隆；工作目录是 /workspace", async () => {
+    const { sandboxes, files, runs } = fakeSandboxes();
+    await provisionWorkspace(sandboxes, "s1", git, { sessionToken: "tok", repos: [] });
+    expect(files.get("/etc/seekcloud/proxy-ca.crt")).toBe(git.caPem);
+    expect(files.get("/etc/gitconfig")).toContain('\temail = "bot@example.com"');
+    expect(runs.filter((r) => r.argv[0] === "git" || r.argv[0] === "test")).toEqual([]);
+    expect(workspaceDirs([])[0] ?? WORKSPACE).toBe("/workspace");
   });
 
   it("已经克隆过的（休眠后唤醒）不再克隆；克隆失败、名字不对时报克隆失败", async () => {

@@ -77,6 +77,8 @@ async function callTool(client: GitHubClient, params: Record<string, unknown> | 
   }
 }
 
+const NO_REPOS = "当前会话没有挂载仓库，GitHub 工具不可用。";
+
 /** 处理一条 JSON-RPC 消息。通知（没有 id）不回复，返回 undefined。 */
 export async function handleMessage(
   session: GitSession,
@@ -106,14 +108,20 @@ export async function handleMessage(
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "seekcloud-github", version: PROTOCOL_VERSION },
         instructions:
-          "这些工具以用户本人的 GitHub 账号操作当前会话挂载的仓库。写到 GitHub 上的正文会自动加署名，不用自己写。",
+          session.repos.length === 0
+            ? NO_REPOS
+            : "这些工具以用户本人的 GitHub 账号操作当前会话挂载的仓库。写到 GitHub 上的正文会自动加署名，不用自己写。",
       });
     }
     case "ping":
       return reply({});
+    // 不使用仓库的会话（#191）：什么都碰不到，工具列表是空的
     case "tools/list":
-      return reply({ tools: toolList });
+      return reply({ tools: session.repos.length === 0 ? [] : toolList });
     case "tools/call":
+      if (session.repos.length === 0) {
+        return reply({ content: [{ type: "text", text: NO_REPOS }], isError: true });
+      }
       return reply(await callTool(new GitHubClient(session, apiBase), message.params));
     default:
       return fail(-32601, `不支持的方法：${message.method}`);

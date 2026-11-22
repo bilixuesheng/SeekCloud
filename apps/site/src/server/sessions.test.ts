@@ -554,3 +554,63 @@ describe("发起会话时的检查", () => {
     });
   });
 });
+
+describe("不使用仓库（#191）", () => {
+  let t: TestApp;
+
+  beforeAll(async () => {
+    t = await createTestApp();
+  });
+  afterAll(() => t.close());
+
+  const errorCode = (body: Record<string, unknown>) => (body.error as { code: string }).code;
+  const tokensFor = (sessionId: string) =>
+    t.host.commands.filter((c) => c.type === "set_github_token" && c.sessionId === sessionId);
+
+  it("没关联 GitHub 也能发起：会话没有仓库；准备沙箱不带仓库和提交身份，也不下发 GitHub 令牌；回合照常跑完", async () => {
+    const browser = await t.admin();
+    t.host.script({ type: "message", text: "写好了 hello.py。" });
+    const res = await browser.post("/api/sessions", { text: "写一个打印 hello 的 Python 脚本" });
+    expect(res.status).toBe(201);
+    const session = (await res.json()) as { shortId: string; repos: unknown[] };
+    expect(session.repos).toEqual([]);
+
+    const events = await eventsUntilWaiting(browser, session.shortId);
+    expect(events.at(-2)).toMatchObject({ type: "turn.ended" });
+    const prepare = t.host.last("prepare_sandbox");
+    expect(prepare.repos).toEqual([]);
+    expect(prepare.committer).toBeUndefined();
+    expect(t.host.last("start_turn")).toMatchObject({ sessionId: prepare.sessionId });
+    await t.host.idle();
+    expect(tokensFor(prepare.sessionId)).toEqual([]);
+
+    // 会话列表、改动面板都认没有仓库的会话
+    const list = (await (await browser.get("/api/sessions")).json()) as {
+      sessions: Array<{ shortId: string; repos: unknown[] }>;
+    };
+    expect(list.sessions.find((s) => s.shortId === session.shortId)?.repos).toEqual([]);
+    expect(await (await browser.get(`/api/sessions/${session.shortId}/diff`)).json()).toEqual({
+      repos: [],
+    });
+  });
+
+  it("关联了 GitHub、不选仓库：提交身份照常带上（Agent 自己 git init 时用），GitHub 令牌不下发", async () => {
+    const { browser } = await t.adminWithGitHub("solo", "solo/app");
+    const res = await browser.post("/api/sessions", { text: "试试" });
+    expect(res.status).toBe(201);
+    await t.host.idle();
+    const prepare = t.host.last("prepare_sandbox");
+    expect(prepare.repos).toEqual([]);
+    expect(prepare.committer).toMatchObject({ name: "solo" });
+    expect(tokensFor(prepare.sessionId)).toEqual([]);
+  });
+
+  it("仓库和基础分支只给一个：400", async () => {
+    const browser = await t.admin();
+    for (const body of [{ repo: "solo/app" }, { baseBranch: "main" }]) {
+      const res = await browser.post("/api/sessions", { ...body, text: "嗨" });
+      expect(res.status).toBe(400);
+      expect(errorCode((await res.json()) as Record<string, unknown>)).toBe("invalid_request");
+    }
+  });
+});

@@ -296,4 +296,48 @@ describe.skipIf(!enabled)("端到端：真的主站、宿主机、沙箱和 dsh"
     const upstream = model.requests.find((r) => r.path.endsWith("/v1/messages"));
     expect(upstream?.path).toBe("/anthropic/v1/messages");
   });
+
+  it("不使用仓库（#191）：不克隆，Agent 在 /workspace 里工作；Git 代理不放行任何仓库；回合结束不推送、没有改动卡片", async () => {
+    model.script = [
+      {
+        tools: [
+          {
+            id: "toolu_norepo",
+            name: "bash",
+            input: {
+              command: [
+                "pwd",
+                "echo 你好 > note.txt",
+                "git ls-remote https://github.com/acme/app.git 2>&1 | tail -n 3",
+                "echo 完成",
+              ].join("; "),
+              description: "看看工作目录",
+            },
+          },
+        ],
+      },
+      { text: "写好了 note.txt。" },
+    ];
+    const refsBefore = github.refs("acme/app");
+    const res = await browser.post("/api/sessions", { text: "在空目录里写个文件" });
+    expect(res.status, await res.clone().text()).toBe(201);
+    const { shortId, repos } = (await res.json()) as { shortId: string; repos: unknown[] };
+    expect(repos).toEqual([]);
+
+    const events = await untilWaiting(shortId);
+    expect(
+      events.find((e) => e.type === "turn.ended"),
+      logs.slice(-30).join("\n"),
+    ).toMatchObject({
+      reason: "completed",
+    });
+    const result = events.find((e) => e.type === "tool.result");
+    const output = result?.type === "tool.result" ? result.output : "";
+    // 工作目录是 /workspace；会话没挂载仓库，代理不放行
+    expect(output).toMatch(/^\/workspace\n/);
+    expect(output).toContain("没有挂载到当前会话");
+    expect(output).toContain("完成");
+    expect(events.some((e) => e.type === "workspace")).toBe(false);
+    expect(github.refs("acme/app")).toEqual(refsBefore);
+  });
 });
