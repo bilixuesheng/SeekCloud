@@ -215,8 +215,14 @@ export function Collapse({ open, children }: { open: boolean; children: ReactNod
   );
 }
 
-/** 底部弹层开和关的时长，和 styles.css 里 --sheet-ms 的一样。 */
+/** 底部弹层打开的时长：先快后慢地停下。 */
 export const SHEET_MS = 360;
+/** 关的时长：先慢后快地滑出去（不在快到底时放慢，免得看着像停在半路）。 */
+export const SHEET_CLOSE_MS = 260;
+const SHEET_OPEN_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
+const SHEET_CLOSE_EASE = "cubic-bezier(0.3, 0, 0.8, 0.15)";
+/** 关的时候滑到弹层下面这么多：弹层上沿的阴影也滑出屏幕。 */
+const SHEET_SHADOW_PX = 48;
 
 /**
  * 拖动条松手时关不关：往下拉过 90 像素，或者往下甩得够快（每毫秒 0.5 像素以上）就关，不然弹回去。
@@ -226,10 +232,60 @@ export function sheetShouldClose(dragged: number, velocity: number): boolean {
   return dragged > 90 || (dragged > 12 && velocity > 0.5);
 }
 
+/** 弹层现在往下挪了多少像素（正在播的动画、拖动的位移都算）。 */
+function sheetOffset(el: HTMLElement): number {
+  const transform = getComputedStyle(el).transform;
+  return transform && transform !== "none" ? new DOMMatrixReadOnly(transform).m42 : 0;
+}
+
 /**
- * 底部弹层：从屏幕底下滑上来，关的时候按原路滑回去，同样的曲线和时长，遮罩一起淡入淡出。
+ * 弹层滑到 to（0 是停在原位，"out" 是滑出屏幕，连上沿的阴影一起），从 from 开始（不给就从现在的位置），
+ * 遮罩跟着淡入淡出。先停掉还在播的动画（关到一半又打开时从当前位置接着走）。返回弹层的那段动画。
+ */
+function slideSheet(
+  el: HTMLElement | null,
+  bg: HTMLElement | null,
+  playing: Animation[],
+  to: 0 | "out",
+  from: number | undefined,
+  setPlaying: (list: Animation[]) => void,
+): Animation | undefined {
+  if (!el || !bg) return undefined;
+  const startY = from ?? sheetOffset(el);
+  const startOpacity = Number(getComputedStyle(bg).opacity);
+  for (const a of playing) a.cancel();
+  // 滑出去：滑过弹层自己的高度加上阴影。滑上来的路程按一整屏算（打开的那一刻里面的内容可能还没量好高度，
+  // 弹层自己的高度还不准）
+  const outY =
+    to === "out"
+      ? el.offsetHeight + SHEET_SHADOW_PX
+      : Math.max(el.offsetHeight, window.innerHeight) + SHEET_SHADOW_PX;
+  const endY = to === "out" ? outY : 0;
+  const full = to === "out" ? SHEET_CLOSE_MS : SHEET_MS;
+  // 走的路短（拖到一半松手）就快一点
+  const duration = reducedMotion() ? 0 : Math.max(120, (full * Math.abs(endY - startY)) / outY);
+  const easing = to === "out" ? SHEET_CLOSE_EASE : SHEET_OPEN_EASE;
+  const options = { duration, easing, fill: "forwards" as const };
+  const moving = el.animate(
+    [{ transform: `translateY(${startY}px)` }, { transform: `translateY(${endY}px)` }],
+    options,
+  );
+  const fading = bg.animate(
+    [{ opacity: startOpacity }, { opacity: to === "out" ? 0 : 1 }],
+    options,
+  );
+  setPlaying([moving, fading]);
+  return moving;
+}
+
+/**
+ * 底部弹层：从屏幕底下滑上来，遮罩一起淡入；关的时候滑出屏幕、遮罩淡出，滑到底以后才拿掉。
  * 拖动条能往下拉关掉。从一个菜单进到另一个弹层时，先关这一个，在 onClosed 里再打开下一个，
  * 这样是先收下去、再弹出来。
+ *
+ * 动画用 Web Animations 播（不靠 CSS 过渡）：打开的起点是写明的"在屏幕下面"，不靠浏览器先算出隐藏时的
+ * 样式，所以每次都有动画；关的时候从现在的位置（包括拖到一半、开到一半）接着滑，播完才拿掉，
+ * 不会在半路停住再一下子消失。系统开了"减少动效"时直接出现、直接拿掉。
  */
 export function Sheet({
   open,
@@ -245,15 +301,79 @@ export function Sheet({
   onClosed?: () => void;
   children: ReactNode;
 }) {
-  const { mounted, shown } = usePresence(open, SHEET_MS);
+  const [mounted, setMounted] = useState(open);
+  // 打开时和 open 同一次渲染就挂上，不等下一轮
+  if (open && !mounted) setMounted(true);
   const [dragged, setDragged] = useState<number>();
   const drag = useRef<{ start: number; last: number; at: number; velocity: number }>(undefined);
+  const sheet = useRef<HTMLElement>(null);
+  const scrim = useRef<HTMLDivElement>(null);
+  const playing = useRef<Animation[]>([]);
+  /** 拖动条松手关掉时，弹层停在哪（松手那一下拖动的位移已经清掉了，关的动画从这里接着走）。 */
+  const releasedAt = useRef<number | undefined>(undefined);
   const wasMounted = useRef(mounted);
   const closed = useRef(onClosed);
   closed.current = onClosed;
   // 拖动条上的手指归弹层，不让 App 的手势抢走（touch.ts）
   const grip = useRef<HTMLDivElement>(null);
   useClaimTouch(grip, mounted);
+
+  const slide = (to: 0 | "out", from?: number) =>
+    slideSheet(sheet.current, scrim.current, playing.current, to, from, (list) => {
+      playing.current = list;
+    });
+
+  // 打开：从屏幕下面（或者关到一半的地方）滑上来。关：从现在的位置滑出去，播完才拿掉。
+  // 在画出来之前开始动画，第一帧就是起点，不会先闪一下停在原位的样子。
+  useLayoutEffect(() => {
+    if (!mounted) return;
+    const el = sheet.current;
+    if (!el) return;
+    const setPlaying = (list: Animation[]) => {
+      playing.current = list;
+    };
+    if (open) {
+      const fresh = playing.current.length === 0;
+      const moving = slideSheet(
+        el,
+        scrim.current,
+        playing.current,
+        0,
+        // 第一次打开从一整屏下面开始：这时里面的内容可能还没量好高度
+        fresh ? window.innerHeight + SHEET_SHADOW_PX : undefined,
+        setPlaying,
+      );
+      // 停稳以后去掉动画留下的样式，拖动时直接改位置
+      void moving?.finished.then(
+        () => {
+          for (const a of playing.current) a.cancel();
+          playing.current = [];
+        },
+        () => undefined,
+      );
+      return;
+    }
+    const moving = slideSheet(
+      el,
+      scrim.current,
+      playing.current,
+      "out",
+      releasedAt.current,
+      setPlaying,
+    );
+    releasedAt.current = undefined;
+    let done = false;
+    const unmount = () => {
+      if (done) return;
+      done = true;
+      playing.current = [];
+      setMounted(false);
+    };
+    void moving?.finished.then(unmount, () => undefined);
+    // 万一动画没播（页面在后台、浏览器不支持），也按时拿掉
+    const timer = setTimeout(unmount, (reducedMotion() ? 0 : SHEET_CLOSE_MS) + 200);
+    return () => clearTimeout(timer);
+  }, [open, mounted]);
 
   useEffect(() => {
     if (wasMounted.current && !mounted) closed.current?.();
@@ -270,9 +390,15 @@ export function Sheet({
   if (!mounted) return null;
 
   const onDown = (e: ReactPointerEvent) => {
+    if (!open) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { start: e.clientY, last: e.clientY, at: e.timeStamp, velocity: 0 };
-    setDragged(0);
+    // 还在滑上来时就拉住：停在现在的位置，跟着手指
+    const el = sheet.current;
+    const at = el ? Math.max(0, sheetOffset(el)) : 0;
+    for (const a of playing.current) a.cancel();
+    playing.current = [];
+    drag.current = { start: e.clientY - at, last: e.clientY, at: e.timeStamp, velocity: 0 };
+    setDragged(at);
   };
   const onMove = (e: ReactPointerEvent) => {
     const d = drag.current;
@@ -287,25 +413,28 @@ export function Sheet({
     const d = drag.current;
     if (!d) return;
     drag.current = undefined;
+    const offset = Math.max(0, d.last - d.start);
     setDragged(undefined);
-    if (sheetShouldClose(d.last - d.start, d.velocity)) onClose();
+    if (sheetShouldClose(offset, d.velocity)) {
+      releasedAt.current = offset;
+      onClose();
+    } else {
+      // 弹回去
+      slide(0, offset);
+    }
   };
 
-  const visible = shown && open;
   // 挂到页面最外层：在侧栏这类有位移、有裁切的容器里打开时，弹层照样贴着屏幕底部、盖在最上面
   return createPortal(
     <>
-      <div
-        className={`sheet-scrim${visible ? " shown" : ""}`}
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <div ref={scrim} className="sheet-scrim" onClick={onClose} aria-hidden="true" />
       <section
-        className={`sheet${visible ? " shown" : ""}${dragged !== undefined ? " dragging" : ""}`}
+        ref={sheet}
+        className="sheet"
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        style={dragged ? { transform: `translateY(${dragged}px)` } : undefined}
+        style={dragged !== undefined ? { transform: `translateY(${dragged}px)` } : undefined}
       >
         <div
           ref={grip}
