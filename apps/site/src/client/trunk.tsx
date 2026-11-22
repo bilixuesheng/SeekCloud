@@ -1,19 +1,16 @@
 import { GitHubMark } from "./GitHubMark";
 import { ChatIcon, ChipIcon, DatabaseIcon, SettingsIcon, UserIcon } from "./Icons";
+import { t } from "./i18n";
 import { LegalPage } from "./legal/LegalPage";
 import type { OverlayProps, PageProps, Registry } from "./registry";
 import { AwaitingInputHint } from "./session/AwaitingInputHint";
 import { NewSession } from "./session/NewSession";
 import { SessionPage } from "./session/SessionPage";
 import { DataSettings } from "./settings/DataSettings";
+import { GeneralSettings } from "./settings/GeneralSettings";
 import { ModelSettings } from "./settings/ModelSettings";
 import { SessionSettings } from "./settings/SessionSettings";
-import {
-  AccountSettings,
-  GeneralSettings,
-  GitHubSettings,
-  SettingsDialog,
-} from "./settings/SettingsDialog";
+import { AccountSettings, GitHubSettings, SettingsDialog } from "./settings/SettingsDialog";
 import { useShell } from "./shell";
 
 /** 首页：问候语和发起会话的输入框。 */
@@ -80,42 +77,42 @@ export function registerTrunk(registry: Registry): Registry {
       })
       .settings({
         id: "general",
-        name: "通用",
+        name: () => t("settings.section.general"),
         icon: <SettingsIcon />,
         component: GeneralSettings,
         order: 10,
       })
       .settings({
         id: "model",
-        name: "模型",
+        name: () => t("settings.section.model"),
         icon: <ChipIcon />,
         component: ModelSettings,
         order: 12,
       })
       .settings({
         id: "sessions",
-        name: "会话",
+        name: () => t("settings.section.sessions"),
         icon: <ChatIcon />,
         component: SessionSettings,
         order: 15,
       })
       .settings({
         id: "github",
-        name: "GitHub",
+        name: () => t("settings.section.github"),
         icon: <GitHubMark size={15} />,
         component: GitHubSettings,
         order: 20,
       })
       .settings({
         id: "account",
-        name: "账户",
+        name: () => t("settings.section.account"),
         icon: <UserIcon />,
         component: AccountSettings,
         order: 30,
       })
       .settings({
         id: "data",
-        name: "数据",
+        name: () => t("settings.section.data"),
         icon: <DatabaseIcon />,
         component: DataSettings,
         order: 40,

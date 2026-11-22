@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { pageTitle, t, useT } from "../i18n";
 import { Brand } from "../Logo";
 import { navigate } from "../router";
 import { LICENSE_NAMES, LICENSE_URLS, MIT_TEXT, OPEN_SOURCE } from "./licenses";
@@ -7,10 +8,12 @@ import { LICENSE_NAMES, LICENSE_URLS, MIT_TEXT, OPEN_SOURCE } from "./licenses";
 export const LEGAL_DOCS = ["licenses"] as const;
 export type LegalDoc = (typeof LEGAL_DOCS)[number];
 
-export const LEGAL_TITLES: Record<LegalDoc, string> = { licenses: "开源声明" };
+/** 文档的标题（按界面语言）。 */
+export const legalTitle = (doc: LegalDoc): string => ({ licenses: t("legal.licenses") })[doc];
 
 /** 开源声明的链接：登录页、账户菜单、设置里用。 */
 export function LegalLink({ doc, newTab }: { doc: LegalDoc; newTab?: boolean }) {
+  useT();
   return (
     <a
       href={`/${doc}`}
@@ -24,18 +27,19 @@ export function LegalLink({ doc, newTab }: { doc: LegalDoc; newTab?: boolean }) 
             },
           })}
     >
-      {LEGAL_TITLES[doc]}
+      {legalTitle(doc)}
     </a>
   );
 }
 
 /** 开源声明：不用登录也能看，手机上也好读。 */
 export function LegalPage({ doc }: { doc: LegalDoc }) {
+  useT();
   useEffect(() => {
-    document.title = `${LEGAL_TITLES[doc]} · SeekCloud`;
+    document.title = pageTitle(legalTitle(doc));
     window.scrollTo(0, 0);
     return () => {
-      document.title = "SeekCloud";
+      document.title = pageTitle();
     };
   }, [doc]);
 
@@ -54,7 +58,7 @@ export function LegalPage({ doc }: { doc: LegalDoc }) {
         </a>
       </header>
       <main className="legal-body" key={doc}>
-        <h1>{LEGAL_TITLES[doc]}</h1>
+        <h1>{legalTitle(doc)}</h1>
         <Licenses />
       </main>
       <footer className="legal-foot">SeekCloud · 非 DeepSeek 官方产品</footer>

@@ -342,3 +342,13 @@ export const WarningIcon = ({ size = 15 }: { size?: number }) => (
     <circle cx="8" cy="11.4" r="0.8" fill="currentColor" />
   </svg>
 );
+
+export const GlobeIcon = ({ size = 15 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="6" {...line} />
+    <path
+      d="M2 8h12M8 2c1.8 1.7 2.6 3.7 2.6 6S9.8 12.3 8 14M8 2C6.2 3.7 5.4 5.7 5.4 8s.8 4.3 2.6 6"
+      {...line}
+    />
+  </svg>
+);

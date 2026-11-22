@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { ChevronDownIcon } from "../Icons";
+import { listTime } from "../i18n/format";
 import { Collapse } from "../Motion";
 import { navigate } from "../router";
 import { useShell } from "../shell";
-import { relativeTime } from "./types";
 
 /**
  * 首页问候语下方的提示（#139，照 Claude）：有会话在等你输入时显示一行。一个时写会话的标题，点了跳过去；
@@ -63,7 +63,7 @@ export function AwaitingInputHint() {
 
 /** 等了多久："刚刚""等了 5 分钟""等了 2 小时"……更早的写日期（会话列表的时间去掉"前"）。 */
 function waitedFor(iso: string): string {
-  const text = relativeTime(iso);
+  const text = listTime(iso);
   if (text === "刚刚") return text;
   return text.endsWith("前") ? `等了 ${text.slice(0, -1)}` : text;
 }

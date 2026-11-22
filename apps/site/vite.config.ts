@@ -9,26 +9,9 @@ export default defineConfig({
       registerType: "autoUpdate",
       // 跳到 /api/ 的页面（比如用 GitHub 登录）必须真的发到服务器，不能用缓存的首页代替。
       workbox: { navigateFallbackDenylist: [/^\/api\//] },
-      manifest: {
-        name: "SeekCloud",
-        short_name: "SeekCloud",
-        description: "云端编程智能体。代码无界，智能随行。",
-        lang: "zh-CN",
-        start_url: "/",
-        display: "standalone",
-        background_color: "#fbfcff",
-        theme_color: "#fbfcff",
-        icons: [
-          { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-          { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-          {
-            src: "/icons/maskable-512.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "maskable",
-          },
-        ],
-      },
+      // 清单中英各一份（public/manifest.zh-CN.webmanifest、manifest.en.webmanifest，#135），
+      // index.html 里引用，public/locale-boot.js 按界面语言换；插件不再生成一份
+      manifest: false,
     }),
   ],
   build: { outDir: "dist/client" },

@@ -1,6 +1,9 @@
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { type ApiError, api } from "./api";
 import { useSerifReady } from "./fonts";
+import { GlobeIcon } from "./Icons";
+import { LOCALE_NAMES, LOCALES, type Locale, setLanguage, t, tRich, useLocale, useT } from "./i18n";
+import { errorText } from "./i18n/errors";
 import { Logo } from "./Logo";
 import { LegalLink } from "./legal/LegalPage";
 import {
@@ -8,10 +11,12 @@ import {
   passkeyErrorText,
   passkeyLoginSupported,
 } from "./settings/PasskeySettings";
+import { Select } from "./ui/select";
 
 /**
- * 登录页。setup 为 true 时还没设置过管理员密码，改成首次设置：填昵称（SeekCloud 称呼管理员时用）和两遍新密码，设完直接登录。
+ * 登录页。setup 为 true 时还没设置过管理员密码，改成首次设置：填昵称（称呼管理员时用）和两遍新密码，设完直接登录。
  * 开了两步验证时，密码对了接着输验证器 App 里的验证码（或者一个恢复码，#100）；也可以用通行密钥直接登录。
+ * 文案都在文案目录里（#135），右上角可以切换界面语言（登录之前只记在这台浏览器上）。
  */
 export function LoginPage({
   setup,
@@ -23,10 +28,12 @@ export function LoginPage({
   /** 关联 GitHub 跳回来时出的问题，比如登录状态已过期。 */
   notice?: string;
 }) {
+  useT();
   const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState(notice);
+  // 出的问题：自己的（按语言现取）或者接口回来的
+  const [error, setError] = useState<ApiError | string | undefined>(notice);
   const [busy, setBusy] = useState(false);
   // 输错过一次密码以后才提示怎么重置，平时不显示
   const [failed, setFailed] = useState(false);
@@ -40,12 +47,11 @@ export function LoginPage({
   useEffect(() => {
     if (pending) codeInput.current?.focus();
   }, [pending, useRecovery]);
-  const nameReady = useSerifReady("SeekCloud");
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (setup && password !== confirm) {
-      setError("两次输入的密码不一致");
+      setError(t("setup.mismatch"));
       return;
     }
     setBusy(true);
@@ -67,9 +73,9 @@ export function LoginPage({
       onSignedIn();
     } catch (e) {
       const err = e as ApiError;
-      setError(err.message);
+      setError(err);
       // 超过 5 分钟没输验证码：回到输密码
-      if (err.code === "login_expired") backToPassword(err.message);
+      if (err.code === "login_expired") backToPassword(err);
       else if (!setup && !pending && err.code !== "network") setFailed(true);
     } finally {
       setBusy(false);
@@ -90,25 +96,30 @@ export function LoginPage({
     }
   };
 
-  const backToPassword = (message?: string) => {
+  const backToPassword = (message?: ApiError) => {
     setPending(undefined);
     setCode("");
     setUseRecovery(false);
     setError(message);
   };
 
+  const alert = error && (
+    <p className="alert" role="alert">
+      {typeof error === "string" ? error : errorText(error)}
+    </p>
+  );
+  const command = <code>pnpm admin:reset-password</code>;
+
   if (pending) {
     return (
-      <AuthFrame nameReady={nameReady}>
-        <h1>两步验证</h1>
+      <AuthFrame>
+        <h1>{t("twoFactor.title")}</h1>
         <form className="stack" onSubmit={submit}>
           <p className="hint">
-            {useRecovery
-              ? "请输入一个恢复码。每个恢复码只能使用一次。"
-              : "请输入验证器 App 中显示的 6 位验证码。"}
+            {useRecovery ? t("twoFactor.enterRecovery") : t("twoFactor.enterCode")}
           </p>
           <label className="field">
-            <span>{useRecovery ? "恢复码" : "验证码"}</span>
+            <span>{useRecovery ? t("twoFactor.recoveryCode") : t("twoFactor.code")}</span>
             <input
               key={useRecovery ? "recovery" : "totp"}
               type="text"
@@ -123,13 +134,9 @@ export function LoginPage({
               onChange={(e) => setCode(e.target.value)}
             />
           </label>
-          {error && (
-            <p className="alert" role="alert">
-              {error}
-            </p>
-          )}
+          {alert}
           <button type="submit" className="primary" disabled={busy}>
-            {busy ? "请稍候…" : "验证并登录"}
+            {busy ? t("common.pleaseWait") : t("twoFactor.submit")}
           </button>
           <div className="auth-links">
             <button
@@ -141,37 +148,28 @@ export function LoginPage({
                 setError(undefined);
               }}
             >
-              {useRecovery ? "使用验证码" : "使用恢复码"}
+              {useRecovery ? t("twoFactor.useCode") : t("twoFactor.useRecovery")}
             </button>
             <button type="button" className="link-button" onClick={() => backToPassword()}>
-              返回
+              {t("common.back")}
             </button>
           </div>
-          {useRecovery && (
-            <p className="hint">
-              恢复码也无法使用时，可在服务器的 apps/site 目录中运行{" "}
-              <code>pnpm admin:reset-password</code>，同时关闭两步验证。
-            </p>
-          )}
+          {useRecovery && <p className="hint">{tRich("twoFactor.recoveryHelp", { command })}</p>}
         </form>
       </AuthFrame>
     );
   }
 
   return (
-    <AuthFrame nameReady={nameReady}>
-      <h1>{setup ? "首次设置" : "登录"}</h1>
+    <AuthFrame>
+      <h1>{setup ? t("setup.title") : t("login.title")}</h1>
       <form className="stack" onSubmit={submit}>
-        {setup && (
-          <p className="hint">
-            请设置昵称和管理员密码。昵称是 SeekCloud 称呼你时使用的名字，之后可在设置中修改。
-          </p>
-        )}
+        {setup && <p className="hint">{t("setup.hint")}</p>}
         {/* 只有一个账户，用户名是固定的；放一个看不见的用户名，密码管理器才能把密码存对 */}
         <input type="text" name="username" autoComplete="username" value="admin" hidden readOnly />
         {setup && (
           <label className="field">
-            <span>昵称</span>
+            <span>{t("setup.nickname")}</span>
             <input
               type="text"
               autoComplete="nickname"
@@ -183,7 +181,7 @@ export function LoginPage({
           </label>
         )}
         <label className="field">
-          <span>{setup ? "新密码（至少 8 位）" : "密码"}</span>
+          <span>{setup ? t("setup.newPassword") : t("login.password")}</span>
           <input
             type="password"
             autoComplete={setup ? "new-password" : "current-password"}
@@ -196,7 +194,7 @@ export function LoginPage({
         </label>
         {setup && (
           <label className="field">
-            <span>确认密码</span>
+            <span>{t("setup.confirmPassword")}</span>
             <input
               type="password"
               autoComplete="new-password"
@@ -208,23 +206,14 @@ export function LoginPage({
             />
           </label>
         )}
-        {error && (
-          <p className="alert" role="alert">
-            {error}
-          </p>
-        )}
-        {failed && (
-          <p className="hint">
-            忘记密码时，可在服务器的 apps/site 目录中运行 <code>pnpm admin:reset-password</code>{" "}
-            重置。
-          </p>
-        )}
+        {alert}
+        {failed && <p className="hint">{tRich("login.forgot", { command })}</p>}
         <button type="submit" className="primary" disabled={busy}>
-          {busy ? "请稍候…" : setup ? "设置密码并登录" : "登录"}
+          {busy ? t("common.pleaseWait") : setup ? t("setup.submit") : t("login.submit")}
         </button>
         {!setup && passkeyLoginSupported() && (
           <button type="button" className="secondary" disabled={busy} onClick={passkey}>
-            使用通行密钥登录
+            {t("login.passkey")}
           </button>
         )}
       </form>
@@ -232,22 +221,42 @@ export function LoginPage({
   );
 }
 
-/** 登录页的外框：标志、名字、标语、卡片和页脚。 */
-function AuthFrame({ nameReady, children }: { nameReady: boolean; children: ReactNode }) {
+/** 登录页的外框：右上角的语言切换，标志、名字、标语、卡片和页脚。 */
+function AuthFrame({ children }: { children: ReactNode }) {
+  const brand = t("brand.name");
+  const nameReady = useSerifReady(brand);
   return (
     <div className="auth-page">
+      <LanguageSwitch />
       <div className="auth-hero">
         <Logo size={96} />
-        <p className={`auth-name serif-text${nameReady ? "" : " pending"}`}>SeekCloud</p>
-        <p className="auth-tagline">代码无界，智能随行</p>
+        <p className={`auth-name serif-text${nameReady ? "" : " pending"}`}>{brand}</p>
+        <p className="auth-tagline">{t("brand.tagline")}</p>
       </div>
       <main className="auth-card">{children}</main>
       <footer className="auth-footer">
-        <p>非 DeepSeek 官方产品</p>
+        <p>{t("brand.notOfficial")}</p>
         <p className="auth-footer-links">
           <LegalLink doc="licenses" />
         </p>
       </footer>
+    </div>
+  );
+}
+
+/** 登录前切换界面语言：只记在这台浏览器上，登录后主站没设置过时再存上去（i18n 的 reconcileLanguage）。 */
+function LanguageSwitch() {
+  const locale = useLocale();
+  return (
+    <div className="auth-language">
+      <GlobeIcon />
+      <Select
+        size="small"
+        label={t("language.switch")}
+        value={locale}
+        options={LOCALES.map((l) => ({ value: l, label: LOCALE_NAMES[l] }))}
+        onChange={(next) => setLanguage(next as Locale, "picker")}
+      />
     </div>
   );
 }

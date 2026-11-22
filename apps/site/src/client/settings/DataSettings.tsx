@@ -4,7 +4,7 @@ import { setCached, useCached } from "../cached";
 
 const EXPORTS = "/api/account/export";
 
-import { shortDateTime } from "../session/relative-time";
+import { shortDateTime } from "../i18n/format";
 import { toast, useErrorToast } from "../ui/toast";
 
 interface ExportView {

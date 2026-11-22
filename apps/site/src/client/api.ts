@@ -1,6 +1,9 @@
 export interface ApiError {
   code: string;
+  /** 主站给的说明（中文）；界面上优先用文案目录里按 code 写好的（i18n/errors.ts 的 errorText）。 */
   message: string;
+  /** 被频率限制时还要等的秒数（响应的 Retry-After）。 */
+  retryAfter?: number;
 }
 
 /**
@@ -19,12 +22,12 @@ export async function api<T = unknown>(
   });
   const data = res.status === 204 ? undefined : await res.json().catch(() => undefined);
   if (!res.ok) {
-    throw (
-      (data as { error?: ApiError } | undefined)?.error ?? {
-        code: "network",
-        message: "网络异常，请稍后重试",
-      }
-    );
+    const error = (data as { error?: ApiError } | undefined)?.error ?? {
+      code: "network",
+      message: "网络异常，请稍后重试",
+    };
+    const retryAfter = Number(res.headers.get("retry-after"));
+    throw retryAfter > 0 ? { ...error, retryAfter } : error;
   }
   return data as T;
 }

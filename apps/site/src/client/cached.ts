@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { type ApiError, api } from "./api";
+import { errorText } from "./i18n/errors";
 
 /**
  * 接口数据的一份浏览器内缓存，设置窗口用：打开设置时把各分类要的数据一起拉好（prefetch），
@@ -63,7 +64,8 @@ export function useCached<T>(path: string): {
   const reload = useCallback(() => {
     load<T>(path).then(
       () => setError(undefined),
-      (e: ApiError) => setError(e.message),
+      // 认得的错误按界面语言写（i18n/errors.ts），不认得的用主站给的说明
+      (e: ApiError) => setError(errorText(e)),
     );
   }, [path]);
 

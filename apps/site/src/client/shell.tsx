@@ -35,6 +35,7 @@ export const ShellProvider = ShellContext.Provider;
 
 export function useShell(): ShellValue {
   const value = useContext(ShellContext);
+  // 不是界面文案：程序用错时抛的错
   if (!value) throw new Error("useShell 只能用在登录后的页面里");
   return value;
 }

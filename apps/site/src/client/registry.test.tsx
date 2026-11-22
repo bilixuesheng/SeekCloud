@@ -3,7 +3,14 @@ import { join } from "node:path";
 import type { ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type OverlayProps, Registry, RegistryProvider, SLOTS, Slot } from "./registry";
+import {
+  type OverlayProps,
+  Registry,
+  RegistryProvider,
+  SLOTS,
+  Slot,
+  sectionName,
+} from "./registry";
 import { matchPath, pathOf, setPages } from "./router";
 import { resolveSection } from "./settings/SettingsDialog";
 import { ShellProvider, type ShellValue } from "./shell";
@@ -99,7 +106,7 @@ describe("设置分类", () => {
   };
 
   it("主干登记通用、模型、会话、GitHub、账户、数据六类，按顺序排", () => {
-    const names = registerTrunk(new Registry()).settingsSections.map((s) => s.name);
+    const names = registerTrunk(new Registry()).settingsSections.map(sectionName);
     expect(names).toEqual(["通用", "模型", "会话", "GitHub", "账户", "数据"]);
   });
 

@@ -7,7 +7,9 @@ import {
 } from "@simplewebauthn/browser";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { type ApiError, api } from "../api";
-import { shortDateTime } from "../session/relative-time";
+import { t } from "../i18n";
+import { errorText } from "../i18n/errors";
+import { shortDateTime } from "../i18n/format";
 import { Modal } from "../ui/modal";
 import { toast } from "../ui/toast";
 import { CodeField } from "./TwoFactorSettings";
@@ -32,13 +34,16 @@ interface PasskeyList {
 export function passkeyErrorText(error: unknown): string {
   const e = error as { name?: string; code?: string; message?: string };
   if (e?.name === "NotAllowedError" || e?.code === "ERROR_CEREMONY_ABORTED") {
-    return "验证已取消，或未在规定时间内完成。";
+    return t("passkey.cancelled");
   }
   if (e?.name === "InvalidStateError" || e?.code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") {
-    return "此设备上已有该账户的通行密钥。";
+    return t("passkey.exists");
   }
-  if (typeof e?.code === "string" && typeof e?.message === "string" && !e.name) return e.message;
-  return "通行密钥验证失败，请重试。";
+  // 主站回的错误（{ code, message }）：认得的按界面语言写
+  if (typeof e?.code === "string" && typeof e?.message === "string" && !e.name) {
+    return errorText(e as ApiError);
+  }
+  return t("passkey.failed");
 }
 
 /** 登录页的"使用通行密钥登录"：浏览器不支持时不显示。 */

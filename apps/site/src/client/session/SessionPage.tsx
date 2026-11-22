@@ -33,6 +33,8 @@ import {
   RetryIcon,
   UndoIcon,
 } from "../Icons";
+import { pageTitle } from "../i18n";
+import { fullTime, relativeTime } from "../i18n/format";
 import { BlurText, Collapse, usePresence } from "../Motion";
 import { Slot } from "../registry";
 import { Whale } from "../Whale";
@@ -45,7 +47,6 @@ import { contentKey, ScrollFollower } from "./follow-scroll";
 import { LiveMarkdown, SessionLinks } from "./Markdown";
 import { effortLabels, ModelPicker } from "./ModelPicker";
 import { usePacedText } from "./paced-text";
-import { fullTime, relativeTime } from "./relative-time";
 import { SessionHeader } from "./SessionHeader";
 import {
   buildTimeline,
@@ -130,9 +131,9 @@ export function SessionPage({
   }, [id, listed]);
 
   useEffect(() => {
-    if (session) document.title = `${session.title} · SeekCloud`;
+    if (session) document.title = pageTitle(session.title);
     return () => {
-      document.title = "SeekCloud";
+      document.title = pageTitle();
     };
   }, [session]);
 
