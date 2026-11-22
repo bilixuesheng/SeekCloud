@@ -17,15 +17,15 @@ import {
   type AppDeps,
   adminSettings,
   apiError,
+  configuredRouting,
   connectDatabase,
   createApp,
-  deepseekRouting,
   notLoggedIn,
   runMigrations,
   SecretBox,
   type SettingsPolicy,
-  setProviderKey,
   transparentErrors,
+  updateProvider,
   usageAdmission,
 } from "@seekcloud/site/server";
 import {
@@ -77,11 +77,11 @@ export async function startDownstreamExample() {
     settingsPolicy: exampleSettings,
     // 模型网关的三个扩展点照主干的；假的提供方，填一个假 key
     modelAdmission: usageAdmission(base),
-    providerRouting: deepseekRouting(base),
+    providerRouting: configuredRouting({ ...base, settingsPolicy: exampleSettings }),
     errorPresentation: transparentErrors,
     modelFetch: new FakeModelProvider().fetch,
   };
-  await setProviderKey(deps, "sk-example");
+  await updateProvider(deps, "deepseek", { apiKey: "sk-example" });
   const app = createApp(deps);
 
   // 下游自己的接口：读写自己的表，登录状态问身份来源。

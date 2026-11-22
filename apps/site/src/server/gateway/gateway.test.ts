@@ -220,7 +220,7 @@ describe("模型网关", () => {
     expect(rows.at(-1)).toMatchObject({
       purpose: "agent",
       provider: "deepseek",
-      model: "deepseek-flash",
+      model: "deepseek/deepseek-flash",
       inputTokens: UPSTREAM_USAGE.input_tokens,
       outputTokens: 33,
       cacheReadTokens: UPSTREAM_USAGE.cache_read_input_tokens,
@@ -331,17 +331,20 @@ describe("模型网关", () => {
     });
     const body = await (await call(ask())).json();
     expect(body.error.message).toMatch(/^模型服务拒绝了请求（401/);
-    const status = await (await browser.get("/api/settings/model-provider")).json();
-    expect(status.keyRejectedAt).not.toBeNull();
+    const deepseek = async () =>
+      (
+        (await (await browser.get("/api/settings/model-providers")).json()) as {
+          providers: Array<{ id: string; keyRejectedAt: string | null }>;
+        }
+      ).providers.find((p) => p.id === "deepseek");
+    expect((await deepseek())?.keyRejectedAt).not.toBeNull();
 
-    await browser.request("/api/settings/model-provider/key", {
-      method: "PUT",
+    await browser.request("/api/settings/model-providers/deepseek", {
+      method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ apiKey: MODEL_KEY }),
     });
-    expect(
-      (await (await browser.get("/api/settings/model-provider")).json()).keyRejectedAt,
-    ).toBeNull();
+    expect((await deepseek())?.keyRejectedAt).toBeNull();
   });
 
   it("上游的原始报错保存 30 天，过了就删掉", async () => {
@@ -422,13 +425,17 @@ describe("还没填模型服务的 key", () => {
     expect(await res.json()).toEqual({
       error: {
         code: "model_not_configured",
-        message: "尚未设置模型服务的 API key，请在“设置 → 模型”中填写",
+        message: "尚无可用的模型，请在“设置 → 模型”中填写 DeepSeek API key 或添加模型提供商",
       },
     });
-    expect(await (await browser.get("/api/settings/model-provider")).json()).toMatchObject({
-      keySet: false,
-      keySetAt: null,
-    });
+    const { providers } = await (await browser.get("/api/settings/model-providers")).json();
+    expect(providers).toEqual([
+      expect.objectContaining({
+        id: "deepseek",
+        credential: expect.objectContaining({ masked: null, envDetected: null }),
+        keySetAt: null,
+      }),
+    ]);
     await t.close();
   });
 });

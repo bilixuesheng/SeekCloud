@@ -4,11 +4,11 @@ import {
   describeProviderRoutingContract,
 } from "../../testing/model-contracts";
 import { createTestApp } from "../../testing/test-app";
-import { deepseekRouting, transparentErrors, usageAdmission } from "./trunk";
+import { configuredRouting, transparentErrors, usageAdmission } from "./trunk";
 
-describeProviderRoutingContract("主干的 DeepSeek 官方", async () => {
+describeProviderRoutingContract("主干的按设置路由", async () => {
   const t = await createTestApp();
-  return { routing: deepseekRouting(t.deps), close: t.close };
+  return { routing: configuredRouting(t.deps), close: t.close };
 });
 
 describeModelAdmissionContract("主干的记用量", async () => {

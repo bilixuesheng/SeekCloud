@@ -1,8 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { AppDeps } from "../app";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
-import { findModel } from "../sessions/models";
-import type { Sessions } from "../sessions/sessions";
+import { normalizeModelRef, type Sessions } from "../sessions/sessions";
 import {
   AiLabelsValue,
   EffortValue,
@@ -98,9 +97,37 @@ const putHostOfflineGraceRoute = createRoute({
   },
 });
 
-const PlatformModel = z.object({ model: z.string().max(100) }).openapi("PlatformModel", {
+const PlatformModel = z.object({ model: z.string().max(300) }).openapi("PlatformModel", {
   description:
-    "平台自己发起的模型调用（判断会话是否在等你输入这些）用哪个模型：模型的 ID，或者 auto（自动，用模型列表里最省的那个）。",
+    "平台自己发起的模型调用（判断会话是否在等你输入这些）用哪个模型：提供方/模型（/api/models 的 id），或者 auto（自动，用能用的模型里最省的那个）。",
+});
+
+const DefaultModel = z.object({ model: z.string().max(300) }).openapi("DefaultModel", {
+  description:
+    "新会话默认的模型（提供方/模型）。模型选择器里选了就记下（照 dsh）；空字符串是没选过，用第一个能用的模型。",
+});
+
+const getDefaultModelRoute = createRoute({
+  method: "get",
+  path: "/default-model",
+  summary: "新会话默认的模型",
+  responses: {
+    200: { description: "没选过时是空字符串", ...json(DefaultModel) },
+    401: errorResponse("没有登录"),
+  },
+});
+
+const putDefaultModelRoute = createRoute({
+  method: "put",
+  path: "/default-model",
+  summary: "修改新会话默认的模型",
+  request: { body: { ...json(DefaultModel), required: true } },
+  responses: {
+    200: { description: "改好以后的值", ...json(DefaultModel) },
+    400: errorResponse("不支持这个模型"),
+    401: errorResponse("没有登录"),
+    403: errorResponse("这项设置不能修改（主干里不会出现）"),
+  },
 });
 
 const getPlatformModelRoute = createRoute({
@@ -175,6 +202,24 @@ export function settingsRoutes(deps: AppDeps, sessions: Sessions) {
       }
       return c.json({ seconds }, 200);
     })
+    .openapi(getDefaultModelRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      return c.json({ model: await readSetting(deps, "default_model", { userId: me.id }) }, 200);
+    })
+    .openapi(putDefaultModelRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      const { model } = c.req.valid("json");
+      const chosen = model && normalizeModelRef(model);
+      if (chosen && !(await sessions.models.find(chosen))) {
+        return c.json(apiError("unknown_model", "不支持这个模型"), 400);
+      }
+      if (!(await writeSetting(deps, "default_model", { userId: me.id }, chosen))) {
+        return c.json(locked, 403);
+      }
+      return c.json({ model: chosen }, 200);
+    })
     .openapi(getPlatformModelRoute, async (c) => {
       const me = await deps.identity.currentUser(c);
       if (!me) return c.json(notLoggedIn, 401);
@@ -184,12 +229,13 @@ export function settingsRoutes(deps: AppDeps, sessions: Sessions) {
       const me = await deps.identity.currentUser(c);
       if (!me) return c.json(notLoggedIn, 401);
       const { model } = c.req.valid("json");
-      if (model !== "auto" && !findModel(model)) {
+      const chosen = model === "auto" ? model : normalizeModelRef(model);
+      if (chosen !== "auto" && !(await sessions.models.find(chosen))) {
         return c.json(apiError("unknown_model", "不支持这个模型"), 400);
       }
-      if (!(await writeSetting(deps, "platform_model", { userId: me.id }, model))) {
+      if (!(await writeSetting(deps, "platform_model", { userId: me.id }, chosen))) {
         return c.json(locked, 403);
       }
-      return c.json({ model }, 200);
+      return c.json({ model: chosen }, 200);
     });
 }

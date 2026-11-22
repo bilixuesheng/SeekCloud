@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { ErrorCode } from "@seekcloud/protocol";
 import type { AppDeps } from "../app";
 import { upstreamErrors } from "../db/schema";
-import { markProviderKeyRejected } from "./trunk";
+import { markProviderKeyRejected } from "../models/providers";
 
 /** 上游的报错最多存这么长。 */
 export const MAX_ERROR_BODY = 16 * 1024;

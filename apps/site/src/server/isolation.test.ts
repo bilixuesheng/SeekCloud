@@ -116,7 +116,9 @@ describe("两个人互相看不到对方的数据", () => {
       .filter(([path]) => path.includes("{"))
       .flatMap(([path, methods]) => Object.keys(methods).map((m) => `${m.toUpperCase()} ${path}`))
       // 仓库的分支：按乙自己关联的 GitHub 账号去查，不是谁的数据 ID
-      .filter((route) => route !== "GET /api/github/repos/{owner}/{repo}/branches");
+      .filter((route) => route !== "GET /api/github/repos/{owner}/{repo}/branches")
+      // 模型提供方是全站的设置（ID 是 Provider ID，不是谁的数据），能不能改问设置的规则（model_providers）
+      .filter((route) => !route.includes("/api/settings/model-providers/{id}"));
     expect(withIds.sort()).toEqual(Object.keys(foreignCalls()).sort());
   });
 

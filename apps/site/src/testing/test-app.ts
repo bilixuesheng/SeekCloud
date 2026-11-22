@@ -8,16 +8,11 @@ import { type AppDeps, createApp } from "../server/app";
 import { hasAdmin } from "../server/auth/admin";
 import { adminIdentity } from "../server/auth/admin-identity";
 import { connectDatabase } from "../server/db/client";
-import { modelProviders } from "../server/db/schema";
-import {
-  deepseekRouting,
-  setProviderKey,
-  transparentErrors,
-  usageAdmission,
-} from "../server/gateway/trunk";
+import { configuredRouting, transparentErrors, usageAdmission } from "../server/gateway/trunk";
 import { HostHub } from "../server/hosts/hub";
 import { createHost } from "../server/hosts/keys";
 import { runMaintenance } from "../server/maintenance";
+import { createModelCatalog, updateProvider } from "../server/models/providers";
 import type { OutboundNetwork } from "../server/network/address";
 import type {
   ErrorPresentation,
@@ -73,6 +68,10 @@ export interface TestAppOptions {
   webFetchTimeoutMs?: number;
   /** 事件流的保活间隔（同时核对登录状态），默认 25 秒。测"退出以后事件流断开"时改短。 */
   streamKeepaliveMs?: number;
+  /** 主站读到的环境变量（模型提供方没填 key 时读）。默认是空的，不读跑测试的机器上的。 */
+  env?: Record<string, string | undefined>;
+  /** DeepSeek 发布的模型列表。默认关（只用内置的两个）；测它的测试打开。 */
+  deepseekListing?: { timeoutMs?: number; maxAgeMs?: number };
 }
 
 /** 测试里填好的模型服务 key（发给假提供方的请求里应该带着它）。 */
@@ -99,27 +98,38 @@ export async function createTestApp(options: TestAppOptions = {}) {
     github,
     secrets: new SecretBox(Buffer.alloc(32, 7)),
     host: options.host === false ? undefined : host,
+    env: options.env ?? {},
   };
   const model = new FakeModelProvider();
+  const settingsPolicy = options.settingsPolicy ?? adminSettings;
+  const models = createModelCatalog({
+    ...base,
+    settingsPolicy,
+    modelFetch: options.modelFetch ?? model.fetch,
+    deepseekListing: options.deepseekListing ?? false,
+  });
   const deps: AppDeps = {
     ...base,
     identity: (options.identity ?? adminIdentity)(base),
-    settingsPolicy: options.settingsPolicy ?? adminSettings,
+    settingsPolicy,
     modelAdmission: options.modelAdmission ?? usageAdmission(base),
-    providerRouting: options.providerRouting ?? deepseekRouting(base),
+    providerRouting:
+      options.providerRouting ?? configuredRouting({ ...base, settingsPolicy }, models),
     errorPresentation: options.errorPresentation ?? transparentErrors,
     modelFetch: options.modelFetch ?? model.fetch,
     outboundNetwork: options.outboundNetwork,
     webFetchTimeoutMs: options.webFetchTimeoutMs,
     streamKeepaliveMs: options.streamKeepaliveMs,
     platformCalls: options.platformCalls ?? false,
+    deepseekListing: options.deepseekListing ?? false,
+    models,
   };
   if (options.modelKey !== false) {
     try {
-      await setProviderKey(deps, MODEL_KEY);
-      await db
-        .update(modelProviders)
-        .set({ baseUrl: options.modelBaseUrl ?? "https://model.test/anthropic" });
+      await updateProvider(deps, "deepseek", {
+        apiKey: MODEL_KEY,
+        baseUrl: options.modelBaseUrl ?? "https://model.test/anthropic",
+      });
     } catch (error) {
       // 测数据库连不上的情况（databaseUrl 指向一个不存在的库）：填不了 key，也用不着。
       if (!options.databaseUrl) throw error;

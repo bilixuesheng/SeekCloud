@@ -9,7 +9,9 @@ import { eq } from "drizzle-orm";
 import type { AppDeps } from "./app";
 import { settings } from "./db/schema";
 import type { SettingsActor, SettingsPolicy } from "./ports";
-import { DEFAULT_EFFORT } from "./sessions/models";
+
+/** 新会话默认的思考强度（模型没有这一档时换成最近的一档）。 */
+export const DEFAULT_EFFORT: ThinkingEffort = "high";
 
 /**
  * 全站设置。每一项有固定的键、形状和默认值；库里没有这一行，或者存的值不符合现在的形状
@@ -42,7 +44,17 @@ export const SETTINGS = {
   /**
    * 平台自己发起的模型调用（判断是否在等输入这些，#140）用哪个模型。"auto" 是自动：用模型列表里最省的那个。
    */
-  platform_model: { shape: z.string().max(100), fallback: "auto" as string },
+  platform_model: { shape: z.string().max(300), fallback: "auto" as string },
+  /**
+   * 新会话默认用的模型（"提供方/模型"），在模型选择器里选了就记下（照 dsh：选模型也设为新会话的默认值）。
+   * 空的、或者那个模型不能用了，用第一个能用的模型。
+   */
+  default_model: { shape: z.string().max(300), fallback: "" as string },
+  /**
+   * 模型提供方（设置的"模型"：提供方、key、模型列表，#113）。内容存在 model_providers、provider_models 两张表里，
+   * 不在这一项；这一项只用来问规则能不能改（SettingsPolicy.canWrite），下游可以不让普通用户改。
+   */
+  model_providers: { shape: z.null(), fallback: null },
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;

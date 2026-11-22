@@ -8,6 +8,7 @@ import type { Database } from "./db/client";
 import { apiError, handleError } from "./errors";
 import { ModelGateway } from "./gateway/gateway";
 import type { GitHub } from "./github/port";
+import { createModelCatalog, type ModelCatalog } from "./models/providers";
 import type { OutboundNetwork } from "./network/address";
 import type {
   Clock,
@@ -68,6 +69,18 @@ export interface AppDeps {
    * 只用规则（测试默认关：这些调用会抢走测试给假模型排好的回复）。timeoutMs 换掉两处的超时（测试用）。
    */
   platformCalls?: false | { timeoutMs?: number };
+  /** 读环境变量（模型提供方没填 key 时读，#113）。不填就是 process.env；测试里换掉。 */
+  env?: Record<string, string | undefined>;
+  /**
+   * DeepSeek 发布的模型列表（models/deepseek-listing.ts）：默认开，第一次要用时去取，之后约每十分钟刷新。
+   * false 时只用内置的两个（测试默认关：它会抢走测试给假模型排好的回复）。
+   */
+  deepseekListing?: false | { timeoutMs?: number; maxAgeMs?: number };
+  /**
+   * 提供方和模型（models/providers.ts）。路由（configuredRouting）和 createApp 要用同一个（DeepSeek 发布的列表
+   * 缓存在里面）：main.ts 里用 createModelCatalog 建好传进来；不填时 createApp 自己建一个。
+   */
+  models?: ModelCatalog;
 }
 
 const CheckResult = z.enum(["ok", "error"]);
@@ -185,17 +198,19 @@ export function createApp(deps: AppDeps) {
     return database === "ok" ? c.json(body, 200) : c.json(body, 503);
   });
 
+  const models = deps.models ?? createModelCatalog(deps);
   const gateway = new ModelGateway(deps);
-  app.route("/api/gateway", gatewayRoutes(deps, gateway));
+  app.route("/api/gateway", gatewayRoutes(deps, gateway, models));
   app.route("/api/auth/github", githubAuthRoutes(deps));
   const platform = deps.platformCalls;
   const sessions = new Sessions(
     deps,
     platform === false
-      ? {}
+      ? { models }
       : {
-          waitingCheck: new WaitingCheck(deps, gateway, platform),
-          pinTitles: new PinTitles(deps, gateway, platform),
+          models,
+          waitingCheck: new WaitingCheck({ models }, gateway, platform),
+          pinTitles: new PinTitles({ models }, gateway, platform),
         },
   );
   app.route("/api/account", accountRoutes(deps));
@@ -205,7 +220,7 @@ export function createApp(deps: AppDeps) {
   app.route("/api", sessionRoutes(deps, sessions));
   app.route("/api", sidebarRoutes(deps, sessions));
   app.route("/api", meRoutes(deps));
-  app.route("/api", modelRoutes(deps));
+  app.route("/api", modelRoutes(deps, models));
 
   app.onError(handleError);
   app.notFound((c) => c.json(apiError("not_found", "接口不存在"), 404));

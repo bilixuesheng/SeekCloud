@@ -17,7 +17,8 @@
     "db:generate": "drizzle-kit generate",
     "admin:reset-password": "tsx src/server/cli/reset-password.ts",
     "host:create": "tsx src/server/cli/host.ts create",
-    "host:revoke": "tsx src/server/cli/host.ts revoke"
+    "host:revoke": "tsx src/server/cli/host.ts revoke",
+    "model-catalog": "tsx src/server/cli/model-catalog.ts"
   },
   "dependencies": {
     "@fontsource/noto-serif-sc": "^5.3.1",

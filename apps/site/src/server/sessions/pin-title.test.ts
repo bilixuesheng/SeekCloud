@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEEPSEEK_MODELS } from "../models/catalog";
 import {
   cleanPinTitle,
   PIN_TITLE_INSTRUCTIONS,
@@ -75,10 +76,7 @@ describe("置顶的短标题：问模型", () => {
     );
   });
 
-  const deps = {
-    db: { select: () => ({ from: () => ({ where: async () => [] }) }) } as never,
-    settingsPolicy: { defaultValue: async () => "auto", canWrite: () => true } as never,
-  };
+  const deps = { models: { platformModel: async () => DEEPSEEK_MODELS[0] } };
 
   it("问最省的模型，不思考，用途 pin_title；出错、超时、没有文字时给不出来", async () => {
     const calls: Array<{ call: object; body: object }> = [];
@@ -93,7 +91,7 @@ describe("置顶的短标题：问模型", () => {
     );
     expect(calls[0]?.call).toMatchObject({
       purpose: "pin_title",
-      model: "deepseek-flash",
+      model: "deepseek/deepseek-flash",
       sessionId: "s1",
     });
     expect(calls[0]?.body).toMatchObject({ max_tokens: 32, thinking: { type: "disabled" } });

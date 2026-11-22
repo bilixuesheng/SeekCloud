@@ -1,11 +1,14 @@
-import { fitEffort, THINKING_EFFORTS, type ThinkingEffort } from "@seekcloud/protocol";
+import { fitEffort, type ThinkingEffort } from "@seekcloud/protocol";
 import { type CSSProperties, type RefObject, useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../Icons";
 import { Pages, reducedMotion, usePresence } from "../Motion";
 import { useClaimTouch } from "../touch";
 
 export interface ModelInfo {
+  /** 提供方/模型。 */
   id: string;
+  provider: string;
+  providerName: string;
   name: string;
   description: string;
   /** 能不能识图：不能时输入框"+"里的"图片"不可用。 */
@@ -15,18 +18,17 @@ export interface ModelInfo {
 
 export const effortLabels: Record<ThinkingEffort, string> = {
   off: "关闭",
+  minimal: "极低",
   low: "低",
+  medium: "中",
   high: "高",
+  xhigh: "很高",
   max: "最高",
 };
 
 /** 拉到"最高"时，档位名的位置换成这句话，过一会儿再换回来。 */
 export const MAX_HINT = "思考时间更长，用量更多。";
 const MAX_HINT_MS = 1400;
-
-/** 滑块上从左到右的四档。模型不支持的那几档也画出来，只是不可选。 */
-const STOPS = THINKING_EFFORTS;
-const LAST = STOPS.length - 1;
 
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
 
@@ -119,7 +121,6 @@ function ModelEffortMenu({
   const live = dragging ?? effort;
   const hint = useMaxHint(live);
   const thumb = useRef<HTMLSpanElement>(null);
-  const unsupported = STOPS.filter((e) => !current.efforts.includes(e));
 
   // 打开时焦点放在滑块上，方向键直接能换档
   useEffect(() => {
@@ -181,18 +182,16 @@ function ModelEffortMenu({
               <ResetIcon />
             </button>
           </div>
-          <EffortSlider
-            thumbRef={thumb}
-            efforts={current.efforts}
-            value={effort}
-            onChange={(e) => onChange(current.id, e)}
-            onDrag={setDragging}
-            describedBy={unsupported.length > 0 ? "effort-unsupported" : undefined}
-          />
-          {unsupported.length > 0 && (
-            <p className="effort-note" id="effort-unsupported">
-              {current.name} 不支持{unsupported.map((e) => `"${effortLabels[e]}"`).join("、")}档。
-            </p>
+          {current.efforts.length > 1 ? (
+            <EffortSlider
+              thumbRef={thumb}
+              efforts={current.efforts}
+              value={effort}
+              onChange={(e) => onChange(current.id, e)}
+              onDrag={setDragging}
+            />
+          ) : (
+            <p className="effort-note">{current.name} 未声明推理等级，由接口自行决定是否思考。</p>
           )}
           {/* 读屏软件：到"最高"时读出提示 */}
           <span className="visually-hidden" aria-live="polite">
@@ -256,23 +255,14 @@ function useMaxHint(live: ThinkingEffort): boolean {
   return hint;
 }
 
-/** 滑块上离 r（0 到 1）最近的、模型支持的一档。 */
+/** 滑块上离 r（0 到 1）最近的一档。滑块上只画模型支持的档位，等距排开。 */
 export function nearest(efforts: readonly ThinkingEffort[], r: number): ThinkingEffort {
-  const at = r * LAST;
-  let best = efforts[0] ?? "high";
-  for (const e of efforts) {
-    if (Math.abs(STOPS.indexOf(e) - at) < Math.abs(STOPS.indexOf(best) - at)) best = e;
-  }
-  return best;
+  return efforts[Math.round(clamp(r) * Math.max(0, efforts.length - 1))] ?? efforts[0] ?? "off";
 }
 
 /** 往左（-1）或往右（1）的下一个支持的档位；到头了就不动。 */
 export function step(efforts: readonly ThinkingEffort[], from: ThinkingEffort, dir: 1 | -1) {
-  for (let i = STOPS.indexOf(from) + dir; i >= 0 && i <= LAST; i += dir) {
-    const e = STOPS[i];
-    if (e && efforts.includes(e)) return e;
-  }
-  return from;
+  return efforts[efforts.indexOf(from) + dir] ?? from;
 }
 
 /**
@@ -286,22 +276,22 @@ function EffortSlider({
   value,
   onChange,
   onDrag,
-  describedBy,
 }: {
   thumbRef: RefObject<HTMLSpanElement | null>;
+  /** 模型支持的档位，从低到高：滑块上只画这几档。 */
   efforts: readonly ThinkingEffort[];
   value: ThinkingEffort;
   onChange: (effort: ThinkingEffort) => void;
   onDrag: (effort: ThinkingEffort | null) => void;
-  describedBy?: string;
 }) {
-  const index = STOPS.indexOf(value);
+  const last = Math.max(1, efforts.length - 1);
+  const index = Math.max(0, efforts.indexOf(value));
   const [drag, setDrag] = useState<number | null>(null);
   const [moving, setMoving] = useState(false);
   const startX = useRef(0);
   const track = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
-  const ratio = drag ?? index / LAST;
+  const ratio = drag ?? index / last;
 
   useParticles(canvas, track);
   useClaimTouch(track);
@@ -323,8 +313,8 @@ function EffortSlider({
     if (key === "ArrowLeft" || key === "ArrowDown" || key === "PageDown") {
       return step(efforts, value, -1);
     }
-    if (key === "Home") return STOPS.find((e) => efforts.includes(e)) ?? value;
-    if (key === "End") return STOPS.findLast((e) => efforts.includes(e)) ?? value;
+    if (key === "Home") return efforts[0] ?? value;
+    if (key === "End") return efforts.at(-1) ?? value;
     return undefined;
   };
 
@@ -358,12 +348,8 @@ function EffortSlider({
       }}
       onPointerCancel={end}
     >
-      {STOPS.map((e, i) => (
-        <span
-          key={e}
-          className={`effort-stop${efforts.includes(e) ? "" : " unsupported"}`}
-          style={{ "--i": i / LAST } as CSSProperties}
-        />
+      {efforts.map((e, i) => (
+        <span key={e} className="effort-stop" style={{ "--i": i / last } as CSSProperties} />
       ))}
       <span className="effort-fill">
         <span className="effort-fill-max" />
@@ -376,10 +362,9 @@ function EffortSlider({
         tabIndex={0}
         aria-label="思考强度"
         aria-valuemin={0}
-        aria-valuemax={LAST}
+        aria-valuemax={efforts.length - 1}
         aria-valuenow={index}
         aria-valuetext={effortLabels[value]}
-        aria-describedby={describedBy}
         onKeyDown={(e) => {
           const next = keyStep(e.key);
           if (!next) return;

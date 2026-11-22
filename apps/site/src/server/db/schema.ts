@@ -1,5 +1,6 @@
 import type {
   ErrorCode,
+  ModelProtocol,
   PullRequestState,
   RepoDiff,
   SessionEventBody,
@@ -22,6 +23,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { ModelCompat, ModelInput, ProviderKind, ReasoningEfforts } from "../models/types";
 import type { WebTool } from "../ports";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull();
@@ -342,22 +344,58 @@ export const settings = pgTable("settings", {
 });
 
 /**
- * 模型服务的提供方（模型网关，#26）。主干现在只有 DeepSeek 官方一个；多提供方在 #112 里加。
- * key 用 SEEKCLOUD_SECRET_KEY 加密存放，接口从不返回原文。
+ * 模型服务的提供方（照 dsh 的"设置 → 模型"，#113）：内置的 DeepSeek 官方（kind = deepseek，迁移时建好，
+ * 不能删）、目录里的第三方提供方（catalog，slug 就是目录里的 ID）、自定义接口（custom）。
+ * key 用 SEEKCLOUD_SECRET_KEY 加密存放，接口从不返回原文；没填 key 时读主站进程的环境变量
+ * （目录列出的变量名，或者管理员给自定义接口填的 api_key_env）。
  */
 export const modelProviders = pgTable("model_providers", {
   id: uuid("id").primaryKey().defaultRandom(),
-  // 程序里认它用的标识，比如 deepseek。
+  // Provider ID（小写字母、数字、-），定了不能改：会话、用量、设置里都记它。
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
-  // Anthropic Messages 兼容接口的地址，比如 https://api.deepseek.com/anthropic。
-  baseUrl: text("base_url").notNull(),
+  kind: text("kind").$type<ProviderKind>().notNull().default("custom"),
+  // 自定义接口的协议；DeepSeek 是 Anthropic Messages，目录里的照目录（每个模型自己的协议）。
+  api: text("api").$type<ModelProtocol>(),
+  // 接口地址。目录里的提供方为空时用目录给的地址（每种协议一个）；填了就是所有模型都用它（和 dsh 一样）。
+  baseUrl: text("base_url"),
   apiKey: text("api_key"),
   keySetAt: timestamp("key_set_at", { withTimezone: true }),
   // 上游说 key 不对（401、403）的时间；换了 key 以后清掉。设置里据此提示管理员检查 key。
   keyRejectedAt: timestamp("key_rejected_at", { withTimezone: true }),
+  // 自定义接口没填 key 时读的环境变量名。
+  apiKeyEnv: text("api_key_env"),
+  enabled: boolean("enabled").notNull().default(true),
+  // 设置页和模型选择器里的先后，从小到大。
+  position: doublePrecision("position").notNull().default(0),
+  // 用自己的模型列表（provider_models）。为假时 DeepSeek 跟着它发布的列表、目录里的跟着目录；
+  // "恢复默认模型"改回假并删掉自己的列表。自定义接口总是真。
+  customModels: boolean("custom_models").notNull().default(false),
   createdAt: createdAt(),
 });
+
+/** 提供方自己的模型列表（custom_models 为真时用）。顺序是 position 从小到大。 */
+export const providerModels = pgTable(
+  "provider_models",
+  {
+    providerId: uuid("provider_id")
+      .notNull()
+      .references(() => modelProviders.id, { onDelete: "cascade" }),
+    // 发给接口的模型 ID。
+    modelId: text("model_id").notNull(),
+    name: text("name"),
+    // 没填时照 dsh 的默认值（models/defaults.ts）。
+    contextWindow: integer("context_window"),
+    maxTokens: integer("max_tokens"),
+    input: jsonb("input").$type<ModelInput[]>().notNull(),
+    // 推理等级：档位到发给接口的参数值（off 可以是 null，表示不传）。没声明时为空，模型选择器里没有思考强度。
+    reasoningEfforts: jsonb("reasoning_efforts").$type<ReasoningEfforts>(),
+    // 请求兼容性开关（dsh 的 compat）。
+    compat: jsonb("compat").$type<ModelCompat>(),
+    position: integer("position").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.providerId, t.modelId] })],
+);
 
 /**
  * 模型调用的用量（#26）：每次调用一条，只记 token 数，不换算成钱。purpose 是用途：Agent 的调用、起标题、
