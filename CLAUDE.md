@@ -126,6 +126,7 @@
 - 主站的每个响应都带内容安全策略（`apps/site/src/server/app.ts`）：脚本只能来自本站，页面里不能写内联脚本，要在页面画出来之前跑的放进 `apps/site/public/` 下单独的文件（比如 `theme-boot.js`）。接口的请求体最多 1 MB（webhook 25 MB）。
 - Agent 回复里的图片只有 GitHub 和主站自己的直接显示，别的来源点了才加载（`session/Markdown.tsx` 的 `trustedImageHost`）：图片地址是 Agent 写的，直接加载等于给了它一条往外送数据的路。
 - 要看界面时，可以用假 GitHub、假宿主机起一个真主站来截图：照 `apps/site/src/testing/test-app.ts` 的写法建 `createApp()`，再挂上 `dist/client` 的静态文件。
+- 界面的通用组件在 `apps/site/src/client/ui/`（2026-11-22 用户要求设置页不要粗糙）：`toast.tsx`（右下角可堆叠的通知，手机上在底部；`toast(文字, "success" | "error" | "info")`，读取或操作失败用 `useErrorToast(error)`；操作结果一律用它，不在页面里插提示）、`confirm.tsx`（`await confirmDialog({ title, body, confirmText, danger })`，退出、删除这类确认一律用它，不在原地把按钮换成"确认"）、`modal.tsx`（要填东西的操作放进弹窗：改密码、两步验证、通行密钥、模型目录、连接设置、添加提供商）、`select.tsx`（自己画的下拉框，可以分组；设置里不用浏览器自带的下拉框）。弹窗、通知、下拉列表的进出都带模糊，系统开了"减少动效"时不播。通知和确认弹窗挂在 `mountApp` 里，哪一页都能用。
 - 接口出错时统一返回 `{ error: { code, message } }`：`code` 给程序判断，`message` 是给人看的中文。用 `apps/site/src/server/errors.ts` 的 `apiError()`。
 - 全站设置（管理员在设置窗口里改的配置）存在 `settings` 表里，一项一行，读写都走 `apps/site/src/server/settings.ts`；接口在 `routes/settings.ts`（`/api/settings/...`）。现在有 AI 标识的两个开关（随准备沙箱的命令下发给宿主机，改了以后给沙箱还开着的会话再发一次 `set_ai_labels`）和新会话默认的思考强度（`/api/models` 的 `defaultEffort` 也是它，发起会话时没指定思考强度就用它）。
 - 加表：改 `apps/site/src/server/db/schema.ts`，然后在 `apps/site` 里运行 `pnpm db:generate --name <名字>` 生成迁移。主站启动时自动跑迁移。
