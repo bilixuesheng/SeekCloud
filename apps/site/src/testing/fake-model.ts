@@ -31,6 +31,8 @@ export type FakeModelReply =
   | { stream: Array<{ event: string; data: unknown }>; hold?: boolean; dropAfter?: number }
   /** 非流式回一个 JSON。 */
   | { json: Record<string, unknown> }
+  /** 流式原样回这几段文字（一段一块），给 OpenAI、Gemini 这类没有 event 行的流用。 */
+  | { sse: string[] }
   /** 上游出错：状态码、响应体、响应头。 */
   | { status: number; body: string; headers?: Record<string, string> }
   /** 连不上。 */
@@ -135,6 +137,19 @@ export class FakeModelProvider {
       return new Response(JSON.stringify(reply.json), {
         headers: { "content-type": "application/json", ...upstreamHeaders },
       });
+    }
+    if ("sse" in reply) {
+      const chunks = reply.sse.map((c) => new TextEncoder().encode(c));
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          pull: (controller) => {
+            const next = chunks.shift();
+            if (next) controller.enqueue(next);
+            else controller.close();
+          },
+        }),
+        { headers: { "content-type": "text/event-stream", ...upstreamHeaders } },
+      );
     }
     const encoder = new TextEncoder();
     const blocks = reply.stream.map(
