@@ -37,7 +37,8 @@ export function Modal({
     );
     (first ?? card.current)?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      // 下拉框开着时 Esc 先收起下拉框（ui/select.tsx 自己处理），弹窗不关
+      if (e.key === "Escape" && !document.querySelector(".select-list:not(.closing)")) {
         // 捕获阶段先拿到：不让底下的设置窗口跟着关
         e.stopPropagation();
         close.current();

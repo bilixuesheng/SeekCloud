@@ -3,6 +3,10 @@ import { useMemo, useState } from "react";
 import { type ApiError, api } from "../../api";
 import { useCached } from "../../cached";
 import { PlusIcon, SearchIcon } from "../../Icons";
+import { confirmDialog } from "../../ui/confirm";
+import { Modal } from "../../ui/modal";
+import { Select } from "../../ui/select";
+import { toast, useErrorToast } from "../../ui/toast";
 import { KeyField } from "./KeyField";
 import { type DraftModel, ModelEditor } from "./ModelEditor";
 import {
@@ -26,44 +30,43 @@ const PROVIDER_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export function AddProvider({ onAdded }: { onAdded: (provider: ProviderView) => void }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"catalog" | "custom">("catalog");
-  if (!open) {
-    return (
-      <button type="button" className="add-provider-button" onClick={() => setOpen(true)}>
-        <PlusIcon size={16} /> 添加模型提供商
-      </button>
-    );
-  }
   const done = (provider: ProviderView) => {
     onAdded(provider);
     setOpen(false);
+    toast(`已添加 ${provider.name}。`);
   };
   return (
-    <div className="settings-card add-provider">
-      <fieldset className="segmented add-provider-tabs">
-        <legend className="visually-hidden">提供商的类型</legend>
-        {(
-          [
-            ["catalog", "第三方模型提供商"],
-            ["custom", "自定义模型 API"],
-          ] as const
-        ).map(([id, label]) => (
-          <label key={id} className={`segment${tab === id ? " current" : ""}`}>
-            <input
-              type="radio"
-              name="add-provider-tab"
-              checked={tab === id}
-              onChange={() => setTab(id)}
-            />
-            <span className="segment-label">{label}</span>
-          </label>
-        ))}
-      </fieldset>
-      {tab === "catalog" ? (
-        <CatalogForm onCancel={() => setOpen(false)} onAdded={done} />
-      ) : (
-        <CustomForm onCancel={() => setOpen(false)} onAdded={done} />
-      )}
-    </div>
+    <>
+      <button type="button" className="add-provider-button" onClick={() => setOpen(true)}>
+        <PlusIcon size={16} /> 添加模型提供商
+      </button>
+      <Modal open={open} wide title="添加模型提供商" onClose={() => setOpen(false)}>
+        <fieldset className="segmented add-provider-tabs">
+          <legend className="visually-hidden">提供商的类型</legend>
+          {(
+            [
+              ["catalog", "第三方模型提供商"],
+              ["custom", "自定义模型 API"],
+            ] as const
+          ).map(([id, label]) => (
+            <label key={id} className={`segment${tab === id ? " current" : ""}`}>
+              <input
+                type="radio"
+                name="add-provider-tab"
+                checked={tab === id}
+                onChange={() => setTab(id)}
+              />
+              <span className="segment-label">{label}</span>
+            </label>
+          ))}
+        </fieldset>
+        {tab === "catalog" ? (
+          <CatalogForm onCancel={() => setOpen(false)} onAdded={done} />
+        ) : (
+          <CustomForm onCancel={() => setOpen(false)} onAdded={done} />
+        )}
+      </Modal>
+    </>
   );
 }
 
@@ -79,7 +82,7 @@ function CatalogForm({
   const [chosen, setChosen] = useState<CatalogEntry>();
   const [key, setKey] = useState<KeyDraft>({ kind: "keep" });
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  useErrorToast(catalog.error);
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (catalog.data?.providers ?? []).filter(
@@ -90,7 +93,6 @@ function CatalogForm({
   const save = async () => {
     if (!chosen) return;
     setBusy(true);
-    setError(undefined);
     try {
       const apiKey = keyPatch(key);
       onAdded(
@@ -101,7 +103,7 @@ function CatalogForm({
         }),
       );
     } catch (e) {
-      setError((e as ApiError).message);
+      toast((e as ApiError).message, "error");
     } finally {
       setBusy(false);
     }
@@ -164,11 +166,6 @@ function CatalogForm({
           </ul>
         </>
       )}
-      {(error ?? catalog.error) && (
-        <p className="alert" role="alert">
-          {error ?? catalog.error}
-        </p>
-      )}
       <div className="settings-form-actions">
         <button type="button" className="secondary" onClick={onCancel}>
           取消
@@ -200,18 +197,29 @@ function CustomForm({
   const [key, setKey] = useState<KeyDraft>({ kind: "keep" });
   const [apiKeyEnv, setApiKeyEnv] = useState("");
   const [models, setModels] = useState<DraftModel[]>([]);
-  const [warnings, setWarnings] = useState<string[]>();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
 
   const idValid = PROVIDER_ID.test(id);
   const ready = idValid && baseUrl.trim() !== "" && models.length > 0;
 
-  const save = async (confirmed = false) => {
-    setError(undefined);
-    if (!confirmed) {
-      const found = await urlWarnings(baseUrl.trim());
-      if (found.length > 0) return setWarnings(found);
+  const save = async () => {
+    // 不是 HTTPS、在内网时先确认（自己部署的模型可以是内网地址，只提示不拦）
+    const found = await urlWarnings(baseUrl.trim());
+    if (
+      found.length > 0 &&
+      !(await confirmDialog({
+        title: "确认使用这个地址？",
+        body: (
+          <>
+            {found.map((w) => (
+              <p key={w}>{w}</p>
+            ))}
+          </>
+        ),
+        confirmText: "仍然添加",
+      }))
+    ) {
+      return;
     }
     setBusy(true);
     try {
@@ -229,10 +237,9 @@ function CustomForm({
         }),
       );
     } catch (e) {
-      setError((e as ApiError).message);
+      toast((e as ApiError).message, "error");
     } finally {
       setBusy(false);
-      setWarnings(undefined);
     }
   };
 
@@ -280,26 +287,18 @@ function CustomForm({
           inputMode="url"
           maxLength={500}
           placeholder="https://gateway.example/v1"
-          onChange={(e) => {
-            setBaseUrl(e.target.value);
-            setWarnings(undefined);
-          }}
+          onChange={(e) => setBaseUrl(e.target.value)}
         />
       </label>
-      <label className="field">
+      <div className="field">
         <span>API 协议</span>
-        <select
-          className="settings-select"
+        <Select
+          label="API 协议"
           value={protocol}
-          onChange={(e) => setProtocol(e.target.value as ModelProtocol)}
-        >
-          {MODEL_PROTOCOLS.map((p) => (
-            <option key={p} value={p}>
-              {PROTOCOL_LABELS[p]}
-            </option>
-          ))}
-        </select>
-      </label>
+          options={MODEL_PROTOCOLS.map((p) => ({ value: p, label: PROTOCOL_LABELS[p] }))}
+          onChange={(v) => setProtocol(v as ModelProtocol)}
+        />
+      </div>
       <p className="settings-hint">
         选网关实际使用的协议；同时提供两种协议的网关要建两个提供商。Gemini API 的基础 URL 包含 API
         版本，例如 https://gateway.example/v1beta。
@@ -321,29 +320,11 @@ function CustomForm({
         />
       </label>
       <ModelEditor models={models} onChange={setModels} probe={probe} allowReasoning />
-      {warnings && (
-        <div className="alert" role="alert">
-          {warnings.map((w) => (
-            <p key={w}>{w}</p>
-          ))}
-          <p>确认无误后再次点击“保存”。</p>
-        </div>
-      )}
-      {error && (
-        <p className="alert" role="alert">
-          {error}
-        </p>
-      )}
       <div className="settings-form-actions">
         <button type="button" className="secondary" onClick={onCancel}>
           取消
         </button>
-        <button
-          type={warnings ? "button" : "submit"}
-          className="primary"
-          disabled={!ready || busy}
-          onClick={warnings ? () => void save(true) : undefined}
-        >
+        <button type="submit" className="primary" disabled={!ready || busy}>
           {busy ? "请稍候…" : "保存"}
         </button>
       </div>

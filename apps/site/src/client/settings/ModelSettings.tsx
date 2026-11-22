@@ -1,8 +1,9 @@
-import { useState } from "react";
 import { type ApiError, api } from "../api";
 import { setCached, useCached } from "../cached";
 import { SparkIcon } from "../Icons";
 import { reloadModels, useModels } from "../session/useModels";
+import { Select, type SelectOption } from "../ui/select";
+import { toast, useErrorToast } from "../ui/toast";
 import { AddProvider } from "./models/AddProvider";
 import { ProviderCard } from "./models/ProviderCard";
 import { MODEL_PROVIDERS, type ProviderView } from "./models/types";
@@ -17,6 +18,7 @@ export const PLATFORM_MODEL = "/api/settings/platform-model";
 export function ModelSettings() {
   const loaded = useCached<{ providers: ProviderView[] }>(MODEL_PROVIDERS);
   const providers = loaded.data?.providers;
+  useErrorToast(loaded.error);
   const write = (next: ProviderView[]) => {
     setCached(MODEL_PROVIDERS, { providers: next });
     reloadModels();
@@ -36,11 +38,6 @@ export function ModelSettings() {
             onDeleted={() => write(providers.filter((x) => x.id !== p.id))}
           />
         ))}
-        {loaded.error && (
-          <p className="alert" role="alert">
-            {loaded.error}
-          </p>
-        )}
         {providers && <AddProvider onAdded={(p) => write([...providers, p])} />}
       </section>
       <PlatformModel />
@@ -56,26 +53,25 @@ function PlatformModel() {
   const loaded = useCached<{ model: string }>(PLATFORM_MODEL);
   const models = useModels()?.models;
   const current = loaded.data?.model;
-  const [failed, setError] = useState<string>();
-  const error = failed ?? loaded.error;
+  useErrorToast(loaded.error);
 
   const choose = async (next: string) => {
     if (current === undefined || next === current) return;
     setCached(PLATFORM_MODEL, { model: next });
-    setError(undefined);
     try {
       await api(PLATFORM_MODEL, { model: next }, "PUT");
     } catch (e) {
       setCached(PLATFORM_MODEL, { model: current });
-      setError((e as ApiError).message);
+      toast((e as ApiError).message, "error");
     }
   };
 
-  const choices = [
-    { id: "auto", label: "自动" },
+  const options: SelectOption[] = [
+    { value: "auto", label: "自动", hint: "使用能用的模型中最省的一个" },
     ...(models ?? []).map((m) => ({
-      id: m.id,
-      label: m.provider === "deepseek" ? m.name : `${m.name}（${m.providerName}）`,
+      value: m.id,
+      label: m.name,
+      group: m.providerName,
     })),
   ];
   return (
@@ -84,46 +80,16 @@ function PlatformModel() {
         <SparkIcon size={16} />
         <h2>平台调用的模型</h2>
       </div>
-      {choices.length <= 4 ? (
-        <fieldset className="segmented" disabled={current === undefined || !models}>
-          <legend className="visually-hidden">平台调用的模型</legend>
-          {choices.map((c) => (
-            <label key={c.id} className={`segment${current === c.id ? " current" : ""}`}>
-              <input
-                type="radio"
-                name="platform-model"
-                value={c.id}
-                checked={current === c.id}
-                onChange={() => void choose(c.id)}
-              />
-              <span className="segment-label">{c.label}</span>
-            </label>
-          ))}
-        </fieldset>
-      ) : (
-        // 模型多了（加了别的提供方）：一排放不下，换成下拉框
-        <select
-          className="settings-select"
-          aria-label="平台调用的模型"
-          disabled={current === undefined || !models}
-          value={current ?? "auto"}
-          onChange={(e) => void choose(e.target.value)}
-        >
-          {choices.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-      )}
+      <Select
+        label="平台调用的模型"
+        value={current ?? "auto"}
+        options={options}
+        disabled={current === undefined || !models}
+        onChange={(v) => void choose(v)}
+      />
       <p className="settings-group-hint">
-        回合结束后判断会话是否在等待你的输入时，会调用一次模型（不开启思考），用量照常记录。选择“自动”时使用能用的模型中最省的一个。
+        回合结束后判断会话是否在等待你的输入、生成置顶消息的短标题时，会调用一次模型（不开启思考），用量照常记录。
       </p>
-      {error && (
-        <p className="alert" role="alert">
-          {error}
-        </p>
-      )}
     </section>
   );
 }

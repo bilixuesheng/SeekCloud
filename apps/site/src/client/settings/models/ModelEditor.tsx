@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { type ApiError, api } from "../../api";
 import { ChevronDownIcon, CloseIcon, MenuIcon, PlusIcon, SearchIcon } from "../../Icons";
 import { effortLabels } from "../../session/ModelPicker";
+import { toast } from "../../ui/toast";
 import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_MAX_TOKENS,
@@ -47,7 +48,7 @@ export function ModelEditor({
 }) {
   const [open, setOpen] = useState<string>();
   const [adding, setAdding] = useState("");
-  const [probing, setProbing] = useState<{ models?: Probed[]; error?: string; busy?: boolean }>();
+  const [probing, setProbing] = useState<{ models?: Probed[]; busy?: boolean }>();
   const list = useRef<HTMLUListElement>(null);
   const dragging = useRef<{ key: string; pointer: number } | undefined>(undefined);
 
@@ -75,7 +76,8 @@ export function ModelEditor({
       const res = await api<{ models: Probed[] }>(`${MODEL_PROVIDERS}/probe`, probe);
       setProbing({ models: res.models });
     } catch (e) {
-      setProbing({ error: (e as ApiError).message });
+      setProbing(undefined);
+      toast((e as ApiError).message, "error");
     }
   };
 
@@ -94,11 +96,6 @@ export function ModelEditor({
           </button>
         )}
       </div>
-      {probing?.error && (
-        <p className="alert" role="alert">
-          {probing.error}
-        </p>
-      )}
       {probing?.models && (
         <ProbePicker
           probed={probing.models}
@@ -362,22 +359,20 @@ function ReasoningRows({
             ))}
           </ul>
           {unused.length > 0 && (
-            <select
-              className="settings-select small"
-              aria-label="添加档位"
-              value=""
-              onChange={(e) => {
-                const level = e.target.value as ThinkingEffort;
-                if (level) set(level, level === "off" ? null : level);
-              }}
-            >
-              <option value="">添加档位…</option>
+            <div className="reasoning-add">
+              <span className="visually-hidden">添加档位</span>
               {unused.map((l) => (
-                <option key={l} value={l}>
-                  {effortLabels[l]}（{l}）
-                </option>
+                <button
+                  key={l}
+                  type="button"
+                  className="model-chip add"
+                  onClick={() => set(l, l === "off" ? null : l)}
+                >
+                  <PlusIcon size={12} />
+                  {effortLabels[l]}
+                </button>
               ))}
-            </select>
+            </div>
           )}
           <p className="settings-hint">
             参数值是发给接口的写法，默认和档位名相同；只有接口文档写法不同时才需要修改。
