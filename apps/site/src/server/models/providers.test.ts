@@ -508,11 +508,14 @@ describe("平台调用的模型", () => {
       const available = (await t.deps.models?.available()) ?? [];
       const all = available.flatMap((p) => p.models).filter((m) => m.cost);
       const cheapest = [...all].sort(
-        (a, b) => (a.cost?.[0] ?? 0) + (a.cost?.[1] ?? 0) - ((b.cost?.[0] ?? 0) + (b.cost?.[1] ?? 0)),
+        (a, b) =>
+          (a.cost?.[0] ?? 0) + (a.cost?.[1] ?? 0) - ((b.cost?.[0] ?? 0) + (b.cost?.[1] ?? 0)),
       )[0];
       const userId = (await t.deps.db.select().from(sessions).limit(1))[0]?.userId ?? "x";
       expect((await t.deps.models?.platformModel(userId))?.ref).toBe(cheapest?.ref);
-      await send(browser, "PUT", "/api/settings/platform-model", { model: "deepseek/deepseek-v4-pro" });
+      await send(browser, "PUT", "/api/settings/platform-model", {
+        model: "deepseek/deepseek-v4-pro",
+      });
       expect((await t.deps.models?.platformModel(userId))?.ref).toBe("deepseek/deepseek-v4-pro");
       await send(browser, "PATCH", `${PROVIDERS}/deepseek`, { enabled: false });
       expect((await t.deps.models?.platformModel(userId))?.provider).toBe("groq");
