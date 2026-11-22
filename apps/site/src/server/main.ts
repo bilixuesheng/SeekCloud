@@ -44,6 +44,7 @@ const base = {
       })
     : unconfiguredGitHub,
   secureCookies: process.env.NODE_ENV === "production",
+  publicUrl: process.env.PUBLIC_URL,
 };
 // 提供方和模型：路由和主站共用一个（DeepSeek 发布的模型列表缓存在里面）。
 const models = createModelCatalog({ ...base, settingsPolicy: adminSettings });

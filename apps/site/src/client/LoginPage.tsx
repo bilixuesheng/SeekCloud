@@ -3,10 +3,15 @@ import { type ApiError, api } from "./api";
 import { useSerifReady } from "./fonts";
 import { Logo } from "./Logo";
 import { LegalLink } from "./legal/LegalPage";
+import {
+  logInWithPasskey,
+  passkeyErrorText,
+  passkeyLoginSupported,
+} from "./settings/PasskeySettings";
 
 /**
  * 登录页。setup 为 true 时还没设置过管理员密码，改成首次设置：填昵称（SeekCloud 称呼管理员时用）和两遍新密码，设完直接登录。
- * 开了两步验证时，密码对了接着输验证器 App 里的验证码（或者一个恢复码，#100）。
+ * 开了两步验证时，密码对了接着输验证器 App 里的验证码（或者一个恢复码，#100）；也可以用通行密钥直接登录。
  */
 export function LoginPage({
   setup,
@@ -66,6 +71,20 @@ export function LoginPage({
       // 超过 5 分钟没输验证码：回到输密码
       if (err.code === "login_expired") backToPassword(err.message);
       else if (!setup && !pending && err.code !== "network") setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 通行密钥（#100）：通过了直接登录，不用密码和验证码
+  const passkey = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await logInWithPasskey();
+      onSignedIn();
+    } catch (e) {
+      setError(passkeyErrorText(e));
     } finally {
       setBusy(false);
     }
@@ -203,6 +222,11 @@ export function LoginPage({
         <button type="submit" className="primary" disabled={busy}>
           {busy ? "请稍候…" : setup ? "设置密码并登录" : "登录"}
         </button>
+        {!setup && passkeyLoginSupported() && (
+          <button type="button" className="secondary" disabled={busy} onClick={passkey}>
+            使用通行密钥登录
+          </button>
+        )}
       </form>
     </AuthFrame>
   );

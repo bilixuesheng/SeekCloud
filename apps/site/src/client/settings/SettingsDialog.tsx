@@ -14,6 +14,7 @@ import { shortDateTime } from "../session/relative-time";
 import { reloadModels, useModels } from "../session/useModels";
 import { currentTheme, setTheme, type Theme } from "../theme";
 import { MODEL_PROVIDERS } from "./ModelSettings";
+import { PasskeySection } from "./PasskeySettings";
 import { HOST_OFFLINE_GRACE } from "./SessionSettings";
 import { CodeField, TwoFactorRow, useTwoFactor } from "./TwoFactorSettings";
 
@@ -362,7 +363,7 @@ function SwitchRow({
   );
 }
 
-/** 账户：昵称、密码、两步验证、登录状态、开源声明。 */
+/** 账户：昵称、密码、两步验证、通行密钥、登录状态、开源声明。 */
 export function AccountSettings({ notice, onSignedOut, onProfileChanged }: SettingsSectionProps) {
   const error = notice;
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -392,6 +393,8 @@ export function AccountSettings({ notice, onSignedOut, onProfileChanged }: Setti
           <TwoFactorRow state={twoFactor} onChanged={refreshTwoFactor} />
         </section>
       )}
+
+      {twoFactor !== undefined && <PasskeySection twoFactor={twoFactor?.enabled ?? false} />}
 
       <section className="settings-section">
         <h2>登录状态</h2>

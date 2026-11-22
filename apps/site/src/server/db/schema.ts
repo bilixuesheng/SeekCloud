@@ -45,6 +45,29 @@ export const users = pgTable("users", {
   createdAt: createdAt(),
 });
 
+/**
+ * 通行密钥（WebAuthn，#100）：可以有多个，各有名字。公钥是 COSE 格式（base64url）。rpId 是添加时主站的域名：
+ * 主站换了地址，旧的通行密钥用不了（浏览器只给同一个域名的），设置里标出来。
+ */
+export const passkeys = pgTable(
+  "passkeys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    credentialId: text("credential_id").notNull().unique(),
+    publicKey: text("public_key").notNull(),
+    counter: bigint("counter", { mode: "number" }).notNull(),
+    transports: jsonb("transports").$type<string[]>(),
+    name: text("name").notNull(),
+    rpId: text("rp_id").notNull(),
+    createdAt: createdAt(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (t) => [index("passkeys_user").on(t.userId)],
+);
+
 /** 两步验证的恢复码（#100）：开启时给 10 个，只显示一次；库里只存哈希，每个只能用一次。 */
 export const recoveryCodes = pgTable(
   "recovery_codes",
@@ -339,9 +362,11 @@ export const accessEvent = pgEnum("access_event", [
   "login",
   "session_start",
   "message",
-  // 开启、关闭两步验证（#100）
+  // 开启、关闭两步验证，添加、删除通行密钥（#100）
   "two_factor_on",
   "two_factor_off",
+  "passkey_add",
+  "passkey_remove",
 ]);
 
 /**

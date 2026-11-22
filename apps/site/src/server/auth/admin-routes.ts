@@ -17,6 +17,7 @@ import {
   MAX_DEVICE_NAME,
   startLoginSession,
 } from "./login-sessions";
+import { passkeyRoutes } from "./passkey-routes";
 import { MAX_PASSWORD_LENGTH } from "./password";
 import {
   openPending,
@@ -272,5 +273,6 @@ export function authRoutes(deps: LoginDeps, limiter: RateLimiter) {
       await endAllLoginSessions(deps, c, me.id);
       return c.body(null, 204);
     })
-    .route("/", twoFactorRoutes(deps, limiter));
+    .route("/", twoFactorRoutes(deps, limiter))
+    .route("/", passkeyRoutes(deps, limiter));
 }

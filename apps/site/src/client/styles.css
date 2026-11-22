@@ -3446,6 +3446,11 @@ details > summary::-webkit-details-marker {
   box-shadow: none;
 }
 
+/* 卡片里单独一行的按钮（添加通行密钥）：不撑满整行 */
+.settings-card-action {
+  align-self: flex-start;
+}
+
 .qr-code {
   width: 176px;
   height: 176px;

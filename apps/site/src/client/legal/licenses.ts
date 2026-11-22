@@ -111,6 +111,14 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     usage: "数据导出的 zip 打包",
   },
   {
+    name: "SimpleWebAuthn",
+    packages: ["@simplewebauthn/server", "@simplewebauthn/browser"],
+    license: "MIT",
+    copyright: "Copyright (c) 2020 Matthew Miller",
+    url: "https://github.com/MasterKale/SimpleWebAuthn",
+    usage: "通行密钥的添加和登录",
+  },
+  {
     name: "uqr",
     packages: ["uqr"],
     license: "MIT",

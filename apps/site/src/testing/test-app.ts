@@ -72,7 +72,12 @@ export interface TestAppOptions {
   env?: Record<string, string | undefined>;
   /** DeepSeek 发布的模型列表。默认关（只用内置的两个）；测它的测试打开。 */
   deepseekListing?: { timeoutMs?: number; maxAgeMs?: number };
+  /** 主站对外的地址（通行密钥按它定 rpId 和来源）。默认 TEST_PUBLIC_URL；null 是没配。 */
+  publicUrl?: string | null;
 }
+
+/** 测试里主站对外的地址。假认证器（src/testing/fake-authenticator.ts）按它签名。 */
+export const TEST_PUBLIC_URL = "https://seekcloud.test";
 
 /** 测试里填好的模型服务 key（发给假提供方的请求里应该带着它）。 */
 export const MODEL_KEY = "sk-test-0123456789abcdef";
@@ -97,6 +102,7 @@ export async function createTestApp(options: TestAppOptions = {}) {
     secureCookies: false,
     github,
     secrets: new SecretBox(Buffer.alloc(32, 7)),
+    publicUrl: options.publicUrl === null ? undefined : (options.publicUrl ?? TEST_PUBLIC_URL),
     host: options.host === false ? undefined : host,
     env: options.env ?? {},
   };

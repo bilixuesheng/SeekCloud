@@ -3,6 +3,7 @@ import type { AppDeps } from "../app";
 import type { Database } from "../db/client";
 import { loginSessions, users } from "../db/schema";
 import { createDefaultEnvironment } from "../environments";
+import { deleteAllPasskeys } from "./passkeys";
 import { hashPassword, randomPassword, verifyPassword } from "./password";
 import { disableTotp } from "./two-factor";
 
@@ -71,17 +72,22 @@ export async function setPassword(
 }
 
 /**
- * 忘记密码时在服务器上重置：换成一个随机密码，所有设备退出，同时关掉两步验证（手机和恢复码都丢了的最后一招，#100）。
+ * 忘记密码时在服务器上重置：换成一个随机密码，所有设备退出，同时关掉两步验证、删掉所有通行密钥
+ * （手机和恢复码都丢了的最后一招，#100）。
  * 还没设置过时返回 undefined。
  */
 export async function resetAdminPassword(
   db: Database,
-): Promise<{ password: string; twoFactorWasOn: boolean } | undefined> {
+): Promise<{ password: string; twoFactorWasOn: boolean; passkeysRemoved: number } | undefined> {
   const [admin] = await db.select({ id: users.id }).from(users).limit(1);
   if (!admin) return undefined;
   const password = randomPassword();
   await setPassword(db, admin.id, password);
-  return { password, twoFactorWasOn: await disableTotp({ db }, admin.id) };
+  return {
+    password,
+    twoFactorWasOn: await disableTotp({ db }, admin.id),
+    passkeysRemoved: await deleteAllPasskeys({ db }, admin.id),
+  };
 }
 
 /** 改昵称。 */
