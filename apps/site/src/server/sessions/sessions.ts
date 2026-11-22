@@ -1348,6 +1348,7 @@ export class Sessions {
       effort: session.effort,
       aiLabels: await readSetting(this.#deps, "ai_labels", { userId: session.userId }),
       committer: await this.#committer(session.userId),
+      providers: await this.#models.sandboxProviders(),
       agentArchive: await readAgentArchive(this.#deps, sessionId),
     });
   }
@@ -1412,6 +1413,20 @@ export class Sessions {
       .from(sessions)
       .where(inArray(sessions.status, ["running", "waiting"]));
     for (const { id } of live) this.#send({ type: "set_ai_labels", sessionId: id, aiLabels });
+  }
+
+  /**
+   * 管理员改了模型提供方（#188）：沙箱还开着的会话（运行中、等待回复）换上新的配置，从下一个回合起生效。
+   * 排队中的会话在准备沙箱时带上新的；休眠的下次唤醒时带上。
+   */
+  async modelsChanged(): Promise<void> {
+    if (!this.#deps.host) return;
+    const providers = await this.#models.sandboxProviders();
+    const live = await this.#deps.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(inArray(sessions.status, ["running", "waiting"]));
+    for (const { id } of live) this.#send({ type: "set_models", sessionId: id, providers });
   }
 
   /** 追加一条会话事件。在会话这一行上加锁取号，同一个会话的序号连续、不重复。 */

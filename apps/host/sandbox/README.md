@@ -117,6 +117,16 @@ Generated-by: SeekCloud (AI)
 | `POST /v1/files`、`GET /v1/files`、`GET`/`DELETE /v1/files/{id}` | 上传给模型看的图片；每个会话只看得到自己传的 | `x-api-key` |
 | `POST /v1/tools/search` | 联网搜索（DeepSeek 搜索接口的格式） | `Authorization: Bearer` |
 | `POST /v1/tools/fetch` | 网页抓取（DeepSeek 抓取接口的格式）：主站替沙箱去取，转成 Markdown | `Authorization: Bearer` |
+| `POST /v1/providers/<id>/…` | 别的模型提供方（#188）：转给主站的透明转发，主站换上真 key | 照协议：`Authorization: Bearer`（OpenAI 系）、`x-api-key`（Anthropic）、`x-goog-api-key` 或查询参数 `key`（Gemini） |
+
+别的提供方（设置的"模型"里加的，#113、#188）写在 `/etc/seekcloud/models.patch.yml`（`src/agent/models-config.ts`），dsh 启动时作为一层 `--patch` 叠在基线配置前面：
+
+- `llm-pi-ai.providers`：每个提供方的 `baseURL` 是 `http://<宿主机地址>:<代理端口>/v1/providers/<id>`，`apiKeyEnv` 是 `SEEKCLOUD_MODEL_API_KEY`（值是会话临时令牌，名字里带 KEY，dsh 给 Agent 跑的命令会去掉它）；自定义接口带 `api` 和模型列表，目录里的提供方没改过模型列表时只带地址和 key；
+- 主站的 DeepSeek 模型列表里有 dsh 内置目录不认识的模型（新发布的）时，写进 `llm-deepseek.models`；
+- 每个回合开始前宿主机重写一遍这个文件；内容变了（管理员改了设置，主站发 `set_models`）就重启 dsh、`session/resume`，从这个回合起生效；
+- 开始回合时 `initialize` 的 `provider` 是 dsh 的路由名：DeepSeek 是 `deepseek-official`，别的是 Provider ID；自定义接口的模型没声明推理等级时不传思考强度。
+
+沙箱里只有会话临时令牌，没有任何提供方的 key 和地址；宿主机只转给主站，不直接连提供方。
 
 - 这个地址是沙箱直连宿主机，不经过 `HTTPS_PROXY`，任何网络策略下都通。网页抓取由主站去取，不受网络策略约束（照 Claude Code），但不连内网和本机地址。
 - 宿主机转给主站时去掉会话令牌和 dsh 夹带的请求头，只留 `content-type`、`anthropic-version`、`anthropic-beta` 这几个，换上宿主机凭据和会话 ID；路径里带 `..` 或编码过的斜杠的不转。主站剥字段、换上提供方的 key（`apps/site/src/server/gateway/`）。

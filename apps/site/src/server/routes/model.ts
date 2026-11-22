@@ -153,6 +153,10 @@ const catalogRoute = createRoute({
               baseUrl: z.string().nullable(),
               models: z.number().int(),
               added: z.boolean(),
+              envDetected: z
+                .string()
+                .nullable()
+                .openapi({ description: "检测到了哪个环境变量（只看有没有值）" }),
             }),
           ),
         }),
@@ -367,7 +371,16 @@ const PROVIDER_ERRORS: Record<ProviderError, { status: 400 | 404 | 409; message:
 
 const locked = apiError("setting_locked", "这项设置不能修改");
 
-export function modelRoutes(deps: AppDeps, models: ModelCatalog) {
+/**
+ * changed：提供方改了以后调用（沙箱还开着的会话换上新的配置，#188）。
+ */
+export function modelRoutes(
+  deps: AppDeps,
+  models: ModelCatalog,
+  changed: () => Promise<void> = async () => {},
+) {
+  // 发给宿主机的事出了错不挡设置的保存
+  const notify = () => void changed().catch((e) => console.error("通知宿主机模型配置失败", e));
   /** 改提供方之前问设置的规则（下游可以不让普通用户改）。 */
   const writable = (userId: string) =>
     Promise.resolve(deps.settingsPolicy.canWrite("model_providers", { userId }));
@@ -453,6 +466,7 @@ export function modelRoutes(deps: AppDeps, models: ModelCatalog) {
       if (!me) return c.json(notLoggedIn, 401);
       if (!(await writable(me.id))) return c.json(locked, 403);
       await reorderProviders(deps, c.req.valid("json").order);
+      notify();
       return c.json({ providers: await views() }, 200);
     })
     .openapi(createProviderRoute, async (c) => {
@@ -464,6 +478,7 @@ export function modelRoutes(deps: AppDeps, models: ModelCatalog) {
         const { body, status } = fail(result.error, result.message);
         return c.json(body, status);
       }
+      notify();
       return c.json(await providerView(deps, models, result.row), 201);
     })
     .openapi(updateProviderRoute, async (c) => {
@@ -475,6 +490,7 @@ export function modelRoutes(deps: AppDeps, models: ModelCatalog) {
         const { body, status } = fail(result.error, result.message);
         return c.json(body, status as 400 | 404);
       }
+      notify();
       return c.json(await providerView(deps, models, result.row), 200);
     })
     .openapi(usageRoute, async (c) => {
@@ -495,6 +511,7 @@ export function modelRoutes(deps: AppDeps, models: ModelCatalog) {
         const { body, status } = fail(result.error);
         return c.json(body, status as 404 | 409);
       }
+      notify();
       return c.json({ ok: true as const }, 200);
     })
     .openapi(errorRoute, async (c) => {

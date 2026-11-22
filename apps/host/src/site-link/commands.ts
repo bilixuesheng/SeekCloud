@@ -72,6 +72,7 @@ export function handleCommands(deps: {
           workspace: command.repos,
           aiLabels,
           committer: command.committer,
+          providers: command.providers,
         });
         const sandboxes = deps.sandboxes;
         if (!sandboxes) {
@@ -124,6 +125,10 @@ export function handleCommands(deps: {
         }
         return;
       }
+      case "set_models":
+        // 写进 dsh 的配置要等下一个回合开始（SandboxAgents.startTurn），正在跑的回合不打断
+        deps.sessions.setProviders(command.sessionId, command.providers);
+        return;
       case "destroy_sandbox": {
         const { sessionId } = command;
         deps.sessions.remove(sessionId);
@@ -135,13 +140,14 @@ export function handleCommands(deps: {
       case "start_turn": {
         const agents = deps.agents;
         if (agents) {
-          const { sessionId, turnId, text, model, effort } = command;
+          const { sessionId, turnId, text, model, effort, provider } = command;
           inOrder(sessionId, "开始回合", () =>
             agents.startTurn(sessionId, {
               turnId,
               text,
               model,
               effort,
+              provider,
               firstTurn: command.firstTurn ?? false,
               turnNumber: command.turnNumber,
             }),

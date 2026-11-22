@@ -3,6 +3,8 @@ import {
   type ModelProtocol,
   modelRef,
   parseModelRef,
+  type SandboxModel,
+  type SandboxProvider,
   THINKING_EFFORTS,
   type ThinkingEffort,
 } from "@seekcloud/protocol";
@@ -212,6 +214,58 @@ export class ModelCatalog {
     const row = await providerRow(this.#deps, provider);
     if (!row?.enabled || !credentialOf(this.#deps, row)) return undefined;
     return (await this.modelsOf(row)).find((m) => m.id === model);
+  }
+
+  /**
+   * 沙箱里的 dsh 能用的提供方（#188，发给宿主机的 prepare_sandbox、set_models）：能用的提供方和它们的模型，
+   * 不带地址、不带 key。目录里的没改过模型列表时不带模型（dsh 用目录的）；DeepSeek 带现在的列表
+   * （发布的列表里有 dsh 内置目录不认识的新模型时宿主机才写进 dsh 的配置）。
+   */
+  async sandboxProviders(): Promise<SandboxProvider[]> {
+    const out: SandboxProvider[] = [];
+    for (const { row, models } of await this.available()) {
+      const custom = row.kind === "custom";
+      const withModels = row.kind === "deepseek" || row.customModels;
+      out.push({
+        id: row.slug,
+        kind: row.kind,
+        name: row.name,
+        ...(custom && row.api ? { api: row.api } : {}),
+        ...(withModels ? { models: await this.#sandboxModels(row, models, custom) } : {}),
+      });
+    }
+    return out;
+  }
+
+  async #sandboxModels(
+    row: ProviderRow,
+    models: ModelEntry[],
+    custom: boolean,
+  ): Promise<SandboxModel[]> {
+    if (!row.customModels) {
+      return models.map((m) => ({
+        id: m.id,
+        name: m.name,
+        contextWindow: m.contextWindow,
+        maxTokens: m.maxTokens,
+        input: m.input,
+      }));
+    }
+    const specs = await this.#deps.db
+      .select()
+      .from(providerModels)
+      .where(eq(providerModels.providerId, row.id))
+      .orderBy(asc(providerModels.position));
+    return specs.map((spec) => ({
+      id: spec.modelId,
+      ...(spec.name ? { name: spec.name } : {}),
+      ...(spec.contextWindow ? { contextWindow: spec.contextWindow } : {}),
+      ...(spec.maxTokens ? { maxTokens: spec.maxTokens } : {}),
+      input: spec.input,
+      // 推理等级只给自定义接口（目录里的由 dsh 的目录给，DeepSeek 的由 dsh 的 DeepSeek 适配器给）
+      ...(custom && spec.reasoningEfforts ? { reasoningEfforts: spec.reasoningEfforts } : {}),
+      ...(spec.compat ? { compat: spec.compat } : {}),
+    }));
   }
 
   /** 新会话默认用哪个模型：设置里的默认模型还能用就用它，不然用第一个能用的。一个都没有时为空。 */
@@ -592,8 +646,11 @@ export async function reorderProviders(deps: Pick<AppDeps, "db">, order: string[
   });
 }
 
-/** 目录里的提供方（"添加模型提供商 → 第三方模型提供商"）：已经加过的标出来。 */
-export async function catalogList(deps: Pick<AppDeps, "db">) {
+/** 目录里的提供方（"添加模型提供商 → 第三方模型提供商"）：已经加过的标出来，环境变量检测到了的写上是哪个。 */
+export async function catalogList(
+  deps: Pick<AppDeps, "db"> & { env?: Record<string, string | undefined> },
+) {
+  const values = envOf(deps);
   const added = new Set(
     (
       await deps.db
@@ -615,6 +672,7 @@ export async function catalogList(deps: Pick<AppDeps, "db">) {
     baseUrl: Object.values(p.endpoints)[0] ?? null,
     models: p.models.length,
     added: added.has(p.id),
+    envDetected: p.env.find((name) => Boolean(values[name]?.trim())) ?? null,
   }));
 }
 

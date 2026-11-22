@@ -1,5 +1,5 @@
 import { fitEffort, type ThinkingEffort } from "@seekcloud/protocol";
-import { type CSSProperties, type RefObject, useEffect, useRef, useState } from "react";
+import { type CSSProperties, Fragment, type RefObject, useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../Icons";
 import { Pages, reducedMotion, usePresence } from "../Motion";
 import { useClaimTouch } from "../touch";
@@ -121,6 +121,7 @@ function ModelEffortMenu({
   const live = dragging ?? effort;
   const hint = useMaxHint(live);
   const thumb = useRef<HTMLSpanElement>(null);
+  const several = new Set(models.map((m) => m.provider)).size > 1;
 
   // 打开时焦点放在滑块上，方向键直接能换档
   useEffect(() => {
@@ -212,22 +213,26 @@ function ModelEffortMenu({
             </button>
             <span>模型</span>
           </div>
-          {models.map((m) => {
+          {models.map((m, i) => {
             const selected = m.id === current.id;
+            // 有几个提供方时按提供方分组（照保存的顺序），每组前面写提供方的名字
+            const group = several && models[i - 1]?.provider !== m.provider;
             return (
-              <button
-                key={m.id}
-                type="button"
-                className={`model-option${selected ? " selected" : ""}`}
-                aria-pressed={selected}
-                onClick={() => pickModel(m)}
-              >
-                <span className="model-option-text">
-                  <span className="model-name">{m.name}</span>
-                  <span className="model-desc">{m.description}</span>
-                </span>
-                {selected && <CheckIcon />}
-              </button>
+              <Fragment key={m.id}>
+                {group && <span className="model-group">{m.providerName}</span>}
+                <button
+                  type="button"
+                  className={`model-option${selected ? " selected" : ""}`}
+                  aria-pressed={selected}
+                  onClick={() => pickModel(m)}
+                >
+                  <span className="model-option-text">
+                    <span className="model-name">{m.name}</span>
+                    {m.description && <span className="model-desc">{m.description}</span>}
+                  </span>
+                  {selected && <CheckIcon />}
+                </button>
+              </Fragment>
             );
           })}
         </div>
