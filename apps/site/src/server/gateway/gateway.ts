@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { ErrorCode } from "@seekcloud/protocol";
+import { type ErrorCode, parseModelRef } from "@seekcloud/protocol";
 import type { AppDeps } from "../app";
 import type { ModelCall, ModelUsage, ProviderTarget } from "../ports";
 import {
@@ -95,7 +95,7 @@ export class ModelGateway {
     }
     const isStream = (response.headers.get("content-type") ?? "").includes("text/event-stream");
     if (!isStream) {
-      const { body, tokens } = await this.#rewriteJson(response, call.model);
+      const { body, tokens } = await this.#rewriteJson(response, wireModel(call.model));
       await this.#record(call, target.provider, tokens, true);
       return new Response(JSON.stringify(body), { status: response.status, headers });
     }
@@ -113,11 +113,11 @@ export class ModelGateway {
     const sent = await this.#send(
       call,
       new Headers(),
-      { ...body, model: call.model, stream: false },
+      { ...body, model: wireModel(call.model), stream: false },
       new AbortController().signal,
     );
     if (!sent.ok) throw new GatewayError(sent.failure);
-    const { body: result, tokens } = await this.#rewriteJson(sent.response, call.model);
+    const { body: result, tokens } = await this.#rewriteJson(sent.response, wireModel(call.model));
     await this.#record(call, sent.target.provider, tokens, true);
     return result;
   }
@@ -307,7 +307,10 @@ export class ModelGateway {
       if (type === "message_start" && typeof data.message === "object" && data.message !== null) {
         const message = data.message as Record<string, unknown>;
         tokens = mergeUsage(tokens, message.usage);
-        const rewritten = { ...data, message: { ...message, id: messageId, model: call.model } };
+        const rewritten = {
+          ...data,
+          message: { ...message, id: messageId, model: wireModel(call.model) },
+        };
         return `event: message_start\ndata: ${JSON.stringify(rewritten)}\n\n`;
       }
       if (type === "message_delta") tokens = mergeUsage(tokens, data.usage);
@@ -353,3 +356,6 @@ export class ModelGateway {
     });
   }
 }
+
+/** 回给调用方的模型名：它请求的那个（"提供方/模型"里的模型），不是上游自己报的名字。 */
+const wireModel = (ref: string) => parseModelRef(ref).model;

@@ -1,3 +1,4 @@
+import { DEEPSEEK_PROVIDER, modelRef } from "@seekcloud/protocol";
 import { and, desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
@@ -8,7 +9,7 @@ import { webFetch } from "../gateway/fetch";
 import { GatewayFiles } from "../gateway/files";
 import type { ModelGateway } from "../gateway/gateway";
 import { webSearch } from "../gateway/web";
-import { findModel } from "../sessions/models";
+import type { ModelCatalog } from "../models/providers";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -49,7 +50,7 @@ async function jsonObject(req: Request): Promise<Record<string, unknown> | Respo
  *
  * 接口和 Anthropic、DeepSeek 的一样（dsh 照原样调）：/v1/messages、/v1/files…、/v1/tools/search、/v1/tools/fetch。
  */
-export function gatewayRoutes(deps: AppDeps, gateway: ModelGateway) {
+export function gatewayRoutes(deps: AppDeps, gateway: ModelGateway, models: ModelCatalog) {
   const files = new GatewayFiles(deps);
 
   const authenticate = createMiddleware<GatewayEnv>(async (c, next) => {
@@ -87,8 +88,9 @@ export function gatewayRoutes(deps: AppDeps, gateway: ModelGateway) {
       const session = c.get("session");
       const body = await jsonObject(c.req.raw);
       if (body instanceof Response) return body;
-      const model = body.model;
-      if (typeof model !== "string" || !findModel(model)) return reject(400, "不支持这个模型");
+      // 这个接口是 DeepSeek 官方的（Anthropic 格式）：模型是 DeepSeek 能用的那些（#113）
+      const model = typeof body.model === "string" ? modelRef(DEEPSEEK_PROVIDER, body.model) : "";
+      if (!model || !(await models.find(model))) return reject(400, "不支持这个模型");
       const providers = await files.referencedProviders(owner(session), body);
       if (providers === undefined) {
         return reject(400, "请求里引用的文件不存在，或者不是这个会话上传的");

@@ -11,9 +11,9 @@ export { apiError, errorResponse, notLoggedIn } from "./errors";
 export { GatewayError, type GatewayFailure } from "./gateway/failures";
 export { ModelGateway } from "./gateway/gateway";
 export {
+  authHeaders,
+  configuredRouting,
   DEEPSEEK,
-  deepseekRouting,
-  setProviderKey,
   stripHarnessFields,
   transparentErrors,
   usageAdmission,
@@ -21,6 +21,15 @@ export {
 export type { GitHub } from "./github/port";
 export { type HostVariables, hostAuth } from "./hosts/credential";
 export { HostHub, type HostStatus } from "./hosts/hub";
+export { CATALOG } from "./models/catalog";
+export {
+  createProvider,
+  credentialOf,
+  ModelCatalog,
+  providerRow,
+  updateProvider,
+} from "./models/providers";
+export type { ModelEntry, ModelSpec } from "./models/types";
 export type {
   Admission,
   ApiErrorBody,

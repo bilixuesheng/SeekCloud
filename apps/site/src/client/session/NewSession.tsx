@@ -89,7 +89,11 @@ export function NewSession({
   // 没动过滑块就用设置里的默认值（设置里改了，这里跟着变）；模型不支持那一档时换成最近的一档
   const [chosenEffort, setEffort] = useState<ThinkingEffort>();
   const efforts = models.find((m) => m.id === model)?.efforts ?? [];
-  const effort = fitEffort(efforts, chosenEffort ?? modelList?.defaultEffort ?? "high") ?? "high";
+  // 模型没声明推理等级时只有"关闭"（由接口自己决定思考不思考）
+  const effort =
+    efforts.length === 0
+      ? "off"
+      : (fitEffort(efforts, chosenEffort ?? modelList?.defaultEffort ?? "high") ?? "high");
   const [picking, setPicking] = useState(false);
   const closePicker = useCallback(() => setPicking(false), []);
   // 关的时候先播完收起的动画再拿掉（和环境、分支的弹层一样）
@@ -238,6 +242,12 @@ export function NewSession({
               onChange={(m, e) => {
                 setModel(m);
                 setEffort(e);
+                // 照 dsh：选了模型也就成了新会话的默认模型（别的设备、下次打开都用它）
+                if (m !== model) {
+                  void api("/api/settings/default-model", { model: m }, "PUT").catch(
+                    () => undefined,
+                  );
+                }
               }}
             />
           )}

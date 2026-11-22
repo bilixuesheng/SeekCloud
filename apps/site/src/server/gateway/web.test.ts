@@ -137,9 +137,10 @@ describe("联网搜索的准入", () => {
       const { browser } = await noKey.adminWithGitHub("octo", "octo/app");
       const { sessionId } = await startSession(noKey, browser, "octo/app");
       // 会话开着的时候管理员把 key 删了
-      const deleted = await browser.request("/api/settings/model-provider/key", {
-        method: "DELETE",
+      const deleted = await browser.request("/api/settings/model-providers/deepseek", {
+        method: "PATCH",
         headers: { "content-type": "application/json" },
+        body: JSON.stringify({ apiKey: null }),
       });
       expect(deleted.status).toBe(200);
       const res = await gatewayRequest(noKey, sessionId, "/v1/tools/search", {

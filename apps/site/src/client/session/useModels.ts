@@ -5,7 +5,8 @@ import type { ModelInfo } from "./ModelPicker";
 
 export interface ModelList {
   models: ModelInfo[];
-  defaultModel: string;
+  /** 新会话默认的模型；一个能用的模型都没有时为 null（去设置里添加）。 */
+  defaultModel: string | null;
   /** 设置里的默认思考强度。 */
   defaultEffort: ThinkingEffort;
 }

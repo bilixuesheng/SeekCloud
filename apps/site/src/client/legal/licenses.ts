@@ -25,6 +25,15 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     usage: "沙箱中运行的 Agent（在其基础上修改）",
   },
   {
+    name: "pi-ai（@earendil-works/pi-ai）",
+    packages: [],
+    license: "MIT",
+    copyright: "Copyright (c) Mario Zechner",
+    url: "https://github.com/earendil-works/pi",
+    usage:
+      "第三方模型提供方的目录（设置中“添加模型提供商”列出的提供方和模型，与沙箱中的 DeepSeek Harness 使用同一份）",
+  },
+  {
     name: "React",
     packages: ["react", "react-dom"],
     license: "MIT",

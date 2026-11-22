@@ -10,7 +10,7 @@ import { type SSEStreamingApi, streamSSE } from "hono/streaming";
 import { recordAccess } from "../access-log";
 import type { AppDeps } from "../app";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
-import { DEFAULT_MODEL, MODELS } from "../sessions/models";
+import { MODEL_INPUTS } from "../models/types";
 import { EVENT_PAGE, type SessionError, type Sessions, sessionErrors } from "../sessions/sessions";
 import { serial } from "../sessions/topic";
 import { readSetting } from "../settings";
@@ -65,10 +65,10 @@ const createSessionRoute = createRoute({
         repo: z.string().openapi({ example: "octocat/hello-world" }),
         baseBranch: z.string(),
         environmentId: z.string().optional().openapi({ description: "不填就用默认环境" }),
-        model: z
-          .string()
-          .optional()
-          .openapi({ description: "不填就用默认模型", example: "deepseek-flash" }),
+        model: z.string().max(300).optional().openapi({
+          description: "提供方/模型（/api/models 的 id），不填就用默认模型",
+          example: "deepseek/deepseek-flash",
+        }),
         effort: z
           .enum(THINKING_EFFORTS)
           .optional()
@@ -86,25 +86,44 @@ const createSessionRoute = createRoute({
   },
 });
 
+const ModelInfo = z
+  .object({
+    id: z.string().openapi({ description: "提供方/模型，发起会话、换模型时用它" }),
+    provider: z.string(),
+    providerName: z.string(),
+    /** 接口里的模型 ID。 */
+    model: z.string(),
+    name: z.string(),
+    description: z.string(),
+    input: z.array(z.enum(MODEL_INPUTS)),
+    vision: z.boolean().openapi({ description: "能不能看图（input 里有 image）" }),
+    contextWindow: z.number().int(),
+    maxTokens: z.number().int(),
+    efforts: z.array(z.enum(THINKING_EFFORTS)).openapi({
+      description: "能选的思考强度，从低到高；空的是模型没声明推理等级，不显示思考强度",
+    }),
+  })
+  .openapi("ModelInfo");
+
 const listModelsRoute = createRoute({
   method: "get",
   path: "/models",
   summary: "可选的模型和思考强度",
+  description:
+    "启用了、有 key（或者环境变量）的提供方的模型，按提供方分组、按保存的顺序（#113）。不含接口地址和 key。",
   responses: {
     200: {
       description: "模型列表",
       ...json(
         z.object({
-          models: z.array(
-            z.object({
-              id: z.string(),
-              name: z.string(),
-              description: z.string(),
-              vision: z.boolean(),
-              efforts: z.array(z.enum(THINKING_EFFORTS)),
-            }),
+          models: z.array(ModelInfo),
+          providers: z.array(
+            z.object({ id: z.string(), name: z.string(), models: z.array(z.string()) }),
           ),
-          defaultModel: z.string(),
+          defaultModel: z
+            .string()
+            .nullable()
+            .openapi({ description: "新会话默认的模型；一个能用的模型都没有时为 null" }),
           defaultEffort: z.enum(THINKING_EFFORTS),
         }),
       ),
@@ -175,7 +194,11 @@ const sendMessageRoute = createRoute({
     body: json(
       z.object({
         text: Text,
-        model: z.string().optional().openapi({ description: "换模型，从这个回合起生效" }),
+        model: z
+          .string()
+          .max(300)
+          .optional()
+          .openapi({ description: "换模型（提供方/模型），从这个回合起生效" }),
         effort: z.enum(THINKING_EFFORTS).optional().openapi({ description: "换思考强度" }),
         mode: z.enum(["now", "later"]).optional().openapi({
           description:
@@ -465,10 +488,31 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
     .openapi(listModelsRoute, async (c) => {
       const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
+      const available = await sessions.models.available();
+      const fallback = await sessions.models.defaultModel(user.id);
       return c.json(
         {
-          models: MODELS.map((m) => ({ ...m, efforts: [...m.efforts] })),
-          defaultModel: DEFAULT_MODEL,
+          models: available.flatMap(({ row, models }) =>
+            models.map((m) => ({
+              id: m.ref,
+              provider: row.slug,
+              providerName: row.name,
+              model: m.id,
+              name: m.name,
+              description: m.description ?? "",
+              input: m.input,
+              vision: m.input.includes("image"),
+              contextWindow: m.contextWindow,
+              maxTokens: m.maxTokens,
+              efforts: m.efforts,
+            })),
+          ),
+          providers: available.map(({ row, models }) => ({
+            id: row.slug,
+            name: row.name,
+            models: models.map((m) => m.ref),
+          })),
+          defaultModel: fallback?.ref ?? null,
           defaultEffort: await readSetting(deps, "default_effort", { userId: user.id }),
         },
         200,

@@ -17,7 +17,7 @@ import type {
   SessionState,
   ThinkingEffort,
 } from "@seekcloud/protocol";
-import { fitEffort, MAX_PUSH_FOLLOW_UPS } from "@seekcloud/protocol";
+import { fitEffort, MAX_PUSH_FOLLOW_UPS, modelRef, parseModelRef } from "@seekcloud/protocol";
 import { and, asc, desc, eq, gt, inArray, isNotNull, notInArray, or, sql } from "drizzle-orm";
 import type { AppDeps } from "../app";
 import type { Database, Tx } from "../db/client";
@@ -34,10 +34,10 @@ import {
 } from "../db/schema";
 import { githubNotConnected } from "../errors";
 import { githubAccessToken, withGitHubToken } from "../github/tokens";
+import { ModelCatalog } from "../models/providers";
 import { readSetting } from "../settings";
 import { readAgentArchive, removeAgentArchive, saveAgentArchive } from "./agent-archive";
 import { judgeTurnEnd } from "./awaiting-input";
-import { DEFAULT_MODEL, findModel } from "./models";
 import { type PinTitles, pinTitle } from "./pin-title";
 import { toSafeError } from "./safe-error";
 import { naturalKey, Sidebar } from "./sidebar";
@@ -56,9 +56,10 @@ export const sessionErrors = {
   branch_not_found: { status: 400, message: "仓库中不存在该分支" },
   environment_not_found: { status: 404, message: "环境不存在" },
   model_not_found: { status: 400, message: "模型不存在或已下线" },
+  model_gone: { status: 409, message: "该会话使用的模型已不可用，请换一个模型后再发送" },
   model_not_configured: {
     status: 409,
-    message: "尚未设置模型服务的 API key，请在“设置 → 模型”中填写",
+    message: "尚无可用的模型，请在“设置 → 模型”中填写 DeepSeek API key 或添加模型提供商",
   },
   session_not_found: { status: 404, message: "会话不存在" },
   session_closed: { status: 409, message: "会话已归档，请先取消归档再发送消息" },
@@ -150,9 +151,20 @@ export class Sessions {
   /** 平台自己发起的模型调用（platform-call.ts）：不给就只用规则。 */
   readonly #waitingCheck: WaitingCheck | undefined;
   readonly #pinTitles: PinTitles | undefined;
+  /** 提供方和模型（#113）。 */
+  readonly #models: ModelCatalog;
 
-  constructor(deps: AppDeps, options: { waitingCheck?: WaitingCheck; pinTitles?: PinTitles } = {}) {
+  /** 提供方和模型：接口里列模型、核对设置用。 */
+  get models(): ModelCatalog {
+    return this.#models;
+  }
+
+  constructor(
+    deps: AppDeps,
+    options: { models?: ModelCatalog; waitingCheck?: WaitingCheck; pinTitles?: PinTitles } = {},
+  ) {
     this.#deps = deps;
+    this.#models = options.models ?? new ModelCatalog(deps);
     this.#waitingCheck = options.waitingCheck;
     this.#pinTitles = options.pinTitles;
     this.sidebar = new Sidebar(deps, {
@@ -171,22 +183,29 @@ export class Sessions {
     const { db, clock, github } = this.#deps;
     const environmentId = await this.#environmentFor(userId, input.environmentId);
     if (!environmentId) return { ok: false, error: "environment_not_found" };
-    const model = findModel(input.model ?? DEFAULT_MODEL);
-    if (!model) return { ok: false, error: "model_not_found" };
+    // 一个能用的模型都没有（没填 key、没加提供方）：现在就说清楚，不等沙箱起来以后每次调模型都失败。
+    const model = input.model
+      ? await this.#models.find(normalizeModelRef(input.model))
+      : await this.#models.defaultModel(userId);
+    if (!model) {
+      const none = (await this.#models.available()).every((p) => p.models.length === 0);
+      return { ok: false, error: none ? "model_not_configured" : "model_not_found" };
+    }
     // 没指定思考强度就用设置里的默认值；模型不支持那一档时换成最近的一档
-    const effort =
-      input.effort ??
-      fitEffort(model.efforts, await readSetting(this.#deps, "default_effort", { userId }));
-    if (!effort || !model.efforts.includes(effort)) return { ok: false, error: "model_not_found" };
-    // 模型服务的 key 还没填：现在就说清楚，不等沙箱起来以后每次调模型都失败。
+    const effort = chooseEffort(
+      model.efforts,
+      input.effort,
+      await readSetting(this.#deps, "default_effort", { userId }),
+    );
+    if (!effort) return { ok: false, error: "model_not_found" };
     const call = {
       purpose: "agent" as const,
       userId,
       sessionId: null,
       turnId: null,
-      model: model.id,
+      model: model.ref,
     };
-    if ((await this.#deps.providerRouting.route(model.id, call)).length === 0) {
+    if ((await this.#deps.providerRouting.route(model.ref, call)).length === 0) {
       return { ok: false, error: "model_not_configured" };
     }
 
@@ -215,7 +234,7 @@ export class Sessions {
             title: titleFrom(text),
             status: "queued",
             environmentId,
-            model: model.id,
+            model: model.ref,
             effort,
             createdAt: now,
             updatedAt: now,
@@ -689,16 +708,29 @@ export class Sessions {
     },
   ): Promise<Result<SendOutcome>> {
     const body = message.text.trim();
-    if (message.model !== undefined || message.effort !== undefined) {
-      const model = message.model === undefined ? undefined : findModel(message.model);
-      if (message.model !== undefined && !model) return { ok: false, error: "model_not_found" };
-      if (model && message.effort && !model.efforts.includes(message.effort)) {
-        return { ok: false, error: "model_not_found" };
-      }
+    if (message.model !== undefined) {
+      const model = await this.#models.find(normalizeModelRef(message.model));
+      if (!model) return { ok: false, error: "model_not_found" };
+      // 只换了模型：思考强度换成新模型支持的（设置里的默认值，或者最近的一档）
+      const effort = chooseEffort(
+        model.efforts,
+        message.effort,
+        await readSetting(this.#deps, "default_effort", { userId }),
+      );
+      if (!effort) return { ok: false, error: "model_not_found" };
+      Object.assign(message, { model: model.ref, effort });
     }
     const outcome = await this.#deps.db.transaction(async (tx) => {
       const session = await this.#lockOwn(tx, userId, shortId);
       if (!session) return "session_not_found" as const;
+      // 会话的模型没了（提供方删了、停用了、key 删了）：提示换一个，不等沙箱里调模型才失败
+      if (
+        message.model === undefined &&
+        session.status !== "archived" &&
+        !(await this.#models.find(session.model))
+      ) {
+        return "model_gone" as const;
+      }
       if (session.status === "waiting") {
         const command = await this.#startTurn(tx, session, { ...message, text: body });
         return { kind: "started" as const, session, command };
@@ -912,7 +944,7 @@ export class Sessions {
       sessionId: session.id,
       turnId: (turn as { id: string }).id,
       text: input.text,
-      model,
+      ...splitModel(model),
       effort,
       firstTurn: !(await this.#reachedAgent(tx, session.id)),
       turnNumber: number,
@@ -1111,7 +1143,7 @@ export class Sessions {
       sessionId: session.id,
       turnId: turn.id,
       text: turn.input,
-      model: session.model,
+      ...splitModel(session.model),
       effort: session.effort,
       firstTurn: !(await this.#reachedAgent(tx, session.id)),
       turnNumber: turn.number,
@@ -1312,7 +1344,7 @@ export class Sessions {
       repos: await this.#repos(sessionId),
       // 刚建的会话一定有环境。
       environmentId: session.environmentId as string,
-      model: session.model,
+      ...splitModel(session.model),
       effort: session.effort,
       aiLabels: await readSetting(this.#deps, "ai_labels", { userId: session.userId }),
       committer: await this.#committer(session.userId),
@@ -1538,4 +1570,30 @@ export class Sessions {
       }
     }
   }
+}
+
+/** "提供方/模型"；没有提供方的旧写法（#113 之前）补上 deepseek。 */
+export function normalizeModelRef(ref: string): string {
+  const { provider, model } = parseModelRef(ref);
+  return modelRef(provider, model);
+}
+
+/** 发给宿主机的命令里模型和提供方分开写。 */
+function splitModel(ref: string): { model: string; provider: string } {
+  return parseModelRef(ref);
+}
+
+/**
+ * 用哪一档思考强度：给了就要是模型支持的；没给就用 fallback（模型不支持那一档时换成最近的一档）。
+ * 模型没声明推理等级时只有 off（由接口自己的默认值决定思考不思考）。
+ */
+export function chooseEffort(
+  efforts: readonly ThinkingEffort[],
+  requested: ThinkingEffort | undefined,
+  fallback: ThinkingEffort,
+): ThinkingEffort | undefined {
+  if (efforts.length === 0)
+    return requested === undefined || requested === "off" ? "off" : undefined;
+  if (requested !== undefined) return efforts.includes(requested) ? requested : undefined;
+  return fitEffort(efforts, fallback);
 }

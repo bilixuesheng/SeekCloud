@@ -5,10 +5,11 @@ import { type AppDeps, createApp } from "./app";
 import { adminIdentity } from "./auth/admin-identity";
 import { connectDatabase } from "./db/client";
 import { runMigrations } from "./db/migrate";
-import { deepseekRouting, transparentErrors, usageAdmission } from "./gateway/trunk";
+import { configuredRouting, transparentErrors, usageAdmission } from "./gateway/trunk";
 import { githubApi, unconfiguredGitHub } from "./github/api";
 import { HostHub } from "./hosts/hub";
 import { startMaintenance } from "./maintenance";
+import { createModelCatalog } from "./models/providers";
 import { systemClock } from "./ports";
 import { SecretBox } from "./secrets";
 import { adminSettings } from "./settings";
@@ -44,14 +45,17 @@ const base = {
     : unconfiguredGitHub,
   secureCookies: process.env.NODE_ENV === "production",
 };
+// 提供方和模型：路由和主站共用一个（DeepSeek 发布的模型列表缓存在里面）。
+const models = createModelCatalog({ ...base, settingsPolicy: adminSettings });
 // 扩展点（ADR 0010）：主干用单管理员的实现。
 const deps: AppDeps = {
   ...base,
   identity: adminIdentity(base),
   settingsPolicy: adminSettings,
   modelAdmission: usageAdmission(base),
-  providerRouting: deepseekRouting(base),
+  providerRouting: configuredRouting({ ...base, settingsPolicy: adminSettings }, models),
   errorPresentation: transparentErrors,
+  models,
 };
 // 沙箱宿主机用宿主机密钥连上来（pnpm host:create 添加）。一台都没连着时，新会话留在排队中。
 const hub = new HostHub(deps);

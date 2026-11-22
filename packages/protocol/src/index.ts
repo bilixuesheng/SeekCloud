@@ -51,8 +51,44 @@ export interface SessionState {
   detail: SessionStatusDetail;
 }
 
-export const THINKING_EFFORTS = ["off", "low", "high", "max"] as const;
+/**
+ * 思考强度（推理等级），照 dsh（pi-ai）的档位，从低到高。每个模型只给其中几档：DeepSeek 的模型是
+ * off、low、high、max；目录里的模型照目录；自定义的模型在设置里声明（#113）。
+ */
+export const THINKING_EFFORTS = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
 export type ThinkingEffort = (typeof THINKING_EFFORTS)[number];
+
+/** 模型接口的四种协议（照 dsh 的"API 协议"）。 */
+export const MODEL_PROTOCOLS = [
+  "openai-completions",
+  "openai-responses",
+  "anthropic-messages",
+  "google-generative-ai",
+] as const;
+export type ModelProtocol = (typeof MODEL_PROTOCOLS)[number];
+
+/** 内置的 DeepSeek 官方提供方的 ID。 */
+export const DEEPSEEK_PROVIDER = "deepseek";
+
+/**
+ * 会话、设置里记的模型是"提供方/模型"（模型 ID 里可以有斜杠，提供方 ID 里没有）。
+ * 没有斜杠的是 #113 之前的写法，当作 DeepSeek 官方的模型。
+ */
+export function parseModelRef(ref: string): { provider: string; model: string } {
+  const at = ref.indexOf("/");
+  if (at <= 0) return { provider: DEEPSEEK_PROVIDER, model: ref };
+  return { provider: ref.slice(0, at), model: ref.slice(at + 1) };
+}
+
+export const modelRef = (provider: string, model: string) => `${provider}/${model}`;
 
 /**
  * 模型支持这一档就用这一档；不支持就换成它支持的、离得最近的一档（一样近时取低的）。
@@ -231,7 +267,10 @@ export type HostCommand =
       /** 第一个是主仓库，Agent 的工作目录。 */
       repos: SessionRepo[];
       environmentId: string;
+      /** 接口里的模型 ID（不带提供方）。 */
       model: string;
+      /** 模型的提供方（设置里的 Provider ID，#113）。旧版本的主站不填，按 deepseek 处理。 */
+      provider?: string;
       effort: ThinkingEffort;
       aiLabels: AiLabels;
       /**
@@ -273,7 +312,10 @@ export type HostCommand =
       sessionId: string;
       turnId: string;
       text: string;
+      /** 接口里的模型 ID（不带提供方）。 */
       model: string;
+      /** 模型的提供方（设置里的 Provider ID，#113）。旧版本的主站不填，按 deepseek 处理。 */
+      provider?: string;
       effort: ThinkingEffort;
       /**
        * 这个会话以前没有哪个回合到过 Agent：Agent 那边还没有这个会话，新建就是了。
@@ -337,6 +379,7 @@ export interface Session extends SessionState {
   title: string;
   /** 第一个是主仓库。pullRequest：会话分支上最近的 PR，没有时为 null。 */
   repos: Array<SessionRepo & { pullRequest: PullRequestRef | null }>;
+  /** "提供方/模型"（parseModelRef）。 */
   model: string;
   effort: ThinkingEffort;
   /** 会话用的环境的名字；环境被删掉了时为 null。 */
@@ -397,7 +440,12 @@ export type SessionEventBody =
   /** 用户撤回了一条排队的消息。 */
   | { type: "message.withdrawn"; id: string }
   /** 用户换了模型或思考强度，从这个回合起生效。 */
-  | { type: "model.changed"; model: string; effort: ThinkingEffort }
+  | {
+      type: "model.changed";
+      /** "提供方/模型"；#113 之前的事件里只有模型 ID（parseModelRef 当作 DeepSeek 官方的）。 */
+      model: string;
+      effort: ThinkingEffort;
+    }
   /** error 只在变成 failed 时有。 */
   | ({ type: "status"; error?: SafeError } & SessionState)
   | AgentEvent;

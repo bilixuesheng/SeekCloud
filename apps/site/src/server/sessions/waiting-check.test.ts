@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GatewayError } from "../gateway/failures";
+import { DEEPSEEK_MODELS } from "../models/catalog";
 import {
   parseWaitingAnswer,
   WAITING_CHECK_INSTRUCTIONS,
@@ -8,13 +9,8 @@ import {
   waitingCheckPrompt,
 } from "./waiting-check";
 
-const deps = {
-  // 平台模型的设置没改过：settingsPolicy 给默认值
-  db: {
-    select: () => ({ from: () => ({ where: async () => [] }) }),
-  } as never,
-  settingsPolicy: { defaultValue: async () => "auto", canWrite: () => true } as never,
-};
+// 平台调用的模型：最省的那个（ModelCatalog.platformModel，"自动"时怎么挑在 models.test.ts 里测）
+const deps = { models: { platformModel: async () => DEEPSEEK_MODELS[0] } };
 
 /** 假网关：按 answer 回一段文字，或者抛错、一直不回。记下同时在跑的调用有几个。 */
 function fakeGateway(answer: () => Promise<string>) {
@@ -85,7 +81,7 @@ describe("问模型：是不是在等输入（#140）", () => {
         purpose: "waiting_check",
         userId: "u1",
         sessionId: "s1",
-        model: "deepseek-flash",
+        model: "deepseek/deepseek-flash",
       });
       expect(gateway.calls[0]?.body).toMatchObject({
         max_tokens: 8,

@@ -11,9 +11,9 @@ import { type SettingsSectionEntry, type SettingsSectionProps, useRegistry } fro
 import { navigate } from "../router";
 import { effortLabels } from "../session/ModelPicker";
 import { shortDateTime } from "../session/relative-time";
-import { reloadModels } from "../session/useModels";
+import { reloadModels, useModels } from "../session/useModels";
 import { currentTheme, setTheme, type Theme } from "../theme";
-import { MODEL_PROVIDER } from "./ModelSettings";
+import { MODEL_PROVIDERS } from "./ModelSettings";
 import { HOST_OFFLINE_GRACE } from "./SessionSettings";
 
 /** 设置窗口里各分类用到的接口。 */
@@ -72,7 +72,7 @@ export function SettingsDialog({
       ME,
       EXPORTS,
       HOST_OFFLINE_GRACE,
-      MODEL_PROVIDER,
+      MODEL_PROVIDERS,
     ]);
   }, []);
 
@@ -197,12 +197,16 @@ function ThemeSettings() {
 }
 
 /**
- * 新会话默认的思考强度：四档一排，点了当场保存，没存上就拨回去并说明原因。
+ * 新会话默认的思考强度：能用的模型支持的档位一排（只有 DeepSeek 时是四档），点了当场保存，没存上就拨回去并说明原因。
  * 存好以后重新取模型列表，首页的弹层和"恢复默认"跟着用新的值。
  */
 function DefaultEffortSettings() {
   const loaded = useCached<{ effort: ThinkingEffort }>(DEFAULT_EFFORT);
   const effort = loaded.data?.effort;
+  const models = useModels()?.models;
+  const offered = THINKING_EFFORTS.filter(
+    (e) => e === effort || (models ?? []).some((m) => m.efforts.includes(e)),
+  );
   const [failed, setError] = useState<string>();
   const error = failed ?? loaded.error;
 
@@ -228,7 +232,7 @@ function DefaultEffortSettings() {
       </div>
       <fieldset className="segmented" disabled={!effort}>
         <legend className="visually-hidden">默认思考强度</legend>
-        {THINKING_EFFORTS.map((e) => (
+        {(offered.length > 0 ? offered : THINKING_EFFORTS).map((e) => (
           <label key={e} className={`segment ${e}${effort === e ? " current" : ""}`}>
             <input
               type="radio"

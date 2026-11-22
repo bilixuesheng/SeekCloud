@@ -3,14 +3,23 @@ import { type ApiError, api } from "../api";
 import { setCached, useCached } from "../cached";
 import { SparkIcon } from "../Icons";
 import { shortDateTime } from "../session/relative-time";
-import { useModels } from "../session/useModels";
+import { reloadModels, useModels } from "../session/useModels";
 
-export const MODEL_PROVIDER = "/api/settings/model-provider";
+export const MODEL_PROVIDERS = "/api/settings/model-providers";
 export const PLATFORM_MODEL = "/api/settings/platform-model";
 
-interface ProviderStatus {
+/** 设置接口里的一个提供方（server/routes/model.ts 的 ModelProvider）。 */
+export interface ProviderView {
+  id: string;
   name: string;
-  keySet: boolean;
+  kind: "deepseek" | "catalog" | "custom";
+  enabled: boolean;
+  credential: {
+    masked: string | null;
+    env: string[];
+    envDetected: string | null;
+    apiKeyEnv: string | null;
+  };
   keySetAt: string | null;
   keyRejectedAt: string | null;
 }
@@ -53,7 +62,10 @@ function PlatformModel() {
 
   const choices = [
     { id: "auto", label: "自动" },
-    ...(models ?? []).map((m) => ({ id: m.id, label: m.name })),
+    ...(models ?? []).map((m) => ({
+      id: m.id,
+      label: m.provider === "deepseek" ? m.name : `${m.name}（${m.providerName}）`,
+    })),
   ];
   return (
     <section className="settings-group">
@@ -61,23 +73,40 @@ function PlatformModel() {
         <SparkIcon size={16} />
         <h2>平台调用的模型</h2>
       </div>
-      <fieldset className="segmented" disabled={current === undefined || !models}>
-        <legend className="visually-hidden">平台调用的模型</legend>
-        {choices.map((c) => (
-          <label key={c.id} className={`segment${current === c.id ? " current" : ""}`}>
-            <input
-              type="radio"
-              name="platform-model"
-              value={c.id}
-              checked={current === c.id}
-              onChange={() => void choose(c.id)}
-            />
-            <span className="segment-label">{c.label}</span>
-          </label>
-        ))}
-      </fieldset>
+      {choices.length <= 4 ? (
+        <fieldset className="segmented" disabled={current === undefined || !models}>
+          <legend className="visually-hidden">平台调用的模型</legend>
+          {choices.map((c) => (
+            <label key={c.id} className={`segment${current === c.id ? " current" : ""}`}>
+              <input
+                type="radio"
+                name="platform-model"
+                value={c.id}
+                checked={current === c.id}
+                onChange={() => void choose(c.id)}
+              />
+              <span className="segment-label">{c.label}</span>
+            </label>
+          ))}
+        </fieldset>
+      ) : (
+        // 模型多了（加了别的提供方）：一排放不下，换成下拉框
+        <select
+          className="settings-select"
+          aria-label="平台调用的模型"
+          disabled={current === undefined || !models}
+          value={current ?? "auto"}
+          onChange={(e) => void choose(e.target.value)}
+        >
+          {choices.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      )}
       <p className="settings-group-hint">
-        回合结束后判断会话是否在等待你的输入时，会调用一次模型（不开启思考），用量照常记录。选择“自动”时使用最省的模型。
+        回合结束后判断会话是否在等待你的输入时，会调用一次模型（不开启思考），用量照常记录。选择“自动”时使用能用的模型中最省的一个。
       </p>
       {error && (
         <p className="alert" role="alert">
@@ -88,10 +117,18 @@ function PlatformModel() {
   );
 }
 
-/** DeepSeek API key：加密存放，保存以后不再显示原文，只显示是否已设置和保存时间。可以替换或删除。 */
+/** DeepSeek API key：加密存放，保存以后只显示脱敏预览。可以替换或删除（删除后读环境变量）。 */
 function ApiKeyRow() {
-  const loaded = useCached<ProviderStatus>(MODEL_PROVIDER);
-  const status = loaded.data;
+  const loaded = useCached<{ providers: ProviderView[] }>(MODEL_PROVIDERS);
+  const status = loaded.data?.providers.find((p) => p.kind === "deepseek");
+  const keySet = Boolean(status?.credential.masked);
+  const update = async (body: { apiKey: string | null }) => {
+    const next = await api<ProviderView>(`${MODEL_PROVIDERS}/deepseek`, body, "PATCH");
+    setCached(MODEL_PROVIDERS, {
+      providers: (loaded.data?.providers ?? []).map((p) => (p.id === next.id ? next : p)),
+    });
+    reloadModels();
+  };
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [draft, setDraft] = useState("");
@@ -104,8 +141,7 @@ function ApiKeyRow() {
     setBusy(true);
     setError(undefined);
     try {
-      const next = await api<ProviderStatus>(`${MODEL_PROVIDER}/key`, { apiKey: draft }, "PUT");
-      setCached(MODEL_PROVIDER, next);
+      await update({ apiKey: draft.trim() });
       setDraft("");
       setEditing(false);
     } catch (e) {
@@ -119,7 +155,7 @@ function ApiKeyRow() {
     setBusy(true);
     setError(undefined);
     try {
-      setCached(MODEL_PROVIDER, await api<ProviderStatus>(`${MODEL_PROVIDER}/key`, {}, "DELETE"));
+      await update({ apiKey: null });
       setConfirmDelete(false);
     } catch (e) {
       setError((e as ApiError).message);
@@ -136,14 +172,16 @@ function ApiKeyRow() {
           <span className="settings-row-sub">
             {status === undefined
               ? "　"
-              : status.keySet
-                ? `已设置${status.keySetAt ? `，保存于 ${shortDateTime(new Date(status.keySetAt))}` : ""}。加密存放，不再显示原文。`
-                : "未设置。设置之前无法发起会话。"}
+              : keySet
+                ? `${status.credential.masked}${status.keySetAt ? `，保存于 ${shortDateTime(new Date(status.keySetAt))}` : ""}。加密存放，不再显示原文。`
+                : status.credential.envDetected
+                  ? `未保存，使用环境变量 ${status.credential.envDetected}。`
+                  : "未设置。设置之前无法使用 DeepSeek 的模型。"}
           </span>
         </span>
         {status && !editing && !confirmDelete && (
           <span className="settings-actions">
-            {status.keySet && (
+            {keySet && (
               <button type="button" className="pill-button" onClick={() => setConfirmDelete(true)}>
                 删除
               </button>
@@ -156,7 +194,7 @@ function ApiKeyRow() {
                 setError(undefined);
               }}
             >
-              {status.keySet ? "替换" : "设置"}
+              {keySet ? "替换" : "设置"}
             </button>
           </span>
         )}
@@ -183,7 +221,11 @@ function ApiKeyRow() {
         </p>
       )}
       {confirmDelete && (
-        <p className="settings-hint">删除以后无法发起新会话，运行中的会话调用模型也会失败。</p>
+        <p className="settings-hint">
+          {status?.credential.envDetected
+            ? `删除以后改用环境变量 ${status.credential.envDetected}。`
+            : "删除以后无法使用 DeepSeek 的模型，运行中的会话调用模型也会失败。"}
+        </p>
       )}
       {editing && (
         <form className="settings-form" onSubmit={save}>
@@ -195,7 +237,7 @@ function ApiKeyRow() {
               spellCheck={false}
               placeholder="sk-…"
               required
-              maxLength={200}
+              maxLength={400}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
             />

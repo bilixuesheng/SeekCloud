@@ -1,67 +1,292 @@
 import { createRoute, z } from "@hono/zod-openapi";
+import { MODEL_PROTOCOLS, THINKING_EFFORTS } from "@seekcloud/protocol";
 import { and, eq } from "drizzle-orm";
 import type { AppDeps } from "../app";
 import { upstreamErrors } from "../db/schema";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
-import { deleteProviderKey, providerStatus, setProviderKey } from "../gateway/trunk";
+import {
+  catalogList,
+  createProvider,
+  deleteProvider,
+  ENV_NAME,
+  type ModelCatalog,
+  PROVIDER_ID,
+  type ProviderError,
+  providerRow,
+  providerRows,
+  providerView,
+  reorderProviders,
+  sessionsUsing,
+  updateProvider,
+} from "../models/providers";
+import { MODEL_INPUTS } from "../models/types";
+import { publicNetwork } from "../network/address";
 import { jsonBody as json, newRouter } from "./router";
 
-const ProviderStatus = z
+/**
+ * 设置的"模型"一类（#113，照 dsh 的"设置 → 模型"）：内置的 DeepSeek、目录里的第三方提供方、自定义接口。
+ * key 只写不读：接口只给脱敏预览（models/mask.ts）。以及按参考号查模型服务出错。
+ */
+
+const ApiKey = z
+  .string()
+  .trim()
+  .min(1, { error: "请填写 API key" })
+  .max(400, { error: "API key 过长" })
+  .regex(/^\S+$/, { error: "API key 不能包含空格或换行" });
+
+const BaseUrl = z
+  .string()
+  .trim()
+  .max(500, { error: "地址过长" })
+  .refine(
+    (v) => {
+      try {
+        const url = new URL(v);
+        return (url.protocol === "https:" || url.protocol === "http:") && !url.username;
+      } catch {
+        return false;
+      }
+    },
+    { error: "请填写 http:// 或 https:// 开头的地址" },
+  );
+
+const EnvName = z
+  .string()
+  .trim()
+  .regex(ENV_NAME, { error: "环境变量名只能包含字母、数字和下划线" });
+
+const ModelSpec = z
   .object({
+    id: z.string().trim().min(1, { error: "请填写模型 ID" }).max(200),
+    name: z.string().trim().max(100).nullish(),
+    contextWindow: z.number().int().min(1).max(100_000_000).nullish(),
+    maxTokens: z.number().int().min(1).max(100_000_000).nullish(),
+    input: z
+      .array(z.enum(MODEL_INPUTS))
+      .min(1, { error: "至少保留一种输入类型" })
+      .max(MODEL_INPUTS.length),
+    reasoningEfforts: z
+      .partialRecord(z.enum(THINKING_EFFORTS), z.string().trim().min(1).max(40).nullable())
+      .nullish()
+      .openapi({
+        description: "档位到发给接口的参数值；只有 off 可以是 null（不传）。为空是没声明推理等级",
+      }),
+    compat: z
+      .record(z.string().max(60), z.union([z.boolean(), z.number(), z.string().max(100)]))
+      .nullish()
+      .openapi({ description: "请求兼容性开关（dsh 的 compat）" }),
+  })
+  .openapi("ModelSpec");
+
+const ModelSpecView = ModelSpec.extend({
+  name: z.string(),
+  contextWindow: z.number().int(),
+  maxTokens: z.number().int(),
+  efforts: z.array(z.enum(THINKING_EFFORTS)),
+}).openapi("ModelSpecView");
+
+const Provider = z
+  .object({
+    id: z.string().openapi({ description: "Provider ID，定了不能改" }),
     name: z.string(),
-    keySet: z.boolean(),
-    keySetAt: z.string().nullable().openapi({ description: "保存 key 的时间；没填时为 null" }),
+    kind: z.enum(["deepseek", "catalog", "custom"]),
+    api: z.enum(MODEL_PROTOCOLS).nullable(),
+    protocols: z.array(z.enum(MODEL_PROTOCOLS)),
+    baseUrl: z.string().nullable().openapi({ description: "保存的地址；为空时用 defaultBaseUrl" }),
+    defaultBaseUrl: z.string().nullable(),
+    enabled: z.boolean(),
+    credential: z.object({
+      masked: z
+        .string()
+        .nullable()
+        .openapi({ description: "已保存的 key 的脱敏预览；没保存时为空" }),
+      env: z.array(z.string()).openapi({ description: "没填 key 时读哪些环境变量" }),
+      envDetected: z
+        .string()
+        .nullable()
+        .openapi({ description: "检测到了哪个环境变量：只看有没有值，不验证、不连" }),
+      apiKeyEnv: z.string().nullable(),
+    }),
+    keySetAt: z.string().nullable(),
     keyRejectedAt: z
       .string()
       .nullable()
       .openapi({ description: "上游最近一次说 key 不对的时间；换了 key 以后清掉" }),
+    customModels: z.boolean().openapi({ description: "用的是自己改过的模型列表" }),
+    models: z.array(ModelSpecView),
   })
-  .openapi("ModelProviderStatus", { description: "模型服务提供方的 key 的状态，不含原文" });
+  .openapi("ModelProvider", { description: "一个模型提供方，不含 key 的原文" });
 
-const getProviderRoute = createRoute({
+const IdParam = z.object({ id: z.string().regex(PROVIDER_ID) });
+
+const listRoute = createRoute({
   method: "get",
-  path: "/settings/model-provider",
-  summary: "模型服务提供方（DeepSeek）的 key 的状态",
+  path: "/settings/model-providers",
+  summary: "模型提供方",
   responses: {
-    200: { description: "状态，不含 key 的原文", ...json(ProviderStatus) },
+    200: { description: "按保存的顺序", ...json(z.object({ providers: z.array(Provider) })) },
     401: errorResponse("没有登录"),
   },
 });
 
-const putKeyRoute = createRoute({
-  method: "put",
-  path: "/settings/model-provider/key",
-  summary: "填写或替换 DeepSeek API key",
-  description: "加密存放（SEEKCLOUD_SECRET_KEY），之后不再显示原文。",
+const catalogRoute = createRoute({
+  method: "get",
+  path: "/settings/model-providers/catalog",
+  summary: "目录里的第三方提供方",
+  description: "来自 dsh 用的 @earendil-works/pi-ai 目录（快照）。只列填一个 key 就能用的。",
+  responses: {
+    200: {
+      description: "目录",
+      ...json(
+        z.object({
+          providers: z.array(
+            z.object({
+              id: z.string(),
+              name: z.string(),
+              env: z.array(z.string()),
+              protocols: z.array(z.enum(MODEL_PROTOCOLS)),
+              baseUrl: z.string().nullable(),
+              models: z.number().int(),
+              added: z.boolean(),
+            }),
+          ),
+        }),
+      ),
+    },
+    401: errorResponse("没有登录"),
+  },
+});
+
+const createProviderRoute = createRoute({
+  method: "post",
+  path: "/settings/model-providers",
+  summary: "添加模型提供方",
+  description:
+    "kind = catalog：从目录里选，id 是目录里的 ID，地址、协议、模型列表由目录给；kind = custom：自定义接口，" +
+    "要 Provider ID、地址、协议、至少一个模型。key 加密存放；不填时读环境变量。",
   request: {
     body: {
       ...json(
         z.object({
-          apiKey: z
-            .string()
-            .trim()
-            .min(1, { error: "请填写 API key" })
-            .max(200, { error: "API key 过长" })
-            .regex(/^\S+$/, { error: "API key 不能包含空格或换行" }),
+          kind: z.enum(["catalog", "custom"]),
+          id: z.string().regex(PROVIDER_ID, {
+            error: "Provider ID 只能包含小写字母、数字和 -，以字母或数字开头",
+          }),
+          name: z.string().trim().max(60).optional(),
+          api: z.enum(MODEL_PROTOCOLS).optional(),
+          baseUrl: BaseUrl.nullish(),
+          apiKey: ApiKey.optional(),
+          apiKeyEnv: EnvName.nullish(),
+          models: z.array(ModelSpec).max(1000).optional(),
         }),
       ),
       required: true,
     },
   },
   responses: {
-    200: { description: "保存以后的状态", ...json(ProviderStatus) },
-    400: errorResponse("key 为空、过长或带空白"),
+    201: { description: "添加好的提供方", ...json(Provider) },
+    400: errorResponse("格式不对、模型列表不对"),
     401: errorResponse("没有登录"),
+    403: errorResponse("这项设置不能修改（主干里不会出现）"),
+    404: errorResponse("目录里没有这个提供方"),
+    409: errorResponse("Provider ID 已经有了，或者和内置的、目录里的冲突"),
   },
 });
 
-const deleteKeyRoute = createRoute({
-  method: "delete",
-  path: "/settings/model-provider/key",
-  summary: "删除 DeepSeek API key",
-  description: "删除以后发起会话会提示先填 key；运行中的会话的模型调用会失败。",
+const updateProviderRoute = createRoute({
+  method: "patch",
+  path: "/settings/model-providers/{id}",
+  summary: "修改模型提供方",
+  description:
+    "apiKey 为 null 是删掉已保存的 key（之后读环境变量）；models 是整个替换模型列表；resetModels 是“恢复默认模型”。" +
+    "改了 key 下一次请求就用新的，不用重启沙箱。",
+  request: {
+    params: IdParam,
+    body: {
+      ...json(
+        z.object({
+          name: z.string().trim().max(60).optional(),
+          api: z.enum(MODEL_PROTOCOLS).optional(),
+          baseUrl: BaseUrl.nullish(),
+          apiKey: ApiKey.nullish(),
+          apiKeyEnv: EnvName.nullish(),
+          enabled: z.boolean().optional(),
+          models: z.array(ModelSpec).max(1000).optional(),
+          resetModels: z.boolean().optional(),
+        }),
+      ),
+      required: true,
+    },
+  },
   responses: {
-    200: { description: "删除以后的状态", ...json(ProviderStatus) },
+    200: { description: "改好以后的提供方", ...json(Provider) },
+    400: errorResponse("格式不对、模型列表不对"),
+    401: errorResponse("没有登录"),
+    403: errorResponse("这项设置不能修改（主干里不会出现）"),
+    404: errorResponse("没有这个提供方"),
+  },
+});
+
+const usageRoute = createRoute({
+  method: "get",
+  path: "/settings/model-providers/{id}/sessions",
+  summary: "用着这个提供方的模型的会话有几个",
+  description: "删除提供方之前提示。不算已归档的。",
+  request: { params: IdParam },
+  responses: {
+    200: { description: "会话数", ...json(z.object({ sessions: z.number().int() })) },
+    401: errorResponse("没有登录"),
+    404: errorResponse("没有这个提供方"),
+  },
+});
+
+const deleteProviderRoute = createRoute({
+  method: "delete",
+  path: "/settings/model-providers/{id}",
+  summary: "删除模型提供方",
+  description:
+    "连同它的模型列表和 key 一起删。已经跑过的会话保留自己的模型，下一次发消息时提示换一个。内置的 DeepSeek 不能删，只能停用。",
+  request: { params: IdParam },
+  responses: {
+    200: { description: "删好了", ...json(z.object({ ok: z.literal(true) })) },
+    401: errorResponse("没有登录"),
+    403: errorResponse("这项设置不能修改（主干里不会出现）"),
+    404: errorResponse("没有这个提供方"),
+    409: errorResponse("内置的 DeepSeek 不能删"),
+  },
+});
+
+const orderRoute = createRoute({
+  method: "put",
+  path: "/settings/model-providers/order",
+  summary: "调整提供方的先后",
+  request: {
+    body: {
+      ...json(z.object({ order: z.array(z.string().regex(PROVIDER_ID)).max(200) })),
+      required: true,
+    },
+  },
+  responses: {
+    200: { description: "调整以后的提供方", ...json(z.object({ providers: z.array(Provider) })) },
+    401: errorResponse("没有登录"),
+    403: errorResponse("这项设置不能修改（主干里不会出现）"),
+  },
+});
+
+const checkUrlRoute = createRoute({
+  method: "post",
+  path: "/settings/model-providers/check-url",
+  summary: "保存前看一下接口地址",
+  description:
+    "不是 HTTPS 时提示请求和 key 会以明文发出；解析到内网、本机时提示地址在内网（自己部署的模型可以是内网地址，不拦）。只解析域名，不连。",
+  request: { body: { ...json(z.object({ url: BaseUrl })), required: true } },
+  responses: {
+    200: {
+      description: "提示",
+      ...json(z.object({ plaintext: z.boolean(), internal: z.boolean() })),
+    },
+    400: errorResponse("地址格式不对"),
     401: errorResponse("没有登录"),
   },
 });
@@ -80,22 +305,99 @@ const errorRoute = createRoute({
   },
 });
 
-/** 设置的"模型"一类，以及按参考号查模型服务出错。 */
-export function modelRoutes(deps: AppDeps) {
+const PROVIDER_ERRORS: Record<ProviderError, { status: 400 | 404 | 409; message: string }> = {
+  provider_not_found: { status: 404, message: "该模型提供方不存在" },
+  provider_exists: { status: 409, message: "该 Provider ID 已被使用" },
+  provider_reserved: {
+    status: 409,
+    message: "该 Provider ID 与内置或目录中的提供方相同，请换一个",
+  },
+  provider_builtin: { status: 409, message: "内置的 DeepSeek 不能删除，可以停用" },
+  catalog_not_found: { status: 404, message: "目录中没有该提供方" },
+  invalid_models: { status: 400, message: "模型列表有误" },
+};
+
+const locked = apiError("setting_locked", "这项设置不能修改");
+
+export function modelRoutes(deps: AppDeps, models: ModelCatalog) {
+  /** 改提供方之前问设置的规则（下游可以不让普通用户改）。 */
+  const writable = (userId: string) =>
+    Promise.resolve(deps.settingsPolicy.canWrite("model_providers", { userId }));
+  const fail = (error: ProviderError, message?: string) => {
+    const known = PROVIDER_ERRORS[error];
+    return { body: apiError(error, message ?? known.message), status: known.status };
+  };
+  const views = async () =>
+    Promise.all((await providerRows(deps)).map((row) => providerView(deps, models, row)));
+
   return newRouter()
-    .openapi(getProviderRoute, async (c) => {
+    .openapi(listRoute, async (c) => {
       if (!(await deps.identity.currentUser(c))) return c.json(notLoggedIn, 401);
-      return c.json(await providerStatus(deps), 200);
+      return c.json({ providers: await views() }, 200);
     })
-    .openapi(putKeyRoute, async (c) => {
+    .openapi(catalogRoute, async (c) => {
       if (!(await deps.identity.currentUser(c))) return c.json(notLoggedIn, 401);
-      await setProviderKey(deps, c.req.valid("json").apiKey);
-      return c.json(await providerStatus(deps), 200);
+      return c.json({ providers: await catalogList(deps) }, 200);
     })
-    .openapi(deleteKeyRoute, async (c) => {
+    .openapi(checkUrlRoute, async (c) => {
       if (!(await deps.identity.currentUser(c))) return c.json(notLoggedIn, 401);
-      await deleteProviderKey(deps);
-      return c.json(await providerStatus(deps), 200);
+      const url = new URL(c.req.valid("json").url);
+      const host = url.hostname.replace(/^\[|\]$/g, "");
+      const network = deps.outboundNetwork ?? publicNetwork;
+      const internal = await network.resolve(host).then(
+        (addresses) => addresses.some((a) => !network.allowAddress(a.address)),
+        () => false,
+      );
+      return c.json({ plaintext: url.protocol !== "https:", internal }, 200);
+    })
+    .openapi(orderRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      if (!(await writable(me.id))) return c.json(locked, 403);
+      await reorderProviders(deps, c.req.valid("json").order);
+      return c.json({ providers: await views() }, 200);
+    })
+    .openapi(createProviderRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      if (!(await writable(me.id))) return c.json(locked, 403);
+      const result = await createProvider(deps, c.req.valid("json"));
+      if (!result.ok) {
+        const { body, status } = fail(result.error, result.message);
+        return c.json(body, status);
+      }
+      return c.json(await providerView(deps, models, result.row), 201);
+    })
+    .openapi(updateProviderRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      if (!(await writable(me.id))) return c.json(locked, 403);
+      const result = await updateProvider(deps, c.req.valid("param").id, c.req.valid("json"));
+      if (!result.ok) {
+        const { body, status } = fail(result.error, result.message);
+        return c.json(body, status as 400 | 404);
+      }
+      return c.json(await providerView(deps, models, result.row), 200);
+    })
+    .openapi(usageRoute, async (c) => {
+      if (!(await deps.identity.currentUser(c))) return c.json(notLoggedIn, 401);
+      const { id } = c.req.valid("param");
+      if (!(await providerRow(deps, id))) {
+        const { body } = fail("provider_not_found");
+        return c.json(body, 404);
+      }
+      return c.json({ sessions: await sessionsUsing(deps, id) }, 200);
+    })
+    .openapi(deleteProviderRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      if (!(await writable(me.id))) return c.json(locked, 403);
+      const result = await deleteProvider(deps, c.req.valid("param").id);
+      if (!result.ok) {
+        const { body, status } = fail(result.error);
+        return c.json(body, status as 404 | 409);
+      }
+      return c.json({ ok: true as const }, 200);
     })
     .openapi(errorRoute, async (c) => {
       const me = await deps.identity.currentUser(c);

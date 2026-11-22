@@ -4,22 +4,24 @@ import { describe, expect, it } from "vitest";
 import { type ModelInfo, ModelPicker, nearest, step } from "./ModelPicker";
 
 const all = THINKING_EFFORTS;
+const deepseek = ["off", "low", "high", "max"] as const;
 const noOff = ["low", "high", "max"] as const;
 
 describe("思考强度的滑块", () => {
-  it("松手吸到最近的一档；模型不支持的那档跳过", () => {
-    expect(nearest(all, 0)).toBe("off");
-    expect(nearest(all, 0.3)).toBe("low");
-    expect(nearest(all, 0.6)).toBe("high");
-    expect(nearest(all, 0.9)).toBe("max");
+  it("只画模型支持的档位，等距排开；松手吸到最近的一档", () => {
+    expect(nearest(deepseek, 0)).toBe("off");
+    expect(nearest(deepseek, 0.3)).toBe("low");
+    expect(nearest(deepseek, 0.6)).toBe("high");
+    expect(nearest(deepseek, 0.9)).toBe("max");
     expect(nearest(noOff, 0)).toBe("low");
     expect(nearest(noOff, 0.1)).toBe("low");
+    expect(nearest(all, 0.5)).toBe("medium");
   });
 
-  it("方向键换到下一个支持的档位，到头了不动", () => {
-    expect(step(all, "high", 1)).toBe("max");
-    expect(step(all, "max", 1)).toBe("max");
-    expect(step(all, "low", -1)).toBe("off");
+  it("方向键换到下一档，到头了不动", () => {
+    expect(step(deepseek, "high", 1)).toBe("max");
+    expect(step(deepseek, "max", 1)).toBe("max");
+    expect(step(deepseek, "low", -1)).toBe("off");
     expect(step(noOff, "low", -1)).toBe("low");
     expect(step(["off", "high"], "off", 1)).toBe("high");
   });
@@ -36,13 +38,21 @@ describe("思考强度的滑块", () => {
 
 describe("模型和思考强度的按钮", () => {
   const models: ModelInfo[] = [
-    { id: "flash", name: "DeepSeek Flash", description: "", vision: false, efforts: [...all] },
+    {
+      id: "deepseek/deepseek-flash",
+      provider: "deepseek",
+      providerName: "DeepSeek 官方",
+      name: "DeepSeek Flash",
+      description: "",
+      vision: false,
+      efforts: [...deepseek],
+    },
   ];
   const render = (effort: "high" | "max") =>
     renderToStaticMarkup(
       <ModelPicker
         models={models}
-        model="flash"
+        model="deepseek/deepseek-flash"
         effort={effort}
         defaultEffort="high"
         onChange={() => undefined}

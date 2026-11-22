@@ -1,4 +1,11 @@
-import type { MessagePin, ModelProgress, ThinkingEffort, TodoItem } from "@seekcloud/protocol";
+import {
+  type MessagePin,
+  type ModelProgress,
+  modelRef,
+  parseModelRef,
+  type ThinkingEffort,
+  type TodoItem,
+} from "@seekcloud/protocol";
 import {
   createContext,
   type ReactNode,
@@ -194,7 +201,11 @@ export function SessionPage({
   const closed = status === "archived";
   // Agent 在工作（或者排队等位置）时重试是灰的；会话关了也不能重试。
   const canRetry = !busy && !closed && status !== "running" && status !== "queued";
-  const nameOf = (model: string) => models?.models.find((m) => m.id === model)?.name ?? model;
+  // #113 之前的事件里只有模型 ID（DeepSeek 官方的）：补上提供方再找
+  const nameOf = (model: string) => {
+    const { provider, model: id } = parseModelRef(model);
+    return models?.models.find((m) => m.id === modelRef(provider, id))?.name ?? id;
+  };
   const picked = choice ?? (session && { model: session.model, effort: session.effort });
   const working = status === "running" || status === "queued";
 

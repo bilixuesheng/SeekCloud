@@ -3,7 +3,7 @@
 // 扩展点：下游版本可以换掉的东西。每个扩展点在 AppDeps 里占一项，主干里只有单管理员的那一份实现，
 // 主干自己在用。主干里不放下游的实现，也不放版本开关。
 
-import type { ErrorCode } from "@seekcloud/protocol";
+import type { ErrorCode, ModelProtocol } from "@seekcloud/protocol";
 import type { Context, Env, Hono } from "hono";
 import type { SettingKey, SettingValue } from "./settings";
 
@@ -99,7 +99,10 @@ export interface ModelCall {
   sessionId: string | null;
   /** 沙箱里的调用发生在哪个回合；不在回合里（或平台调用）时为空。 */
   turnId: string | null;
-  /** 我们的模型 ID（/api/models 里的那些），不是上游的模型名。 */
+  /**
+   * 我们的模型 ID："提供方/模型"（/api/models 里的 id，#113），不是上游自己报的模型名。
+   * #113 之前的调用方只写模型 ID，按 DeepSeek 官方的算（parseModelRef）。
+   */
   model: string;
 }
 
@@ -151,6 +154,8 @@ export interface ModelAdmission {
 export interface ProviderTarget {
   /** 提供方的标识，记进用量、报错和上传的文件。 */
   provider: string;
+  /** 上游说哪种协议（#113）。不填是 Anthropic Messages。 */
+  protocol?: ModelProtocol;
   /**
    * 上游接口的完整地址。path 是沙箱请求的路径：/v1/messages、/v1/files、/v1/files/{id}、/v1/tools/search，
    * 查询参数由网关自己加。

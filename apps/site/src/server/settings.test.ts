@@ -134,7 +134,7 @@ describe("设置：新会话默认的思考强度", () => {
   });
 
   it("格式不对：400，原来的值不变", async () => {
-    for (const body of [{ effort: "medium" }, { effort: null }, {}]) {
+    for (const body of [{ effort: "extreme" }, { effort: null }, {}]) {
       expect((await put(browser, body)).status).toBe(400);
     }
     expect(await (await browser.get("/api/settings/default-effort")).json()).toEqual({
@@ -164,10 +164,14 @@ describe("设置：平台调用的模型（#140）", () => {
     expect(await (await browser.get("/api/settings/platform-model")).json()).toEqual({
       model: "auto",
     });
-    const res = await put(browser, { model: "deepseek-v4-pro" });
+    const res = await put(browser, { model: "deepseek/deepseek-v4-pro" });
     expect(res.status).toBe(200);
     expect(await (await browser.get("/api/settings/platform-model")).json()).toEqual({
-      model: "deepseek-v4-pro",
+      model: "deepseek/deepseek-v4-pro",
+    });
+    // #113 之前的写法（只有模型 ID）当作 DeepSeek 官方的
+    expect(await (await put(browser, { model: "deepseek-flash" })).json()).toEqual({
+      model: "deepseek/deepseek-flash",
     });
     const bad = await put(browser, { model: "gpt-x" });
     expect(bad.status).toBe(400);

@@ -1,15 +1,12 @@
-import { eq, lt } from "drizzle-orm";
+import { DEEPSEEK_PROVIDER, type ModelProtocol, parseModelRef } from "@seekcloud/protocol";
+import { lt } from "drizzle-orm";
 import type { AppDeps } from "../app";
-import { modelProviders, modelUsage, upstreamErrors, webToolUsage } from "../db/schema";
+import { modelUsage, upstreamErrors, webToolUsage } from "../db/schema";
+import { catalogProvider, DEEPSEEK } from "../models/catalog";
+import { credentialOf, ModelCatalog, type ProviderRow, providerRow } from "../models/providers";
 import type { ErrorPresentation, ModelAdmission, ProviderRouting, ProviderTarget } from "../ports";
-import { findModel } from "../sessions/models";
 
-/** DeepSeek 官方：主干唯一的提供方。 */
-export const DEEPSEEK = {
-  slug: "deepseek",
-  name: "DeepSeek 官方",
-  baseUrl: "https://api.deepseek.com/anthropic",
-} as const;
+export { DEEPSEEK };
 
 /** 发给上游的请求头只留这几个，其余的（包括 dsh 的 x-deepseek-harness-*）一律不带。 */
 const FORWARDED_HEADERS = ["anthropic-version", "anthropic-beta"];
@@ -37,101 +34,83 @@ export function stripHarnessFields(body: Record<string, unknown>): Record<string
   return out;
 }
 
-type ProviderDeps = Pick<AppDeps, "db" | "secrets" | "version">;
-
-/** 提供方的 key 现在的状态（给设置页看，不含原文）。 */
-export async function providerStatus(deps: Pick<AppDeps, "db">) {
-  const [row] = await deps.db
-    .select()
-    .from(modelProviders)
-    .where(eq(modelProviders.slug, DEEPSEEK.slug));
-  return {
-    name: row?.name ?? DEEPSEEK.name,
-    keySet: Boolean(row?.apiKey),
-    keySetAt: row?.keySetAt?.toISOString() ?? null,
-    keyRejectedAt: row?.keyRejectedAt?.toISOString() ?? null,
-  };
-}
-
-/** 填写或替换 DeepSeek 的 key：加密存放；之前"key 被拒绝"的提示清掉。 */
-export async function setProviderKey(
-  deps: Pick<AppDeps, "db" | "secrets" | "clock">,
-  apiKey: string,
-): Promise<void> {
-  const now = deps.clock.now();
-  const sealed = deps.secrets.seal(apiKey);
-  await deps.db
-    .insert(modelProviders)
-    .values({ ...DEEPSEEK, apiKey: sealed, keySetAt: now, createdAt: now })
-    .onConflictDoUpdate({
-      target: modelProviders.slug,
-      set: { apiKey: sealed, keySetAt: now, keyRejectedAt: null },
-    });
-}
-
-/** 删除 key：之后发起会话会提示先填 key。 */
-export async function deleteProviderKey(deps: Pick<AppDeps, "db">): Promise<void> {
-  await deps.db
-    .update(modelProviders)
-    .set({ apiKey: null, keySetAt: null, keyRejectedAt: null })
-    .where(eq(modelProviders.slug, DEEPSEEK.slug));
-}
-
-/** 上游说 key 不对（401、403）：记下时间，设置里提示管理员检查。 */
-export async function markProviderKeyRejected(
-  deps: Pick<AppDeps, "db" | "clock">,
-  provider: string,
-): Promise<void> {
-  await deps.db
-    .update(modelProviders)
-    .set({ keyRejectedAt: deps.clock.now() })
-    .where(eq(modelProviders.slug, provider));
-}
+type ProviderDeps = Pick<AppDeps, "db" | "secrets" | "version" | "clock" | "settingsPolicy"> & {
+  env?: Record<string, string | undefined>;
+};
 
 /** DeepSeek 的联网搜索、抓取接口在接口地址的同一个域名下，路径是 /v1/tools/…（和 dsh 的约定一样）。 */
 const TOOLS_PREFIX = "/v1/tools/";
 
 /**
- * 用存着的 key 建一个 DeepSeek 官方的上游；没填 key（或者解不开）时为空。
- * model 是 Messages 请求换成的上游模型名（我们的模型 ID 就是 DeepSeek 的模型名）。
+ * 认证头按协议放（#113）：OpenAI 系是 Authorization: Bearer，Anthropic 是 x-api-key，Gemini 是
+ * x-goog-api-key。Anthropic 的 anthropic-version、anthropic-beta 照转，别的请求头一律不带。
  */
-async function deepseekTarget(
-  deps: ProviderDeps,
-  model?: string,
-): Promise<ProviderTarget | undefined> {
-  const [row] = await deps.db
-    .select()
-    .from(modelProviders)
-    .where(eq(modelProviders.slug, DEEPSEEK.slug));
-  if (!row?.apiKey) return undefined;
-  const apiKey = deps.secrets.open(row.apiKey);
-  if (apiKey === undefined) {
-    // 换过 SEEKCLOUD_SECRET_KEY，旧的密文解不开：当作没填，管理员重新填一次。
-    console.warn(
-      "模型服务的 API key 无法解密（SEEKCLOUD_SECRET_KEY 可能换过），请在设置里重新填写",
-    );
-    return undefined;
-  }
-  const base = row.baseUrl.replace(/\/+$/, "");
-  const origin = new URL(base).origin;
-  const headers = (path: string, incoming: Headers) => {
-    const out = new Headers({ "user-agent": `SeekCloud/${deps.version}` });
-    // 联网工具认 Authorization: Bearer，Messages 和 Files 认 x-api-key。
-    if (path.startsWith(TOOLS_PREFIX)) {
-      out.set("authorization", `Bearer ${apiKey}`);
-      return out;
-    }
+export function authHeaders(
+  protocol: ModelProtocol,
+  apiKey: string,
+  incoming: Headers,
+  version: string,
+): Headers {
+  const out = new Headers({ "user-agent": `SeekCloud/${version}` });
+  if (protocol === "anthropic-messages") {
     out.set("x-api-key", apiKey);
     for (const name of FORWARDED_HEADERS) {
       const value = incoming.get(name);
       if (value) out.set(name, value);
     }
     if (!out.has("anthropic-version")) out.set("anthropic-version", DEFAULT_ANTHROPIC_VERSION);
-    return out;
-  };
+  } else if (protocol === "google-generative-ai") {
+    out.set("x-goog-api-key", apiKey);
+  } else {
+    out.set("authorization", `Bearer ${apiKey}`);
+  }
+  return out;
+}
+
+/** 提供方的某种协议发到哪个地址：管理员填的地址优先，目录里的用目录给的。 */
+export function endpointOf(row: ProviderRow, protocol: ModelProtocol): string | undefined {
+  if (row.baseUrl) return row.baseUrl;
+  if (row.kind === "deepseek") return DEEPSEEK.baseUrl;
+  if (row.kind === "catalog") return catalogProvider(row.slug)?.endpoints[protocol];
+  return undefined;
+}
+
+/** 一个模型用哪种协议：DeepSeek 是 Anthropic Messages，目录里的照目录，自定义接口照设置。 */
+export function protocolOf(row: ProviderRow, model: string): ModelProtocol {
+  if (row.kind === "deepseek") return "anthropic-messages";
+  if (row.kind === "catalog") {
+    const listed = catalogProvider(row.slug);
+    const known = listed?.models.find((m) => m.id === model)?.api;
+    return (
+      known ??
+      (Object.keys(listed?.endpoints ?? {})[0] as ModelProtocol | undefined) ??
+      "openai-completions"
+    );
+  }
+  return row.api ?? "openai-completions";
+}
+
+/** 一个提供方、一种协议的上游。key 每次请求时现读（改了 key 下一次请求就用新的）。 */
+function targetOf(
+  deps: ProviderDeps,
+  row: ProviderRow,
+  protocol: ModelProtocol,
+  apiKey: string,
+  model?: string,
+): ProviderTarget | undefined {
+  const endpoint = endpointOf(row, protocol);
+  if (!endpoint) return undefined;
+  const base = endpoint.replace(/\/+$/, "");
+  const origin = new URL(base).origin;
+  const deepseek = row.kind === "deepseek";
+  const tools = (path: string) => deepseek && path.startsWith(TOOLS_PREFIX);
+  // DeepSeek 的联网工具认 Authorization: Bearer，Messages 和 Files 认 x-api-key
+  const headers = (path: string, incoming: Headers) =>
+    authHeaders(tools(path) ? "openai-completions" : protocol, apiKey, incoming, deps.version);
   return {
     provider: row.slug,
-    url: (path) => (path.startsWith(TOOLS_PREFIX) ? `${origin}${path}` : `${base}${path}`),
+    protocol,
+    url: (path) => (tools(path) ? `${origin}${path}` : `${base}${path}`),
     headers,
     prepare: ({ headers: incoming, body }) => {
       const out = headers("/v1/messages", incoming);
@@ -143,19 +122,31 @@ async function deepseekTarget(
 }
 
 /**
- * 主干的提供方路由：只有 DeepSeek 官方一个，没填 key 时没有可用的。
- * 我们的模型 ID 就是 DeepSeek 官方的模型名（和 dsh 的模型目录一致），不用换。
- * Files 和联网搜索也走 DeepSeek 官方，用同一把 key。
+ * 主干的提供方路由：按设置里的提供方（#113）。模型 ID 是"提供方/模型"，发给上游时换成模型本身的 ID。
+ * 提供方停用了、没有 key（也没有环境变量）、模型不在它的列表里时没有可用的。Files 和联网搜索只有
+ * DeepSeek 官方有。models 和 createApp 用同一个（main.ts），不填时自己建一个不取 DeepSeek 发布列表的。
  */
-export function deepseekRouting(deps: ProviderDeps): ProviderRouting {
+export function configuredRouting(
+  deps: ProviderDeps,
+  models: Pick<ModelCatalog, "find"> = new ModelCatalog(deps),
+): ProviderRouting {
+  const resolve = async (slug: string) => {
+    const row = await providerRow(deps, slug);
+    if (!row?.enabled) return undefined;
+    const credential = credentialOf(deps, row);
+    return credential ? { row, key: credential.key } : undefined;
+  };
   return {
-    async route(model) {
-      if (!findModel(model)) return [];
-      const target = await deepseekTarget(deps, model);
+    async route(ref) {
+      const { provider, model } = parseModelRef(ref);
+      const found = await resolve(provider);
+      if (!found || !(await models.find(ref))) return [];
+      const target = targetOf(deps, found.row, protocolOf(found.row, model), found.key, model);
       return target ? [target] : [];
     },
     async service() {
-      const target = await deepseekTarget(deps);
+      const found = await resolve(DEEPSEEK_PROVIDER);
+      const target = found && targetOf(deps, found.row, "anthropic-messages", found.key);
       return target ? [target] : [];
     },
   };

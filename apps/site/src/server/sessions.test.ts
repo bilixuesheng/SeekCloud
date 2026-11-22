@@ -60,7 +60,7 @@ describe("发起会话，宿主机按脚本跑完一个回合", () => {
           access: "push",
         },
       ],
-      model: "deepseek-flash",
+      model: "deepseek/deepseek-flash",
       effort: "high",
     });
 
@@ -145,19 +145,27 @@ describe("发起会话，宿主机按脚本跑完一个回合", () => {
       defaultModel: string;
       defaultEffort: string;
     };
-    expect(models.defaultModel).toBe("deepseek-flash");
+    expect(models.defaultModel).toBe("deepseek/deepseek-flash");
     expect(models.defaultEffort).toBe("high");
-    expect(models.models.map((m) => m.id)).toContain("deepseek-v4-pro");
+    expect(models.models.map((m) => m.id)).toContain("deepseek/deepseek-v4-pro");
     expect(models.models[0]?.efforts).toEqual(["off", "low", "high", "max"]);
 
-    const { session } = await startSession(browser, { model: "deepseek-v4-pro", effort: "max" });
-    await t.host.idle();
-
-    expect(session).toMatchObject({ model: "deepseek-v4-pro", effort: "max" });
-    expect(t.host.last("prepare_sandbox")).toMatchObject({
-      model: "deepseek-v4-pro",
+    const { session } = await startSession(browser, {
+      model: "deepseek/deepseek-v4-pro",
       effort: "max",
     });
+    await t.host.idle();
+
+    expect(session).toMatchObject({ model: "deepseek/deepseek-v4-pro", effort: "max" });
+    // 发给宿主机的命令里模型和提供方分开写
+    expect(t.host.last("prepare_sandbox")).toMatchObject({
+      model: "deepseek-v4-pro",
+      provider: "deepseek",
+      effort: "max",
+    });
+    // #113 之前的写法（只有模型 ID）照样认，记成"提供方/模型"
+    const legacy = await startSession(browser, { model: "deepseek-v4-pro" });
+    expect(legacy.session).toMatchObject({ model: "deepseek/deepseek-v4-pro" });
   });
 
   it("公开仓库没装 App：只读挂载", async () => {
@@ -226,18 +234,23 @@ describe("发起会话，宿主机按脚本跑完一个回合", () => {
       effort: "max",
     });
     expect(reply.status).toBe(201);
-    expect(await reply.json()).toMatchObject({ model: "deepseek-v4-pro", effort: "max" });
+    expect(await reply.json()).toMatchObject({ model: "deepseek/deepseek-v4-pro", effort: "max" });
     await t.host.idle();
     expect(t.host.last("start_turn")).toMatchObject({
       text: "换个强点的模型再看看",
       model: "deepseek-v4-pro",
+      provider: "deepseek",
       effort: "max",
     });
 
     const stream = await browser.stream(`/api/sessions/${session.shortId}/events`);
     const events = (await stream.until((e) => parse(e).type === "model.changed")).map(parse);
     await stream.close();
-    expect(events.at(-1)).toMatchObject({ turn: 2, model: "deepseek-v4-pro", effort: "max" });
+    expect(events.at(-1)).toMatchObject({
+      turn: 2,
+      model: "deepseek/deepseek-v4-pro",
+      effort: "max",
+    });
 
     // 不换就不记。
     await browser.post(`/api/sessions/${session.shortId}/messages`, { text: "继续" });
