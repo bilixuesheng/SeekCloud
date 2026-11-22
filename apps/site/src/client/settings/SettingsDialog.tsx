@@ -5,7 +5,7 @@ import { type ApiError, api } from "../api";
 import { prefetch, setCached, useCached } from "../cached";
 import type { GitHubStatus } from "../GitHubConnectCard";
 import { GitHubMark } from "../GitHubMark";
-import { CloseIcon, MoonIcon, SparkIcon } from "../Icons";
+import { CloseIcon } from "../Icons";
 import { LegalLink } from "../legal/LegalPage";
 import { type SettingsSectionEntry, type SettingsSectionProps, useRegistry } from "../registry";
 import { navigate } from "../router";
@@ -167,11 +167,8 @@ export function GeneralSettings() {
 function ThemeSettings() {
   const [theme, setThemeState] = useState(currentTheme);
   return (
-    <section className="settings-group">
-      <div className="settings-group-head">
-        <MoonIcon />
-        <h2>外观</h2>
-      </div>
+    <section className="settings-section settings-group">
+      <h2>外观</h2>
       <fieldset className="theme-tiles">
         <legend className="visually-hidden">外观</legend>
         {themes.map((item) => (
@@ -231,11 +228,8 @@ function DefaultEffortSettings() {
   };
 
   return (
-    <section className="settings-group">
-      <div className="settings-group-head">
-        <SparkIcon size={16} />
-        <h2>默认思考强度</h2>
-      </div>
+    <section className="settings-section settings-group">
+      <h2>默认思考强度</h2>
       <fieldset className="segmented" disabled={!effort}>
         <legend className="visually-hidden">默认思考强度</legend>
         {(offered.length > 0 ? offered : THINKING_EFFORTS).map((e) => (
@@ -251,7 +245,9 @@ function DefaultEffortSettings() {
           </label>
         ))}
       </fieldset>
-      <p className="settings-group-hint">新会话默认使用这一档，已有的会话不受影响。</p>
+      <p className="settings-group-hint">
+        新会话默认使用这一档；所选模型没有这一档时，用它最接近的一档。已有的会话不受影响。
+      </p>
     </section>
   );
 }
@@ -441,6 +437,10 @@ interface LoginDevice {
   lastUsedAt: string | null;
 }
 
+/** 设备的名字：App 是它报的型号，浏览器是登录时认出来的"Chrome · macOS"（认不出来的、以前登录的叫"浏览器"）。 */
+const deviceLabel = (d: LoginDevice) =>
+  d.deviceName ?? (d.client === "app" ? "安卓设备" : "浏览器");
+
 /**
  * 登录着的设备（#177）：浏览器和安卓 App，每台一行，能单独退出。身份来源没有这个接口（下游换掉了）时不显示。
  * 退出的是当前这台时和退出登录一样。
@@ -456,7 +456,7 @@ function DeviceRows({ onSignedOut }: { onSignedOut: () => void }) {
   }, []);
 
   const logOut = async (device: LoginDevice) => {
-    const name = device.client === "app" ? (device.deviceName ?? "安卓设备") : "这个浏览器";
+    const name = deviceLabel(device);
     const ok = await confirmDialog({
       title: device.current ? "退出当前设备？" : `退出“${name}”？`,
       body: device.current
@@ -477,14 +477,16 @@ function DeviceRows({ onSignedOut }: { onSignedOut: () => void }) {
   };
 
   if (!devices?.length) return null;
+  // 当前这台排最前，别的按最近使用
+  const sorted = [...devices].sort((a, b) => Number(b.current) - Number(a.current));
   return (
     <>
-      {devices.map((d) => (
+      {sorted.map((d) => (
         <li key={d.id} className="settings-row">
           <span className="settings-row-text">
             <span className="settings-row-name">
-              {d.client === "app" ? (d.deviceName ?? "安卓设备") : "浏览器"}
-              {d.current && "（当前设备）"}
+              {deviceLabel(d)}
+              {d.current && <span className="provider-kind">当前设备</span>}
             </span>
             <span className="settings-row-sub">
               {d.client === "app" ? "安卓 App" : "网页"}

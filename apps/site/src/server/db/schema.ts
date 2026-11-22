@@ -98,7 +98,10 @@ export const loginSessions = pgTable("login_sessions", {
   client: text("client", { enum: ["browser", "app"] })
     .notNull()
     .default("browser"),
-  /** App 登录时传上来的设备名（手机型号这类），当普通文字显示。浏览器的为空。 */
+  /**
+   * App 登录时传上来的设备名（手机型号这类），当普通文字显示。浏览器的是从 User-Agent 认出来的"Chrome · macOS"，
+   * 认不出来时为空。
+   */
   deviceName: text("device_name"),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   lastIp: text("last_ip"),

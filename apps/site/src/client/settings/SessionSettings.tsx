@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { type ApiError, api } from "../api";
 import { setCached, useCached } from "../cached";
-import { ClockIcon } from "../Icons";
 import { toast, useErrorToast } from "../ui/toast";
 
 export const HOST_OFFLINE_GRACE = "/api/settings/host-offline-grace";
@@ -42,11 +41,8 @@ function HostOfflineGrace() {
   };
 
   return (
-    <section className="settings-group">
-      <div className="settings-group-head">
-        <ClockIcon />
-        <h2>宿主机断开后等待</h2>
-      </div>
+    <section className="settings-section settings-group">
+      <h2>宿主机断开后等待</h2>
       <fieldset className="segmented" disabled={seconds === undefined}>
         <legend className="visually-hidden">宿主机断开后等待</legend>
         {CHOICES.map((c) => (

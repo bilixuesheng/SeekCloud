@@ -1,6 +1,5 @@
 import { type ApiError, api } from "../api";
 import { setCached, useCached } from "../cached";
-import { SparkIcon } from "../Icons";
 import { reloadModels } from "../session/useModels";
 import { Select, type SelectOption } from "../ui/select";
 import { toast, useErrorToast } from "../ui/toast";
@@ -120,11 +119,8 @@ function PlatformModel() {
     })),
   ];
   return (
-    <section className="settings-group">
-      <div className="settings-group-head">
-        <SparkIcon size={16} />
-        <h2>平台调用的模型</h2>
-      </div>
+    <section className="settings-section settings-group">
+      <h2>平台调用的模型</h2>
       <Select
         label="平台调用的模型"
         value={state?.model ?? "auto"}

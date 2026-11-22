@@ -3706,25 +3706,12 @@ details > summary::-webkit-details-marker {
   white-space: nowrap;
 }
 
-/* 设置里的外观：一张圆角卡片，三个缩略图就是选项 */
+/*
+ * 设置里只有一个控件的一节（外观、默认思考强度、宿主机断开后等待、平台调用的模型）：和别的节一样是
+ * 外置的小标题，控件自己有边框，不再套一张卡片（2026-11-22 统一，以前两种样式混用）。
+ */
 .settings-group {
-  padding: 18px 16px 16px;
-  border-radius: 20px;
-  background: var(--surface);
-}
-
-.settings-group-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  color: var(--fg-2);
-}
-
-.settings-group-head h2 {
-  font-size: 16px;
-  font-weight: 550;
-  color: var(--fg);
+  gap: 10px;
 }
 
 /* 一排几个选项连在一起的单选（默认思考强度） */
@@ -3787,7 +3774,7 @@ details > summary::-webkit-details-marker {
 }
 
 .settings-group-hint {
-  margin: 10px 2px 0;
+  margin: -2px 2px 0;
   font-size: 13px;
   color: var(--muted);
 }
