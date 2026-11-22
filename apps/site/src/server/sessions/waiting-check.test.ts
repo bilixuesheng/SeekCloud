@@ -20,12 +20,12 @@ function fakeGateway(answer: () => Promise<string>) {
   return {
     calls,
     peak: () => peak,
-    complete: async (call: object, body: Record<string, unknown>) => {
+    text: async (call: object, body: { prompt: string; maxTokens: number }) => {
       calls.push({ call: call as Record<string, unknown>, body });
       running++;
       peak = Math.max(peak, running);
       try {
-        return { content: [{ type: "text", text: await answer() }] };
+        return await answer();
       } finally {
         running--;
       }
@@ -83,10 +83,8 @@ describe("问模型：是不是在等输入（#140）", () => {
         sessionId: "s1",
         model: "deepseek/deepseek-flash",
       });
-      expect(gateway.calls[0]?.body).toMatchObject({
-        max_tokens: 8,
-        thinking: { type: "disabled" },
-      });
+      // 不开思考由网关按协议做（gateway.test.ts 的平台调用）
+      expect(gateway.calls[0]?.body).toMatchObject({ maxTokens: 8 });
     },
   );
 

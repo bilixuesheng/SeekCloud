@@ -4,9 +4,13 @@ import { and, eq } from "drizzle-orm";
 import type { AppDeps } from "../app";
 import { upstreamErrors } from "../db/schema";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
+import { endpointOf, protocolOf } from "../gateway/trunk";
+import { catalogProvider } from "../models/catalog";
+import { probeModels } from "../models/probe";
 import {
   catalogList,
   createProvider,
+  credentialOf,
   deleteProvider,
   ENV_NAME,
   type ModelCatalog,
@@ -291,6 +295,50 @@ const checkUrlRoute = createRoute({
   },
 });
 
+const probeRoute = createRoute({
+  method: "post",
+  path: "/settings/model-providers/probe",
+  summary: "获取可用模型",
+  description:
+    "用表单里的地址、协议、key 问端点有哪些模型（OpenAI 兼容的 GET /models、Anthropic 的 GET /v1/models、" +
+    "Gemini 的 GET /models）；表单里没填的用已保存的。目录里的提供方由目录作答，不发请求。什么都不存。" +
+    "报错里认得出来的密钥打码。",
+  request: {
+    body: {
+      ...json(
+        z.object({
+          id: z.string().regex(PROVIDER_ID).optional().openapi({ description: "已保存的提供方" }),
+          api: z.enum(MODEL_PROTOCOLS).optional(),
+          baseUrl: BaseUrl.optional(),
+          apiKey: ApiKey.optional(),
+        }),
+      ),
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: "端点列出的模型（可能是空的）",
+      ...json(
+        z.object({
+          models: z.array(
+            z.object({
+              id: z.string(),
+              name: z.string().optional(),
+              contextWindow: z.number().int().optional(),
+              maxTokens: z.number().int().optional(),
+            }),
+          ),
+        }),
+      ),
+    },
+    400: errorResponse("缺协议或地址，或者端点报错、格式不对（说明里有端点的回答，密钥打了码）"),
+    401: errorResponse("没有登录"),
+    403: errorResponse("这项设置不能修改（主干里不会出现）"),
+    404: errorResponse("没有这个提供方"),
+  },
+});
+
 const errorRoute = createRoute({
   method: "get",
   path: "/model-errors/{ref}",
@@ -349,6 +397,56 @@ export function modelRoutes(deps: AppDeps, models: ModelCatalog) {
         () => false,
       );
       return c.json({ plaintext: url.protocol !== "https:", internal }, 200);
+    })
+    .openapi(probeRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      if (!(await writable(me.id))) return c.json(locked, 403);
+      const form = c.req.valid("json");
+      const row = form.id ? await providerRow(deps, form.id) : undefined;
+      if (form.id && !row) {
+        const { body } = fail("provider_not_found");
+        return c.json(body, 404);
+      }
+      // 目录里的提供方（没改地址时）由目录作答，和 dsh 一样
+      if (row?.kind === "catalog" && !form.baseUrl && !row.baseUrl) {
+        const listed = catalogProvider(row.slug)?.models ?? [];
+        return c.json(
+          {
+            models: listed.map((m) => ({
+              id: m.id,
+              name: m.name,
+              ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
+              ...(m.maxTokens ? { maxTokens: m.maxTokens } : {}),
+            })),
+          },
+          200,
+        );
+      }
+      const protocol =
+        form.api ??
+        (row?.kind === "deepseek"
+          ? "anthropic-messages"
+          : row?.kind === "custom"
+            ? row.api
+            : row
+              ? protocolOf(row, "")
+              : undefined);
+      if (!protocol) return c.json(apiError("probe_failed", "请选择 API 协议"), 400);
+      const baseUrl = form.baseUrl ?? (row ? endpointOf(row, protocol) : undefined);
+      if (!baseUrl) return c.json(apiError("probe_failed", "请填写接口地址"), 400);
+      const apiKey = form.apiKey ?? (row ? credentialOf(deps, row)?.key : undefined);
+      const result = await probeModels(deps, {
+        protocol,
+        baseUrl,
+        apiKey,
+        // DeepSeek 的模型列表在域名根下的 /models（和发布的列表同一个接口）
+        ...(row?.kind === "deepseek" && !form.baseUrl
+          ? { url: new URL("/models", new URL(baseUrl).origin).href }
+          : {}),
+      });
+      if (!result.ok) return c.json(apiError("probe_failed", result.message), 400);
+      return c.json({ models: result.models }, 200);
     })
     .openapi(orderRoute, async (c) => {
       const me = await deps.identity.currentUser(c);

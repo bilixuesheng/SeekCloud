@@ -81,9 +81,9 @@ describe("置顶的短标题：问模型", () => {
   it("问最省的模型，不思考，用途 pin_title；出错、超时、没有文字时给不出来", async () => {
     const calls: Array<{ call: object; body: object }> = [];
     const titles = new PinTitles(deps, {
-      complete: async (call, body) => {
+      text: async (call, body) => {
         calls.push({ call, body });
-        return { content: [{ type: "text", text: "改好了首页" }] };
+        return "改好了首页";
       },
     });
     expect(await titles.title({ userId: "u1", sessionId: "s1", texts: ["改好了。"] })).toBe(
@@ -94,22 +94,18 @@ describe("置顶的短标题：问模型", () => {
       model: "deepseek/deepseek-flash",
       sessionId: "s1",
     });
-    expect(calls[0]?.body).toMatchObject({ max_tokens: 32, thinking: { type: "disabled" } });
+    expect(calls[0]?.body).toMatchObject({ maxTokens: 32 });
 
     expect(await titles.title({ userId: "u1", sessionId: "s1", texts: ["  "] })).toBeUndefined();
     expect(calls).toHaveLength(1);
 
     const failing = new PinTitles(deps, {
-      complete: async () => {
+      text: async () => {
         throw new Error("boom");
       },
     });
     expect(await failing.title({ userId: "u1", sessionId: "s1", texts: ["a"] })).toBeUndefined();
-    const silent = new PinTitles(
-      deps,
-      { complete: () => new Promise(() => {}) },
-      { timeoutMs: 30 },
-    );
+    const silent = new PinTitles(deps, { text: () => new Promise(() => {}) }, { timeoutMs: 30 });
     expect(await silent.title({ userId: "u1", sessionId: "s1", texts: ["a"] })).toBeUndefined();
   });
 });

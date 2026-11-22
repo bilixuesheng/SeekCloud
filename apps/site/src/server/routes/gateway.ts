@@ -8,8 +8,14 @@ import { errorResponse } from "../gateway/failures";
 import { webFetch } from "../gateway/fetch";
 import { GatewayFiles } from "../gateway/files";
 import type { ModelGateway } from "../gateway/gateway";
+import {
+  modelOfRequest,
+  protocolOfPath,
+  safeProviderPath,
+  upstreamSearch,
+} from "../gateway/provider-path";
 import { webSearch } from "../gateway/web";
-import type { ModelCatalog } from "../models/providers";
+import { type ModelCatalog, PROVIDER_ID } from "../models/providers";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -49,6 +55,7 @@ async function jsonObject(req: Request): Promise<Record<string, unknown> | Respo
  * - X-SeekCloud-Session: <会话 ID>：哪个会话。会话必须在这台宿主机上，而且沙箱开着（运行中、等待回复）。
  *
  * 接口和 Anthropic、DeepSeek 的一样（dsh 照原样调）：/v1/messages、/v1/files…、/v1/tools/search、/v1/tools/fetch。
+ * 别的提供方走透明转发 /providers/{id}/…（#113）。
  */
 export function gatewayRoutes(deps: AppDeps, gateway: ModelGateway, models: ModelCatalog) {
   const files = new GatewayFiles(deps);
@@ -82,69 +89,109 @@ export function gatewayRoutes(deps: AppDeps, gateway: ModelGateway, models: Mode
 
   const owner = (s: GatewaySession) => ({ userId: s.userId, sessionId: s.id });
 
-  return new Hono<GatewayEnv>()
-    .use("*", authenticate)
-    .post("/v1/messages", async (c) => {
-      const session = c.get("session");
-      const body = await jsonObject(c.req.raw);
-      if (body instanceof Response) return body;
-      // 这个接口是 DeepSeek 官方的（Anthropic 格式）：模型是 DeepSeek 能用的那些（#113）
-      const model = typeof body.model === "string" ? modelRef(DEEPSEEK_PROVIDER, body.model) : "";
-      if (!model || !(await models.find(model))) return reject(400, "不支持这个模型");
-      const providers = await files.referencedProviders(owner(session), body);
-      if (providers === undefined) {
-        return reject(400, "请求里引用的文件不存在，或者不是这个会话上传的");
-      }
-      return gateway.messages(
-        {
-          purpose: "agent",
-          userId: session.userId,
-          sessionId: session.id,
-          turnId: session.turnId,
-          model,
-        },
-        {
+  return (
+    new Hono<GatewayEnv>()
+      .use("*", authenticate)
+      .post("/v1/messages", async (c) => {
+        const session = c.get("session");
+        const body = await jsonObject(c.req.raw);
+        if (body instanceof Response) return body;
+        // 这个接口是 DeepSeek 官方的（Anthropic 格式）：模型是 DeepSeek 能用的那些（#113）
+        const model = typeof body.model === "string" ? modelRef(DEEPSEEK_PROVIDER, body.model) : "";
+        if (!model || !(await models.find(model))) return reject(400, "不支持这个模型");
+        const providers = await files.referencedProviders(owner(session), body);
+        if (providers === undefined) {
+          return reject(400, "请求里引用的文件不存在，或者不是这个会话上传的");
+        }
+        return gateway.messages(
+          {
+            purpose: "agent",
+            userId: session.userId,
+            sessionId: session.id,
+            turnId: session.turnId,
+            model,
+          },
+          {
+            headers: c.req.raw.headers,
+            body,
+            signal: c.req.raw.signal,
+            providers: providers ?? undefined,
+          },
+        );
+      })
+      .post("/v1/tools/search", async (c) => {
+        const session = c.get("session");
+        const body = await jsonObject(c.req.raw);
+        if (body instanceof Response) return body;
+        return webSearch(
+          deps,
+          { tool: "web_search", ...owner(session), turnId: session.turnId },
+          { headers: c.req.raw.headers, body, signal: c.req.raw.signal },
+        );
+      })
+      .post("/v1/tools/fetch", async (c) => {
+        const session = c.get("session");
+        const body = await jsonObject(c.req.raw);
+        if (body instanceof Response) return body;
+        return webFetch(
+          deps,
+          { tool: "web_fetch", ...owner(session), turnId: session.turnId },
+          { body, signal: c.req.raw.signal },
+        );
+      })
+      .post("/v1/files", (c) =>
+        files.upload(owner(c.get("session")), {
           headers: c.req.raw.headers,
-          body,
+          body: c.req.raw.body,
           signal: c.req.raw.signal,
-          providers: providers ?? undefined,
-        },
-      );
-    })
-    .post("/v1/tools/search", async (c) => {
-      const session = c.get("session");
-      const body = await jsonObject(c.req.raw);
-      if (body instanceof Response) return body;
-      return webSearch(
-        deps,
-        { tool: "web_search", ...owner(session), turnId: session.turnId },
-        { headers: c.req.raw.headers, body, signal: c.req.raw.signal },
-      );
-    })
-    .post("/v1/tools/fetch", async (c) => {
-      const session = c.get("session");
-      const body = await jsonObject(c.req.raw);
-      if (body instanceof Response) return body;
-      return webFetch(
-        deps,
-        { tool: "web_fetch", ...owner(session), turnId: session.turnId },
-        { body, signal: c.req.raw.signal },
-      );
-    })
-    .post("/v1/files", (c) =>
-      files.upload(owner(c.get("session")), {
-        headers: c.req.raw.headers,
-        body: c.req.raw.body,
-        signal: c.req.raw.signal,
-      }),
-    )
-    .get("/v1/files", (c) => files.list(owner(c.get("session")), new URL(c.req.url).searchParams))
-    .get("/v1/files/:id", (c) => files.retrieve(owner(c.get("session")), c.req.param("id")))
-    .delete("/v1/files/:id", (c) =>
-      files.delete(owner(c.get("session")), c.req.param("id"), {
-        headers: c.req.raw.headers,
-        signal: c.req.raw.signal,
-      }),
-    )
-    .all("*", () => reject(404, "模型网关没有这个接口"));
+        }),
+      )
+      .get("/v1/files", (c) => files.list(owner(c.get("session")), new URL(c.req.url).searchParams))
+      .get("/v1/files/:id", (c) => files.retrieve(owner(c.get("session")), c.req.param("id")))
+      .delete("/v1/files/:id", (c) =>
+        files.delete(owner(c.get("session")), c.req.param("id"), {
+          headers: c.req.raw.headers,
+          signal: c.req.raw.signal,
+        }),
+      )
+      // 每个提供方一个透明转发（#113）：沙箱里的 dsh 把这个提供方的地址配成 /v1/providers/<id>（宿主机转到这里），
+      // 用各家自己的协议说话；网关换上真正的 key，原样转给 基础 URL + 剩下的路径。
+      .post("/providers/:id/*", async (c) => {
+        const session = c.get("session");
+        const provider = c.req.param("id");
+        if (!PROVIDER_ID.test(provider)) return reject(404, "没有这个模型服务");
+        const url = new URL(c.req.url);
+        const prefix = `/api/gateway/providers/${provider}`;
+        const path = url.pathname.startsWith(prefix)
+          ? safeProviderPath(url.pathname.slice(prefix.length))
+          : undefined;
+        if (!path) return reject(400, "路径不合法");
+        const protocol = protocolOfPath(path);
+        if (!protocol)
+          return reject(404, "模型网关只转发模型调用（对话、Responses、Messages、Gemini 生成）");
+        const body = await jsonObject(c.req.raw);
+        if (body instanceof Response) return body;
+        const model = modelOfRequest(protocol, path, body);
+        if (!model) return reject(400, "请求里没有模型");
+        return gateway.passThrough(
+          {
+            purpose: "agent",
+            userId: session.userId,
+            sessionId: session.id,
+            turnId: session.turnId,
+            model: modelRef(provider, model),
+          },
+          {
+            provider,
+            protocol,
+            path,
+            search: upstreamSearch(url.search),
+            headers: c.req.raw.headers,
+            body,
+            signal: c.req.raw.signal,
+          },
+        );
+      })
+      .all("*", () => reject(404, "模型网关没有这个接口"))
+  );
 }

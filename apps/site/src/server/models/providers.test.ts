@@ -498,3 +498,26 @@ describe("DeepSeek 的模型跟着它发布的列表", () => {
     }
   });
 });
+
+describe("平台调用的模型", () => {
+  it("自动：能用的模型里输入加输出最便宜的；选了的还能用就用它，不能用了退回自动", async () => {
+    const t = await createTestApp({ env: { GROQ_API_KEY: "gsk-env-0123456789" } });
+    try {
+      const { browser } = await t.adminWithGitHub("octo", "octo/app");
+      await browser.post(PROVIDERS, { kind: "catalog", id: "groq" });
+      const available = (await t.deps.models?.available()) ?? [];
+      const all = available.flatMap((p) => p.models).filter((m) => m.cost);
+      const cheapest = [...all].sort(
+        (a, b) => (a.cost?.[0] ?? 0) + (a.cost?.[1] ?? 0) - ((b.cost?.[0] ?? 0) + (b.cost?.[1] ?? 0)),
+      )[0];
+      const userId = (await t.deps.db.select().from(sessions).limit(1))[0]?.userId ?? "x";
+      expect((await t.deps.models?.platformModel(userId))?.ref).toBe(cheapest?.ref);
+      await send(browser, "PUT", "/api/settings/platform-model", { model: "deepseek/deepseek-v4-pro" });
+      expect((await t.deps.models?.platformModel(userId))?.ref).toBe("deepseek/deepseek-v4-pro");
+      await send(browser, "PATCH", `${PROVIDERS}/deepseek`, { enabled: false });
+      expect((await t.deps.models?.platformModel(userId))?.provider).toBe("groq");
+    } finally {
+      await t.close();
+    }
+  });
+});
