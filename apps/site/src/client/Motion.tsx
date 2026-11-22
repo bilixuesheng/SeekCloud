@@ -33,12 +33,14 @@ export function useFlip(ref: RefObject<HTMLElement | null>): void {
   useLayoutEffect(() => {
     const root = ref.current;
     if (!root) return;
-    const top = root.getBoundingClientRect().top - root.scrollTop;
+    const top = layoutTop(root);
     const next = new Map<string, number>();
     const first = last.current.size === 0;
     for (const el of root.querySelectorAll<HTMLElement>("[data-flip]")) {
       const id = el.dataset.flip as string;
-      const y = el.getBoundingClientRect().top - top;
+      // 量排版上的位置（不算正在播的动画的位移）：动画播到一半又渲染时（比如拖动时每动一下都渲染），
+      // 量到的位置带着上一段动画的位移，会一段比一段大，越滑越远
+      const y = layoutTop(el) - top;
       next.set(id, y);
       if (first || reducedMotion()) continue;
       const before = last.current.get(id);
@@ -65,6 +67,15 @@ export function useFlip(ref: RefObject<HTMLElement | null>): void {
 }
 
 const FLIP_MS = 320;
+
+/** 元素在页面里排版上的上边（offsetTop 一路加上去）：不受 transform 和滚动的影响。 */
+function layoutTop(el: HTMLElement): number {
+  let y = 0;
+  for (let node: HTMLElement | null = el; node; node = node.offsetParent as HTMLElement | null) {
+    y += node.offsetTop;
+  }
+  return y;
+}
 
 /**
  * 一行字带着轻微的模糊一个个浮现出来（照 Claude 置顶消息的标题，2026-11-15 用户要求）：每个字从模糊、透明

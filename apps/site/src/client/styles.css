@@ -644,6 +644,157 @@ input:not([type="range"]):focus {
   }
 }
 
+/*
+ * 拖动和全屏侧栏左滑收回（#153）：先竖着走的交给浏览器滚动，横着走的由页面接（整个侧栏都是，
+ * 不然浏览器会把横着的滑动当成自己的平移，中途取消掉）。不能加 pinch-zoom：加了以后手机上浏览器
+ * 照样会拿横着的滑动去平移页面。touch-action 管不到滚动的容器里面，列表自己也要写一遍。
+ * 拖的时候不选中文字、不弹长按菜单。
+ */
+.sidebar,
+.sidebar-list {
+  touch-action: pan-y;
+}
+
+.session-list li[data-session] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* 原来的位置淡下去，留着空档 */
+.session-list li.drag-source {
+  opacity: 0.28;
+}
+
+/* 手指在哪一块上，那一块浅浅地亮一下 */
+.sidebar-group.drop-active {
+  border-radius: 10px;
+  background: var(--accent-soft);
+  transition: background 0.15s;
+}
+
+/* 还没有置顶的会话时，拖动一开始顶上出现的置顶区 */
+.sidebar-drop-zone {
+  margin: 2px 2px 10px;
+  padding: 14px 10px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 10px;
+  color: var(--faint);
+  font-size: 13px;
+  text-align: center;
+  animation: drop-zone-in 0.2s var(--ease-out);
+}
+
+.sidebar-drop-zone.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+/* 拖动时底部浮出的"新分组" */
+.sidebar-new-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 10px 10px;
+  height: 44px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 550;
+  box-shadow: var(--shadow-sm);
+  animation: drop-zone-up 0.22s var(--ease-out);
+}
+
+.sidebar-new-group.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+@keyframes drop-zone-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes drop-zone-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* 浮起来的会话：带阴影跟着手指走 */
+.drag-ghost {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  transform: scale(1.02);
+  pointer-events: none;
+}
+
+/* 放下去会在哪：一条插入线 */
+.drop-line {
+  position: fixed;
+  z-index: 59;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* 从置顶里拖出来时手指旁边的提示 */
+.drag-unpin {
+  position: fixed;
+  z-index: 61;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 刚建好的分组：名字马上可以改 */
+.sidebar-group-name-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  margin: 0 4px;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.sidebar-alert {
+  margin: 0 12px 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-drop-zone,
+  .sidebar-new-group {
+    animation: none;
+  }
+}
+
 /* 已归档的会话：列表最下面一组，默认收起 */
 .sidebar-archived {
   margin-top: 10px;
