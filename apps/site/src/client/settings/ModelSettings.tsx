@@ -1,36 +1,47 @@
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
 import { type ApiError, api } from "../api";
 import { setCached, useCached } from "../cached";
 import { SparkIcon } from "../Icons";
-import { shortDateTime } from "../session/relative-time";
 import { reloadModels, useModels } from "../session/useModels";
+import { AddProvider } from "./models/AddProvider";
+import { ProviderCard } from "./models/ProviderCard";
+import { MODEL_PROVIDERS, type ProviderView } from "./models/types";
 
-export const MODEL_PROVIDERS = "/api/settings/model-providers";
+export { MODEL_PROVIDERS } from "./models/types";
 export const PLATFORM_MODEL = "/api/settings/platform-model";
 
-/** 设置接口里的一个提供方（server/routes/model.ts 的 ModelProvider）。 */
-export interface ProviderView {
-  id: string;
-  name: string;
-  kind: "deepseek" | "catalog" | "custom";
-  enabled: boolean;
-  credential: {
-    masked: string | null;
-    env: string[];
-    envDetected: string | null;
-    apiKeyEnv: string | null;
-  };
-  keySetAt: string | null;
-  keyRejectedAt: string | null;
-}
-
-/** 设置里的"模型"一类：模型服务的 API key（#26），平台自己发起的调用用哪个模型（#140）。 */
+/**
+ * 设置里的"模型"一类（照 dsh 的"设置 → 模型"，#113）：内置的 DeepSeek 和加进来的提供方，一个一张卡片，
+ * 下面是"添加模型提供商"；最后是平台调用的模型（#140）。改动下一次请求就生效，不用重启沙箱。
+ */
 export function ModelSettings() {
+  const loaded = useCached<{ providers: ProviderView[] }>(MODEL_PROVIDERS);
+  const providers = loaded.data?.providers;
+  const write = (next: ProviderView[]) => {
+    setCached(MODEL_PROVIDERS, { providers: next });
+    reloadModels();
+  };
   return (
     <>
       <section className="settings-section">
         <h2>模型服务</h2>
-        <ApiKeyRow />
+        <p className="settings-hint">
+          密钥只保存在主站，加密存放，不会进入沙箱，Agent 无法读取。修改在下一次请求时生效。
+        </p>
+        {providers?.map((p) => (
+          <ProviderCard
+            key={p.id}
+            provider={p}
+            onSaved={(next) => write(providers.map((x) => (x.id === next.id ? next : x)))}
+            onDeleted={() => write(providers.filter((x) => x.id !== p.id))}
+          />
+        ))}
+        {loaded.error && (
+          <p className="alert" role="alert">
+            {loaded.error}
+          </p>
+        )}
+        {providers && <AddProvider onAdded={(p) => write([...providers, p])} />}
       </section>
       <PlatformModel />
     </>
@@ -114,159 +125,5 @@ function PlatformModel() {
         </p>
       )}
     </section>
-  );
-}
-
-/** DeepSeek API key：加密存放，保存以后只显示脱敏预览。可以替换或删除（删除后读环境变量）。 */
-function ApiKeyRow() {
-  const loaded = useCached<{ providers: ProviderView[] }>(MODEL_PROVIDERS);
-  const status = loaded.data?.providers.find((p) => p.kind === "deepseek");
-  const keySet = Boolean(status?.credential.masked);
-  const update = async (body: { apiKey: string | null }) => {
-    const next = await api<ProviderView>(`${MODEL_PROVIDERS}/deepseek`, body, "PATCH");
-    setCached(MODEL_PROVIDERS, {
-      providers: (loaded.data?.providers ?? []).map((p) => (p.id === next.id ? next : p)),
-    });
-    reloadModels();
-  };
-  const [editing, setEditing] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [failed, setError] = useState<string>();
-  const error = failed ?? loaded.error;
-
-  const save = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(undefined);
-    try {
-      await update({ apiKey: draft.trim() });
-      setDraft("");
-      setEditing(false);
-    } catch (e) {
-      setError((e as ApiError).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const remove = async () => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await update({ apiKey: null });
-      setConfirmDelete(false);
-    } catch (e) {
-      setError((e as ApiError).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="settings-card">
-      <div className="settings-row">
-        <span className="settings-row-text">
-          <span className="settings-row-name">{status?.name ?? "DeepSeek 官方"} API key</span>
-          <span className="settings-row-sub">
-            {status === undefined
-              ? "　"
-              : keySet
-                ? `${status.credential.masked}${status.keySetAt ? `，保存于 ${shortDateTime(new Date(status.keySetAt))}` : ""}。加密存放，不再显示原文。`
-                : status.credential.envDetected
-                  ? `未保存，使用环境变量 ${status.credential.envDetected}。`
-                  : "未设置。设置之前无法使用 DeepSeek 的模型。"}
-          </span>
-        </span>
-        {status && !editing && !confirmDelete && (
-          <span className="settings-actions">
-            {keySet && (
-              <button type="button" className="pill-button" onClick={() => setConfirmDelete(true)}>
-                删除
-              </button>
-            )}
-            <button
-              type="button"
-              className="pill-button"
-              onClick={() => {
-                setEditing(true);
-                setError(undefined);
-              }}
-            >
-              {keySet ? "替换" : "设置"}
-            </button>
-          </span>
-        )}
-        {confirmDelete && (
-          <span className="settings-actions">
-            <button type="button" className="pill-button" onClick={() => setConfirmDelete(false)}>
-              取消
-            </button>
-            <button
-              type="button"
-              className="pill-button danger"
-              disabled={busy}
-              onClick={() => void remove()}
-            >
-              确认删除
-            </button>
-          </span>
-        )}
-      </div>
-      {status?.keyRejectedAt && !editing && (
-        <p className="alert" role="alert">
-          模型服务于 {shortDateTime(new Date(status.keyRejectedAt))} 拒绝了这个
-          key，请检查它是否正确、是否已失效或余额不足，必要时替换。
-        </p>
-      )}
-      {confirmDelete && (
-        <p className="settings-hint">
-          {status?.credential.envDetected
-            ? `删除以后改用环境变量 ${status.credential.envDetected}。`
-            : "删除以后无法使用 DeepSeek 的模型，运行中的会话调用模型也会失败。"}
-        </p>
-      )}
-      {editing && (
-        <form className="settings-form" onSubmit={save}>
-          <label className="field">
-            <span>DeepSeek API key</span>
-            <input
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="sk-…"
-              required
-              maxLength={400}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-            />
-          </label>
-          <p className="settings-hint">
-            在 DeepSeek 开放平台创建。key 只保存在主站，不会进入沙箱，Agent 无法读取。
-          </p>
-          <div className="settings-form-actions">
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
-                setEditing(false);
-                setDraft("");
-              }}
-            >
-              取消
-            </button>
-            <button type="submit" className="primary" disabled={busy || !draft.trim()}>
-              {busy ? "请稍候…" : "保存"}
-            </button>
-          </div>
-        </form>
-      )}
-      {error && (
-        <p className="alert" role="alert">
-          {error}
-        </p>
-      )}
-    </div>
   );
 }

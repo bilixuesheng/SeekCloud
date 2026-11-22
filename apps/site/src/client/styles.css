@@ -1811,11 +1811,22 @@ input:not([type="range"]):focus {
   font-weight: 600;
 }
 
+/* 模型多了（加了别的提供方）：模型那一页自己滚 */
 .model-page {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 2px 0;
+  max-height: min(60vh, 440px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.model-group {
+  padding: 8px 10px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 .model-page-head {
@@ -5317,4 +5328,403 @@ button.changes-path:hover {
   flex-shrink: 0;
   color: var(--faint);
   font-size: 12.5px;
+}
+
+/* 设置的"模型"（#113，照 dsh 的模型页）：提供方卡片、API 密钥输入框、模型目录、获取可用模型、添加提供商 */
+
+.provider-card.disabled .settings-row-name {
+  color: var(--muted);
+}
+
+.provider-kind {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+
+.provider-form,
+.add-provider-form {
+  gap: 10px;
+}
+
+.link-button {
+  align-self: flex-start;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--accent-fg);
+  font-size: 13.5px;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.settings-hint.warn {
+  color: var(--warning);
+}
+
+.settings-form-actions.spread {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.alert p {
+  margin: 0;
+}
+
+.alert p + p {
+  margin-top: 4px;
+}
+
+.key-field > label {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--fg-2);
+}
+
+.key-field-box {
+  position: relative;
+  display: flex;
+}
+
+.key-field-box input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 64px;
+}
+
+.key-field-eye {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  height: 30px;
+  padding: 0 10px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--fg-2);
+  font-size: 12.5px;
+}
+
+.key-field-hint {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.key-field-hint.ok {
+  color: var(--success);
+}
+
+.key-field-hint.warn {
+  color: var(--warning);
+}
+
+.settings-select.small {
+  width: auto;
+  height: 34px;
+  font-size: 14px;
+}
+
+.model-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--fg-2);
+}
+
+.model-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.model-rows:empty {
+  display: none;
+}
+
+.model-row + .model-row {
+  border-top: 1px solid var(--border);
+}
+
+.model-row-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 6px;
+}
+
+.model-row-handle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.model-row-handle:active {
+  cursor: grabbing;
+}
+
+.model-row-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.model-row-name {
+  overflow: hidden;
+  font-size: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.model-row-id {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.model-row-chevron {
+  display: grid;
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--muted);
+  transition: transform 0.2s var(--ease-out);
+}
+
+.model-row.open .model-row-chevron {
+  transform: rotate(180deg);
+}
+
+.model-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 14px 14px;
+  animation: rise-in 0.2s var(--ease-out);
+}
+
+.model-options-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.model-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.model-inputs legend {
+  width: 100%;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--fg-2);
+}
+
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.checkbox input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.reasoning {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reasoning-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--fg-2);
+}
+
+.reasoning-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reasoning-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reasoning-level {
+  width: 3.5em;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.reasoning-rows input {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+}
+
+.model-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.model-add input {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  font-size: 14px;
+}
+
+.probe-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-2);
+  animation: rise-in 0.2s var(--ease-out);
+}
+
+.probe-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.probe-search input {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: none;
+  font-size: 14px;
+}
+
+.probe-list,
+.catalog-list {
+  max-height: 280px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  overscroll-behavior: contain;
+}
+
+.probe-row {
+  padding: 6px 4px;
+}
+
+.probe-name {
+  font-size: 14px;
+}
+
+.probe-id {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.catalog-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  text-align: left;
+}
+
+.catalog-item:hover {
+  background: var(--hover);
+}
+
+.add-provider-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+  background: none;
+  color: var(--fg-2);
+  font-size: 14.5px;
+}
+
+.add-provider-button:hover {
+  background: var(--hover);
+}
+
+.add-provider {
+  padding-top: 14px;
+}
+
+.add-provider-tabs {
+  margin-bottom: 4px;
 }

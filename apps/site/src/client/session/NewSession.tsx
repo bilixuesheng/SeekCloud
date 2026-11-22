@@ -233,6 +233,16 @@ export function NewSession({
               )}
             </div>
           )}
+          {modelList && models.length === 0 && (
+            // 一个能用的模型都没有（没填 key、提供方都停用了）：先去设置里添加，照 dsh 的"选择模型"
+            <button
+              type="button"
+              className="chip model-trigger"
+              onClick={() => navigate("/settings/model")}
+            >
+              <span className="chip-text">选择模型</span>
+            </button>
+          )}
           {modelList && models.length > 0 && (
             <ModelPicker
               models={models}

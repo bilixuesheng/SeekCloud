@@ -153,6 +153,10 @@ const catalogRoute = createRoute({
               baseUrl: z.string().nullable(),
               models: z.number().int(),
               added: z.boolean(),
+              envDetected: z
+                .string()
+                .nullable()
+                .openapi({ description: "检测到了哪个环境变量（只看有没有值）" }),
             }),
           ),
         }),

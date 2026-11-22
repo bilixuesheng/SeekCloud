@@ -592,8 +592,11 @@ export async function reorderProviders(deps: Pick<AppDeps, "db">, order: string[
   });
 }
 
-/** 目录里的提供方（"添加模型提供商 → 第三方模型提供商"）：已经加过的标出来。 */
-export async function catalogList(deps: Pick<AppDeps, "db">) {
+/** 目录里的提供方（"添加模型提供商 → 第三方模型提供商"）：已经加过的标出来，环境变量检测到了的写上是哪个。 */
+export async function catalogList(
+  deps: Pick<AppDeps, "db"> & { env?: Record<string, string | undefined> },
+) {
+  const values = envOf(deps);
   const added = new Set(
     (
       await deps.db
@@ -615,6 +618,7 @@ export async function catalogList(deps: Pick<AppDeps, "db">) {
     baseUrl: Object.values(p.endpoints)[0] ?? null,
     models: p.models.length,
     added: added.has(p.id),
+    envDetected: p.env.find((name) => Boolean(values[name]?.trim())) ?? null,
   }));
 }
 
