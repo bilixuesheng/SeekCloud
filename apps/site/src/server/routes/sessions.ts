@@ -400,8 +400,13 @@ const fail = (error: SessionError) => ({
 /** 代理和浏览器之间长时间没数据会断开，每隔一会儿发一行注释。 */
 const KEEPALIVE_MS = 25_000;
 
-/** 打开一条 SSE。start 开始推送，返回停止推送的函数；浏览器断开时调用它。 */
+/**
+ * 打开一条 SSE。start 开始推送，返回停止推送的函数；浏览器断开时调用它。
+ * 每次保活前再问一次身份来源：这期间这台设备被退出了（设备列表、在所有设备上退出、改密码、在服务器上
+ * 重置密码）就断开，不再推送。
+ */
 function eventStream(
+  deps: AppDeps,
   c: Context,
   start: (stream: SSEStreamingApi) => Promise<() => void>,
 ): Response {
@@ -410,7 +415,15 @@ function eventStream(
   return streamSSE(c, async (stream) => {
     const closed = new Promise<void>((resolve) => stream.onAbort(resolve));
     const stop = await start(stream);
-    const keepalive = setInterval(() => void stream.write(": keepalive\n\n"), KEEPALIVE_MS);
+    const keepalive = setInterval(
+      () =>
+        void (async () => {
+          const still = await deps.identity.currentUser(c).catch(() => undefined);
+          if (!still) stream.abort();
+          else await stream.write(": keepalive\n\n");
+        })(),
+      deps.streamKeepaliveMs ?? KEEPALIVE_MS,
+    );
     if (!stream.aborted) await closed;
     clearInterval(keepalive);
     stop();
@@ -463,7 +476,7 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
     .openapi(sessionListStreamRoute, async (c) => {
       const user = await deps.identity.currentUser(c);
       if (!user) return c.json(notLoggedIn, 401);
-      return eventStream(c, async (stream) => {
+      return eventStream(deps, c, async (stream) => {
         let snapshotSent = false;
         const changed = new Set<string>();
         const push = guarded(stream, async () => {
@@ -502,7 +515,7 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       const handle = await sessions.open(user.id, c.req.valid("param").shortId);
       if (!handle) return c.json(fail("session_not_found").body, 404);
       let last = c.req.valid("header")["last-event-id"] ?? c.req.valid("query").after ?? 0;
-      return eventStream(c, async (stream) => {
+      return eventStream(deps, c, async (stream) => {
         // 先订阅再读库，读库期间来的新事件不会漏；按序号续读，也不会重复。
         const push = guarded(stream, async () => {
           for (;;) {

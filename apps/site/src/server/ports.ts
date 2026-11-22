@@ -31,7 +31,13 @@ export interface CurrentUser {
  * 会话、环境、导出这些数据都挂在它下面。
  */
 export interface Identity {
-  /** 这个请求是谁的；没登录、登录状态过期或已退出时返回 undefined。 */
+  /**
+   * 这个请求是谁的；没登录、登录状态过期或已退出时返回 undefined。
+   *
+   * 请求带了 Authorization 请求头（安卓 App 的设备令牌这类，#177）时，只按它认，不看 Cookie；不认这个
+   * 请求头的身份来源一律返回 undefined。主站因此对带 Authorization 的请求不做同站检查（app.ts）。
+   * 事件流在每次保活时再调一次：返回 undefined 就断开。
+   */
   currentUser(c: Context): Promise<CurrentUser | undefined>;
   /**
    * 没登录时 /api/me 回给浏览器的错误，浏览器按错误码决定显示哪个页面。

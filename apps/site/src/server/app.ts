@@ -60,6 +60,8 @@ export interface AppDeps {
   outboundNetwork?: OutboundNetwork;
   /** 网页抓取的超时，默认 30 秒。测试里改短。 */
   webFetchTimeoutMs?: number;
+  /** 事件流多久发一次保活（同时再核对一次登录状态），默认 25 秒。测试里改短。 */
+  streamKeepaliveMs?: number;
   /**
    * 平台自己发起的模型调用（判断是否在等输入 #140、置顶消息的短标题，platform-call.ts）。默认开；false 时
    * 只用规则（测试默认关：这些调用会抢走测试给假模型排好的回复）。timeoutMs 换掉两处的超时（测试用）。
@@ -69,12 +71,20 @@ export interface AppDeps {
 
 const CheckResult = z.enum(["ok", "error"]);
 
+/** 支持的最低安卓 App 版本。接口改得旧的 App 用不了时改这里（#125 发版时核对）。 */
+export const MIN_APP_VERSION: string | null = null;
+
 const Health = z.object({
   status: CheckResult,
   /** 固定是 seekcloud：安卓 App 连接服务器时靠它认出这是一台 SeekCloud。 */
   product: z.literal("seekcloud"),
   /** 登录以后才给：没登录的人按版本号去找已知的漏洞。 */
   version: z.string().optional(),
+  /**
+   * 这台主站支持的最低安卓 App 版本（#177）：App 连接时核对，太旧就提示更新。没登录也给。
+   * null 是不限（还没有发过 App）。
+   */
+  minAppVersion: z.string().nullable(),
   database: CheckResult,
   time: z.string().openapi({ format: "date-time" }),
 });
@@ -142,10 +152,14 @@ export function createApp(deps: AppDeps) {
   );
 
   // 登录状态放在 Cookie 里，所以拒绝别的网站发来的表单请求。接口只收 JSON，跨站的 JSON 请求浏览器本来就拦。
-  // 模型网关不看 Cookie（只认宿主机凭据），沙箱经它上传文件用的是 multipart，不过这一道。
+  // 不看 Cookie 的请求不过这一道：模型网关（只认宿主机凭据，沙箱经它上传文件用的是 multipart），
+  // 和带 Authorization 的请求（安卓 App 的设备令牌，#177）。身份来源对带 Authorization 的请求只按令牌认、
+  // 不看 Cookie（ports.ts 的 Identity），别的网站的页面又加不上这个请求头。
   const sameSiteOnly = csrf();
   app.use("/api/*", (c, next) =>
-    c.req.path.startsWith("/api/gateway/") ? next() : sameSiteOnly(c, next),
+    c.req.path.startsWith("/api/gateway/") || c.req.header("authorization") !== undefined
+      ? next()
+      : sameSiteOnly(c, next),
   );
 
   app.openapi(healthRoute, async (c) => {
@@ -163,6 +177,7 @@ export function createApp(deps: AppDeps) {
       status: database,
       product: "seekcloud" as const,
       ...(signedIn ? { version: deps.version } : {}),
+      minAppVersion: MIN_APP_VERSION,
       database,
       time: deps.clock.now().toISOString(),
     };
@@ -195,7 +210,14 @@ export function createApp(deps: AppDeps) {
 
   app.doc31("/api/openapi.json", {
     openapi: "3.1.0",
-    info: { title: "SeekCloud", version: deps.version },
+    info: {
+      title: "SeekCloud",
+      version: deps.version,
+      description:
+        "登录有两种方式：网页用 Cookie（POST /api/auth/login 设的）；安卓 App 用设备令牌，" +
+        "登录时带 client: app 拿到，之后放在 Authorization: Bearer <令牌> 里。带了 Authorization 的请求只按令牌认，" +
+        "不看 Cookie，也不做同站检查。模型网关（/api/gateway/）只认宿主机凭据。",
+    },
   });
 
   return app;

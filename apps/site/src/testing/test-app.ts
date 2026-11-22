@@ -71,6 +71,8 @@ export interface TestAppOptions {
   /** 网页抓取怎么解析域名、哪些地址能连。默认是真的（只连公网）。 */
   outboundNetwork?: OutboundNetwork;
   webFetchTimeoutMs?: number;
+  /** 事件流的保活间隔（同时核对登录状态），默认 25 秒。测"退出以后事件流断开"时改短。 */
+  streamKeepaliveMs?: number;
 }
 
 /** 测试里填好的模型服务 key（发给假提供方的请求里应该带着它）。 */
@@ -109,6 +111,7 @@ export async function createTestApp(options: TestAppOptions = {}) {
     modelFetch: options.modelFetch ?? model.fetch,
     outboundNetwork: options.outboundNetwork,
     webFetchTimeoutMs: options.webFetchTimeoutMs,
+    streamKeepaliveMs: options.streamKeepaliveMs,
     platformCalls: options.platformCalls ?? false,
   };
   if (options.modelKey !== false) {

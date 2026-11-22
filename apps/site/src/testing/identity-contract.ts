@@ -14,6 +14,11 @@ export interface IdentityDriver {
    * 身份来源没有凭据可换时不填，这一条跳过。
    */
   changeCredential?(browser: TestBrowser): Promise<void>;
+  /**
+   * 安卓 App 那样登录（#177）：拿到一个放在 Authorization 里的令牌，不设 Cookie。
+   * 身份来源不支持 App 登录时不填，这几条跳过。
+   */
+  appLogIn?(): Promise<string>;
 }
 
 /**
@@ -74,6 +79,48 @@ export function describeIdentityContract(
       expect(await whoIs(stolen)).toBe(401);
       expect((await stolen.get("/api/sessions/stream")).status).toBe(401);
       expect(typeof (await whoIs(other))).toBe("string");
+    });
+
+    it("带了 Authorization 就只按它认，不看 Cookie：认不出来就是没登录", async () => {
+      const browser = await driver.logIn(driver.browser());
+      expect(typeof (await whoIs(browser))).toBe("string");
+      const res = await browser.request("/api/me", {
+        headers: { authorization: "Bearer not-a-real-token-0123456789" },
+      });
+      expect(res.status).toBe(401);
+      const stream = await browser.request("/api/sessions/stream", {
+        headers: { authorization: "Basic YWRtaW46YWRtaW4=" },
+      });
+      expect(stream.status).toBe(401);
+    });
+
+    it("App 的令牌：调接口、连事件流都认；退出以后失效；换凭据时也退出", async (ctx) => {
+      if (!driver.appLogIn) return ctx.skip();
+      const token = await driver.appLogIn();
+      const app = driver.browser();
+      const withToken = (path: string) =>
+        app.request(path, { headers: { authorization: `Bearer ${token}` } });
+      const id = await whoIs(await driver.logIn(driver.browser()));
+      expect(((await (await withToken("/api/me")).json()) as { id: string }).id).toBe(id);
+      const stream = await withToken("/api/sessions/stream");
+      expect(stream.status).toBe(200);
+      await stream.body?.cancel();
+
+      const out = await app.request("/api/auth/logout", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(out.status).toBeLessThan(300);
+      expect((await withToken("/api/me")).status).toBe(401);
+
+      if (driver.changeCredential) {
+        const second = await driver.appLogIn();
+        await driver.changeCredential(await driver.logIn(driver.browser()));
+        const res = await app.request("/api/me", {
+          headers: { authorization: `Bearer ${second}` },
+        });
+        expect(res.status).toBe(401);
+      }
     });
 
     it("换凭据以后，这台设备还登录着，其他设备全部退出", async (ctx) => {
