@@ -56,6 +56,7 @@ export function SessionList({
   currentId,
   searching = false,
   flip = true,
+  draggingId,
   onPick,
 }: {
   sessions: Session[];
@@ -65,6 +66,8 @@ export function SessionList({
   searching?: boolean;
   /** 换位置时平滑滑动（侧栏的 useFlip）。收在"已归档"里的不用，展开时由折叠的动画管。 */
   flip?: boolean;
+  /** 正在拖的会话（#153）：原来的位置淡下去，留着空档。 */
+  draggingId?: string;
   /** 点了某个会话之后（手机上用来收起侧栏）。 */
   onPick?: () => void;
 }) {
@@ -87,7 +90,13 @@ export function SessionList({
           const current = session.shortId === currentId;
           const pr = session.repos[0]?.pullRequest;
           return (
-            <li key={session.shortId} data-flip={flip ? session.shortId : undefined}>
+            <li
+              key={session.shortId}
+              data-flip={flip ? session.shortId : undefined}
+              data-session={session.shortId}
+              data-archived={session.status === "archived" ? "" : undefined}
+              className={draggingId === session.shortId ? "drag-source" : undefined}
+            >
               <a
                 href={`/s/${session.shortId}`}
                 className={`session-item${current ? " current" : ""}`}

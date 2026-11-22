@@ -1,4 +1,4 @@
-import type { SessionGroup } from "@seekcloud/protocol";
+import { MAX_GROUP_NAME, type SessionGroup } from "@seekcloud/protocol";
 import type { ReactNode } from "react";
 import {
   type ComponentType,
@@ -28,10 +28,11 @@ import { rememberNickname } from "./nickname";
 import type { OverlayProps, PageProps } from "./registry";
 import { Slot, useRegistry } from "./registry";
 import { isOverlay, navigate, pathOf, type Route, setOverlayOpen, useRoute } from "./router";
-import { GroupMenu } from "./session/GroupMenu";
+import { GroupMenu, renameGroup } from "./session/GroupMenu";
 import { SessionList } from "./session/SessionList";
 import { sidebarSections, useCollapsed } from "./session/sidebar-sections";
 import { useSessions } from "./session/useSessions";
+import { type DragState, useSidebarDrag } from "./session/useSidebarDrag";
 import { type Me, ShellProvider, type ShellValue } from "./shell";
 
 export function App() {
@@ -85,6 +86,9 @@ function SidebarSection({
   collapsed,
   onToggle,
   onMore,
+  active = false,
+  editing = false,
+  onRename,
   children,
 }: {
   id: string;
@@ -92,22 +96,36 @@ function SidebarSection({
   collapsed: boolean;
   onToggle: () => void;
   onMore?: () => void;
+  /** 拖动时手指正在这一块上。 */
+  active?: boolean;
+  /** 刚拖到"新分组"建好的分组：名字马上可以改，回车或点别处保存，Esc 不改。 */
+  editing?: boolean;
+  onRename?: (name: string) => Promise<void>;
   children: ReactNode;
 }) {
   return (
-    <div className="sidebar-group" data-flip={`section:${id}`}>
+    <div
+      className={`sidebar-group${active ? " drop-active" : ""}`}
+      data-flip={`section:${id}`}
+      data-drop={id}
+      data-collapsed={collapsed ? "" : undefined}
+    >
       <div className="sidebar-section-head">
-        <button
-          type="button"
-          className="sidebar-section-toggle"
-          aria-expanded={!collapsed}
-          onClick={onToggle}
-        >
-          <span className="sidebar-section-name">{name}</span>
-          <span className="sidebar-section-chevron">
-            <ChevronRightIcon />
-          </span>
-        </button>
+        {editing && onRename ? (
+          <GroupNameInput name={name} onDone={onRename} />
+        ) : (
+          <button
+            type="button"
+            className="sidebar-section-toggle"
+            aria-expanded={!collapsed}
+            onClick={onToggle}
+          >
+            <span className="sidebar-section-name">{name}</span>
+            <span className="sidebar-section-chevron">
+              <ChevronRightIcon />
+            </span>
+          </button>
+        )}
         {onMore && (
           <button
             type="button"
@@ -123,6 +141,77 @@ function SidebarSection({
       <Collapse open={!collapsed}>{children}</Collapse>
     </div>
   );
+}
+
+/** 分组名的输入框（拖到"新分组"建好以后）：打开时全选，回车或点别处保存，Esc 保留原来的名字。 */
+function GroupNameInput({
+  name,
+  onDone,
+}: {
+  name: string;
+  onDone: (name: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState(name);
+  const done = useRef(false);
+  const finish = (next: string) => {
+    if (done.current) return;
+    done.current = true;
+    void onDone(next.trim() || name);
+  };
+  return (
+    <input
+      className="sidebar-group-name-input"
+      aria-label="分组名"
+      value={value}
+      maxLength={MAX_GROUP_NAME}
+      // biome-ignore lint/a11y/noAutofocus: 刚建好的分组，名字马上要改（照 Claude）
+      autoFocus
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => finish(value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") finish(value);
+        if (e.key === "Escape") finish(name);
+      }}
+    />
+  );
+}
+
+/** 拖动时浮起来的会话、插入线和"松手取消置顶"的提示。都不接指针事件。 */
+function DragOverlay({ drag, list }: { drag: DragState; list: HTMLElement | null }) {
+  const rect = list?.getBoundingClientRect();
+  const left = (rect?.left ?? 0) + 8;
+  const width = (rect?.width ?? 280) - 16;
+  const target = drag.target;
+  return (
+    <>
+      {target && target.zone !== "new-group" && (
+        <div className="drop-line" style={{ top: target.lineY - 1, left, width }} />
+      )}
+      <div className="drag-ghost" style={{ top: drag.y - 26, left, width }} aria-hidden="true">
+        <span className="session-item-title">{drag.title}</span>
+        <span className="session-item-repo">{drag.repo}</span>
+      </div>
+      {drag.fromPinned && target && target.zone !== "pinned" && (
+        <div className="drag-unpin" style={{ top: drag.y + 30, left: Math.max(8, drag.x - 60) }}>
+          松手取消置顶
+        </div>
+      )}
+    </>
+  );
+}
+
+/** 媒体查询现在成不成立，变了跟着变。 */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => matchMedia(query).matches);
+  useEffect(() => {
+    const list = matchMedia(query);
+    const onChange = () => setMatches(list.matches);
+    list.addEventListener("change", onChange);
+    onChange();
+    return () => list.removeEventListener("change", onChange);
+  }, [query]);
+  return matches;
 }
 
 function HomeLink({ onClick }: { onClick: () => void }) {
@@ -181,7 +270,29 @@ function Shell({
   useLayoutEffect(() => setOverlayOpen(drawer), [drawer]);
   // 置顶、取消置顶、会话换位置时平滑地滑过去（Motion.tsx 的 useFlip）
   const sidebarList = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   useFlip(sidebarList);
+  // 拖动（#153）：手机上先横着走才算拖；全屏的侧栏往左滑能拖回去
+  const narrow = useMediaQuery("(max-width: 899px)");
+  const [editingGroup, setEditingGroup] = useState<string>();
+  const [dragError, setDragError] = useState<string>();
+  useEffect(() => {
+    if (!dragError) return;
+    const timer = setTimeout(() => setDragError(undefined), 4000);
+    return () => clearTimeout(timer);
+  }, [dragError]);
+  const drag = useSidebarDrag({
+    list: sidebarList,
+    sidebar: sidebarRef,
+    sessions,
+    fullScreen: drawer && narrow,
+    onClose: () => setDrawer(false),
+    upsert,
+    onGroupCreated: setEditingGroup,
+    onError: setDragError,
+  });
+  const dragging = drag !== undefined && query === "";
+  const dropZone = drag?.target?.zone;
   const newSession = () => {
     navigate("/");
     setDrawer(false);
@@ -207,7 +318,8 @@ function Shell({
       <div className="shell">
         {/* 设置窗口打开时，底下的页面不能用 Tab 或读屏摸到 */}
         <aside
-          className={`sidebar${drawer ? " open" : ""}`}
+          ref={sidebarRef}
+          className={`sidebar${drawer ? " open" : ""}${dragging ? " dragging" : ""}`}
           aria-label="会话列表"
           inert={overlayRoute}
         >
@@ -239,16 +351,32 @@ function Shell({
               onChange={(e) => setSearch(e.target.value)}
             />
           </label>
+          {dragError && (
+            <p className="alert sidebar-alert" role="alert">
+              {dragError}
+            </p>
+          )}
           <div className="sidebar-list" ref={sidebarList}>
+            {/* 拖动一开始顶上就有置顶区；还没有置顶的会话时显示"拖到这里" */}
+            {dragging && pinned.length === 0 && (
+              <div
+                className={`sidebar-drop-zone${dropZone === "pinned" ? " active" : ""}`}
+                data-drop="pinned"
+              >
+                拖到这里置顶
+              </div>
+            )}
             {pinned.length > 0 && (
               <SidebarSection
                 id="pinned"
                 name="已置顶"
                 collapsed={collapsed.has("pinned")}
                 onToggle={() => toggleCollapsed("pinned")}
+                active={dropZone === "pinned"}
               >
                 <SessionList
                   sessions={pinned}
+                  draggingId={drag?.shortId}
                   loaded
                   currentId={currentId}
                   onPick={() => setDrawer(false)}
@@ -262,6 +390,13 @@ function Shell({
                 name={group.name}
                 collapsed={collapsed.has(`group:${group.id}`)}
                 onToggle={() => toggleCollapsed(`group:${group.id}`)}
+                active={dropZone === `group:${group.id}`}
+                editing={editingGroup === group.id}
+                onRename={async (name) => {
+                  setEditingGroup(undefined);
+                  if (name === group.name) return;
+                  await renameGroup(group.id, name).catch((e: ApiError) => setDragError(e.message));
+                }}
                 onMore={() => {
                   setGroupMenu(group);
                   setGroupMenuOpen(true);
@@ -270,6 +405,7 @@ function Shell({
                 {inGroup.length > 0 ? (
                   <SessionList
                     sessions={inGroup}
+                    draggingId={drag?.shortId}
                     loaded
                     currentId={currentId}
                     onPick={() => setDrawer(false)}
@@ -281,7 +417,10 @@ function Shell({
             ))}
             {/* 会话都置顶了或都在分组里时不显示空的"最近" */}
             {(listed.length > 0 || (pinned.length === 0 && sections.groups.length === 0)) && (
-              <>
+              <div
+                className={`sidebar-group${dropZone === "recent" ? " drop-active" : ""}`}
+                data-drop="recent"
+              >
                 <div className="sidebar-section" data-flip="section:recent">
                   最近
                 </div>
@@ -290,9 +429,10 @@ function Shell({
                   loaded={loaded}
                   currentId={currentId}
                   searching={query !== ""}
+                  draggingId={drag?.shortId}
                   onPick={() => setDrawer(false)}
                 />
-              </>
+              </div>
             )}
             {archived.length > 0 && (
               <div className="sidebar-archived" data-flip="section:archived">
@@ -320,6 +460,18 @@ function Shell({
               </div>
             )}
           </div>
+          {/* 拖动时底部浮出"新分组"：拖上去松手就新建一个分组、把会话放进去 */}
+          {dragging && (
+            <div
+              className={`sidebar-new-group${dropZone === "new-group" ? " active" : ""}`}
+              data-drop="new-group"
+              data-floating
+            >
+              <PlusIcon size={14} />
+              新分组
+            </div>
+          )}
+          {dragging && drag && <DragOverlay drag={drag} list={sidebarList.current} />}
           {groupMenu && (
             <GroupMenu
               group={groups.find((g) => g.id === groupMenu.id) ?? groupMenu}
