@@ -73,9 +73,10 @@ export type SessionError = keyof typeof sessionErrors;
 type Result<T> = { ok: true; value: T } | { ok: false; error: SessionError };
 
 export interface NewSession {
-  /** owner/name */
-  repo: string;
-  baseBranch: string;
+  /** owner/name。不填就是不使用仓库（#191）：不查 GitHub，沙箱里不克隆，Agent 在空的工作目录里工作。 */
+  repo?: string;
+  /** 和 repo 一起填。 */
+  baseBranch?: string;
   /** 不填就用默认环境。 */
   environmentId?: string;
   /** 不填就用默认模型和思考强度。 */
@@ -209,18 +210,24 @@ export class Sessions {
       return { ok: false, error: "model_not_configured" };
     }
 
-    // 装了 App 的仓库可以推送；没装的公开仓库只读挂载。
-    const checked = await withGitHubToken(this.#deps, userId, async (token) => {
-      const found =
-        (await github.listInstalledRepos(token)).find((r) => sameName(r.fullName, input.repo)) ??
-        (await github.getPublicRepo(token, input.repo));
-      if (!found) return "repo_not_found" as const;
-      const branches = await github.listBranches(token, found.fullName);
-      if (!branches.includes(input.baseBranch)) return "branch_not_found" as const;
-      return found;
-    });
-    if (checked === "not_connected") return { ok: false, error: "github_not_connected" };
-    if (typeof checked === "string") return { ok: false, error: checked };
+    // 装了 App 的仓库可以推送；没装的公开仓库只读挂载。不使用仓库时不查 GitHub：没关联也能发起。
+    let repo: { fullName: string; canPush: boolean; baseBranch: string } | undefined;
+    if (input.repo !== undefined) {
+      const { repo: wanted, baseBranch } = input;
+      if (!baseBranch) return { ok: false, error: "branch_not_found" };
+      const checked = await withGitHubToken(this.#deps, userId, async (token) => {
+        const found =
+          (await github.listInstalledRepos(token)).find((r) => sameName(r.fullName, wanted)) ??
+          (await github.getPublicRepo(token, wanted));
+        if (!found) return "repo_not_found" as const;
+        const branches = await github.listBranches(token, found.fullName);
+        if (!branches.includes(baseBranch)) return "branch_not_found" as const;
+        return found;
+      });
+      if (checked === "not_connected") return { ok: false, error: "github_not_connected" };
+      if (typeof checked === "string") return { ok: false, error: checked };
+      repo = { fullName: checked.fullName, canPush: checked.canPush, baseBranch };
+    }
 
     const now = clock.now();
     const text = input.text.trim();
@@ -242,14 +249,16 @@ export class Sessions {
           })
           .returning();
         const id = (session as SessionRow).id;
-        await tx.insert(sessionRepos).values({
-          sessionId: id,
-          position: 0,
-          fullName: checked.fullName,
-          baseBranch: input.baseBranch,
-          branch: sessionBranch(shortId),
-          access: checked.canPush ? "push" : "read",
-        });
+        if (repo) {
+          await tx.insert(sessionRepos).values({
+            sessionId: id,
+            position: 0,
+            fullName: repo.fullName,
+            baseBranch: repo.baseBranch,
+            branch: sessionBranch(shortId),
+            access: repo.canPush ? "push" : "read",
+          });
+        }
         await tx
           .insert(turns)
           .values({ sessionId: id, number: 1, input: text, status: "running", startedAt: now });
@@ -1373,6 +1382,8 @@ export class Sessions {
       .from(sessions)
       .where(eq(sessions.id, sessionId));
     if (!row) return;
+    // 不使用仓库的会话（#191）：Git 代理、GitHub 工具都碰不到任何仓库，令牌用不上，不发
+    if ((await this.#repos(sessionId)).length === 0) return;
     let token: string | undefined;
     try {
       token = await githubAccessToken(this.#deps, row.userId);

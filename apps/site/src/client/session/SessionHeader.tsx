@@ -138,6 +138,11 @@ function SessionInfo({
       <InfoRow icon={<BoxIcon />} label="环境">
         {session.environmentName ?? "已删除"}
       </InfoRow>
+      {session.repos.length === 0 && (
+        <InfoRow icon={<GitHubMark size={14} />} label="仓库">
+          无仓库
+        </InfoRow>
+      )}
       {session.repos.map((repo) => (
         <div key={repo.fullName} className="session-info-repo">
           <InfoRow icon={<GitHubMark size={14} />} label="仓库">
@@ -326,9 +331,12 @@ export function SessionMenu({
           <MenuItem icon={<DotIcon />} disabled={busy} onClick={() => void toggleUnread()}>
             {session.unread ? "标为已读" : "标为未读"}
           </MenuItem>
-          <MenuItem icon={<ExternalIcon />} onClick={() => setPage("open")} more>
-            打开方式
-          </MenuItem>
+          {/* 不使用仓库的会话（#191）没有会话分支和 PR，没有可打开的 */}
+          {session.repos.length > 0 && (
+            <MenuItem icon={<ExternalIcon />} onClick={() => setPage("open")} more>
+              打开方式
+            </MenuItem>
+          )}
           <MenuItem icon={<PencilIcon />} onClick={() => setPage("rename")}>
             重命名
           </MenuItem>

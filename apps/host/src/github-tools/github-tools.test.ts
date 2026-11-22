@@ -328,6 +328,37 @@ describe("只能操作本会话的仓库，以用户本人的账号", () => {
     expect(result).toEqual({ isError: true, text: "GitHub 返回 422：Validation Failed" });
   });
 
+  it("不使用仓库的会话（#191）：工具列表是空的，调用时说明没有挂载仓库，不请求 GitHub", async () => {
+    sessions.register({ sessionId: "s3", sessionToken: "sess_norepo", repos: [] });
+    const init = (await (
+      await rpc(
+        { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } },
+        "sess_norepo",
+      )
+    ).json()) as { result: { instructions: string } };
+    expect(init.result.instructions).toContain("没有挂载仓库");
+    const list = (await (
+      await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, "sess_norepo")
+    ).json()) as { result: { tools: unknown[] } };
+    expect(list.result.tools).toEqual([]);
+    const before = api.requests.length;
+    const called = (await (
+      await rpc(
+        {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: { name: "get_me", arguments: {} },
+        },
+        "sess_norepo",
+      )
+    ).json()) as { result: { isError: boolean; content: Array<{ text: string }> } };
+    expect(called.result.isError).toBe(true);
+    expect(called.result.content[0]?.text).toContain("没有挂载仓库");
+    expect(api.requests.length).toBe(before);
+    sessions.remove("s3");
+  });
+
   it("会话结束后（令牌作废）不能再用", async () => {
     sessions.register({
       sessionId: "s2",

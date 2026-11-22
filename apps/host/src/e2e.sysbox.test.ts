@@ -68,6 +68,7 @@ describe.skipIf(!enabled)("端到端：真的主站、宿主机、沙箱和 dsh"
   let sandboxes: Sandboxes;
   let agents: SandboxAgents;
   let link: SiteLink;
+  let modelUrl: string;
 
   beforeAll(async () => {
     if ((await docker.raw(["image", "inspect", IMAGE as string])).code !== 0) {
@@ -79,7 +80,7 @@ describe.skipIf(!enabled)("端到端：真的主站、宿主机、沙箱和 dsh"
     // 主站：真的 HTTP 服务和宿主机连接；模型请求发到按脚本回复的假模型。
     // 测试库从迁移好的模板库复制（主站自己的测试由 vitest 的全局准备建模板库，这里自己建）
     await createTemplateDatabase();
-    const modelUrl = await model.start();
+    modelUrl = await model.start();
     t = await createTestApp({
       hosts: true,
       modelFetch: fetch,
@@ -295,5 +296,87 @@ describe.skipIf(!enabled)("端到端：真的主站、宿主机、沙箱和 dsh"
     // 模型请求经宿主机转发到主站的模型网关，再到"提供方"：带的是主站的 key，不是会话临时令牌
     const upstream = model.requests.find((r) => r.path.endsWith("/v1/messages"));
     expect(upstream?.path).toBe("/anthropic/v1/messages");
+  });
+
+  it("不使用仓库（#191）：不克隆，Agent 在 /workspace 里工作；Git 代理不放行任何仓库；回合结束不推送、没有改动卡片", async () => {
+    model.script = [
+      {
+        tools: [
+          {
+            id: "toolu_norepo",
+            name: "bash",
+            input: {
+              command: [
+                "pwd",
+                "echo 你好 > note.txt",
+                "git ls-remote https://github.com/acme/app.git 2>&1 | tail -n 3",
+                "echo 完成",
+              ].join("; "),
+              description: "看看工作目录",
+            },
+          },
+        ],
+      },
+      { text: "写好了 note.txt。" },
+    ];
+    const refsBefore = github.refs("acme/app");
+    const res = await browser.post("/api/sessions", { text: "在空目录里写个文件" });
+    expect(res.status, await res.clone().text()).toBe(201);
+    const { shortId, repos } = (await res.json()) as { shortId: string; repos: unknown[] };
+    expect(repos).toEqual([]);
+
+    const events = await untilWaiting(shortId);
+    expect(
+      events.find((e) => e.type === "turn.ended"),
+      logs.slice(-30).join("\n"),
+    ).toMatchObject({
+      reason: "completed",
+    });
+    const result = events.find((e) => e.type === "tool.result");
+    const output = result?.type === "tool.result" ? result.output : "";
+    // 工作目录是 /workspace；会话没挂载仓库，代理不放行
+    expect(output).toMatch(/^\/workspace\n/);
+    expect(output).toContain("没有挂载到当前会话");
+    expect(output).toContain("完成");
+    expect(events.some((e) => e.type === "workspace")).toBe(false);
+    expect(github.refs("acme/app")).toEqual(refsBefore);
+  });
+
+  it("设置里加的自定义接口（#188）：沙箱里的 dsh 经宿主机、主站的透明转发调它，主站换上真 key", async () => {
+    const added = await browser.post("/api/settings/model-providers", {
+      kind: "custom",
+      id: "my-gateway",
+      name: "公司网关",
+      api: "openai-completions",
+      baseUrl: `${modelUrl}/openai/v1`,
+      apiKey: "sk-gateway-real-key",
+      models: [{ id: "gw-model", name: "网关模型", input: ["text"] }],
+    });
+    expect(added.status, await added.clone().text()).toBe(201);
+
+    const before = model.completions().length;
+    model.script = [{ text: "网关模型回的话" }];
+    const res = await browser.post("/api/sessions", {
+      text: "用网关的模型打个招呼",
+      model: "my-gateway/gw-model",
+    });
+    expect(res.status, await res.clone().text()).toBe(201);
+    const { shortId } = (await res.json()) as { shortId: string };
+
+    const events = await untilWaiting(shortId);
+    expect(
+      events.find((e) => e.type === "turn.ended"),
+      logs.slice(-30).join("\n"),
+    ).toMatchObject({
+      reason: "completed",
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "message", text: "网关模型回的话" }),
+    );
+    // 到了"提供方"那里：路径是设置里的地址加上 dsh 的 /chat/completions，key 是主站换上的真 key
+    const request = model.completions().at(before);
+    expect(request?.path).toBe("/openai/v1/chat/completions");
+    expect(request?.headers.authorization).toBe("Bearer sk-gateway-real-key");
+    expect((request?.body as { model?: string } | undefined)?.model).toBe("gw-model");
   });
 });

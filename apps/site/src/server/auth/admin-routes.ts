@@ -1,11 +1,11 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
-import { networkOf } from "../access-log";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
-import { clientIp, HOUR, type RateLimiter, tooFrequent } from "../rate-limit";
+import { type RateLimiter, tooFrequent } from "../rate-limit";
 import { Nickname } from "../routes/me";
 import { jsonBody as json, newRouter } from "../routes/router";
 import { checkPassword, setPassword, setUpAdmin } from "./admin";
+import { limited } from "./limits";
 import {
   currentUser,
   endAllLoginSessions,
@@ -17,7 +17,26 @@ import {
   MAX_DEVICE_NAME,
   startLoginSession,
 } from "./login-sessions";
+import { passkeyRoutes } from "./passkey-routes";
 import { MAX_PASSWORD_LENGTH } from "./password";
+import {
+  openPending,
+  PENDING_TTL_MS,
+  sealPending,
+  twoFactorEnabled,
+  verifySecondFactor,
+} from "./two-factor";
+import { reauthenticate, twoFactorRoutes } from "./two-factor-routes";
+
+const DeviceToken = z.object({ token: z.string() }).openapi("DeviceToken");
+
+const SecondFactorRequired = z
+  .object({
+    secondFactor: z.literal("totp"),
+    pendingToken: z.string(),
+    expiresAt: z.string().openapi({ format: "date-time" }),
+  })
+  .openapi("SecondFactorRequired");
 
 const NewPassword = z
   .string()
@@ -55,11 +74,33 @@ const loginRoute = createRoute({
   responses: {
     200: {
       description: "App 已登录",
-      ...json(z.object({ token: z.string() }).openapi("DeviceToken")),
+      ...json(DeviceToken),
+    },
+    202: {
+      description: "密码正确，开了两步验证：带着 pendingToken 调 /login/verify 输验证码或恢复码",
+      ...json(SecondFactorRequired),
     },
     204: { description: "浏览器已登录" },
     400: errorResponse("密码错误"),
     429: errorResponse("输错密码太多次"),
+  },
+});
+
+const loginVerifyRoute = createRoute({
+  method: "post",
+  path: "/login/verify",
+  summary: "登录的第二步：两步验证的验证码或恢复码",
+  description:
+    "pendingToken 是 /login 回 202 时给的，5 分钟内有效，只能用在这里。成功时和 /login 一样：" +
+    "浏览器设 Cookie 回 204，App 回 200 和设备令牌。输错和输错密码共用同一个频率限制。",
+  request: {
+    body: json(z.object({ pendingToken: z.string().max(4000), code: z.string().max(64) })),
+  },
+  responses: {
+    200: { description: "App 已登录", ...json(DeviceToken) },
+    204: { description: "浏览器已登录" },
+    400: errorResponse("验证码错误，或者登录已超时（要重新输密码）"),
+    429: errorResponse("输错太多次"),
   },
 });
 
@@ -102,13 +143,20 @@ const passwordRoute = createRoute({
   method: "post",
   path: "/password",
   summary: "修改管理员密码",
-  description: "要先输入当前密码。改完后当前设备保持登录，其他设备全部退出。",
+  description:
+    "要先输入当前密码；开了两步验证的再带上验证码或恢复码（code）。改完后当前设备保持登录，其他设备全部退出。",
   request: {
-    body: json(z.object({ currentPassword: z.string(), newPassword: NewPassword })),
+    body: json(
+      z.object({
+        currentPassword: z.string(),
+        newPassword: NewPassword,
+        code: z.string().max(64).optional(),
+      }),
+    ),
   },
   responses: {
     204: { description: "已修改" },
-    400: errorResponse("当前密码错误，或新密码不足 8 位、超过 256 位"),
+    400: errorResponse("当前密码或验证码错误，或新密码不足 8 位、超过 256 位"),
     401: errorResponse("没有登录"),
     429: errorResponse("输错密码太多次"),
   },
@@ -128,23 +176,15 @@ const logoutRoute = createRoute({
   responses: { 204: { description: "已退出" } },
 });
 
-/**
- * 比对管理员密码，登录和改密码共用。同一个 IP 一小时最多输错 10 次，之后正确的密码也要等；输对的不算。
- * 先占一次再比对：同时到达的请求加起来也只能试 10 次。wait 是被限制时还要等的秒数。
- */
-async function checkLimited(
+/** 比对管理员密码。 */
+export async function checkLimited(
   deps: LoginDeps,
   limiter: RateLimiter,
   c: Context,
   password: string,
 ): Promise<{ wait: number; userId?: string }> {
-  // IPv6 按 /64 算一个来源：一个用户手里通常有一整个 /64，按单个地址限等于没限。
-  const rules = [{ key: `password-ip:${networkOf(clientIp(c))}`, limit: 10, windowMs: HOUR }];
-  const wait = limiter.take(rules);
-  if (wait > 0) return { wait };
-  const userId = await checkPassword(deps.db, password);
-  if (userId) limiter.release(rules);
-  return { wait: 0, userId };
+  const { wait, value } = await limited(limiter, c, () => checkPassword(deps.db, password));
+  return { wait, userId: value };
 }
 
 export function authRoutes(deps: LoginDeps, limiter: RateLimiter) {
@@ -163,23 +203,50 @@ export function authRoutes(deps: LoginDeps, limiter: RateLimiter) {
       if (wait > 0) return tooFrequent(c, wait);
       if (!userId) return c.json(apiError("wrong_password", "密码错误"), 400);
       const { client, deviceName } = c.req.valid("json");
-      if (client === "app") {
+      const app = client === "app" ? { client, deviceName: deviceName ?? "安卓设备" } : {};
+      // 开了两步验证：先不发登录状态，给一个 5 分钟的中间令牌，只能拿去输验证码（#100）
+      if (await twoFactorEnabled(deps, userId)) {
+        const expiresAt = new Date(deps.clock.now().getTime() + PENDING_TTL_MS).toISOString();
+        const pendingToken = sealPending(deps, { purpose: "login", userId, ...app });
+        return c.json({ secondFactor: "totp" as const, pendingToken, expiresAt }, 202);
+      }
+      if (app.client === "app") {
         const token = await startLoginSession(deps, c, userId, {
           kind: "app",
-          deviceName: deviceName ?? "安卓设备",
+          deviceName: app.deviceName,
         });
         return c.json({ token }, 200);
       }
       await startLoginSession(deps, c, userId);
       return c.body(null, 204);
     })
+    .openapi(loginVerifyRoute, async (c) => {
+      const { pendingToken, code } = c.req.valid("json");
+      const pending = openPending(deps, pendingToken, "login");
+      if (!pending) {
+        return c.json(apiError("login_expired", "登录已超时，请重新输入密码"), 400);
+      }
+      const { wait, value } = await limited(limiter, c, () =>
+        verifySecondFactor(deps, pending.userId, code),
+      );
+      if (wait > 0) return tooFrequent(c, wait);
+      if (!value) return c.json(apiError("wrong_code", "验证码错误"), 400);
+      if (pending.client === "app") {
+        const token = await startLoginSession(deps, c, pending.userId, {
+          kind: "app",
+          deviceName: pending.deviceName ?? "安卓设备",
+        });
+        return c.json({ token }, 200);
+      }
+      await startLoginSession(deps, c, pending.userId);
+      return c.body(null, 204);
+    })
     .openapi(passwordRoute, async (c) => {
       const me = await currentUser(deps, c);
       if (!me) return c.json(notLoggedIn, 401);
-      const { currentPassword, newPassword } = c.req.valid("json");
-      const { wait, userId } = await checkLimited(deps, limiter, c, currentPassword);
-      if (wait > 0) return tooFrequent(c, wait);
-      if (userId !== me.id) return c.json(apiError("wrong_password", "当前密码错误"), 400);
+      const { currentPassword, newPassword, code } = c.req.valid("json");
+      const denied = await reauthenticate(deps, limiter, c, me.id, currentPassword, code);
+      if (denied) return denied;
       await setPassword(deps.db, me.id, newPassword, loginTokenHash(c));
       return c.body(null, 204);
     })
@@ -205,5 +272,7 @@ export function authRoutes(deps: LoginDeps, limiter: RateLimiter) {
       if (!me) return c.json(notLoggedIn, 401);
       await endAllLoginSessions(deps, c, me.id);
       return c.body(null, 204);
-    });
+    })
+    .route("/", twoFactorRoutes(deps, limiter))
+    .route("/", passkeyRoutes(deps, limiter));
 }

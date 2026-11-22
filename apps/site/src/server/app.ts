@@ -42,6 +42,11 @@ export interface AppDeps {
   github: GitHub;
   /** 加密存放令牌等敏感内容。 */
   secrets: SecretBox;
+  /**
+   * 主站对外的地址（环境变量 PUBLIC_URL）。通行密钥（#100）的 rpId 和来源按它定：不填，或者不是 HTTPS
+   * （本机的 localhost 除外）时不能用通行密钥。
+   */
+  publicUrl?: string;
   /** 沙箱宿主机。还没有接上时，新会话留在排队中。 */
   host?: HostLink;
   /** 主站自己的数据目录：导出数据的压缩包放在这里的 exports 下面。 */

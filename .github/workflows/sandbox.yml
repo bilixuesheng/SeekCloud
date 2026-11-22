@@ -54,7 +54,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
-      - run: pnpm install --frozen-lockfile
+      # 测试机上下载偶尔卡住不动（2026-11-22 卡在最后一个包 38 分钟）：每次最多 10 分钟，卡住了重来一次
+      - name: 安装依赖
+        run: |
+          timeout 600 pnpm install --frozen-lockfile || {
+            echo "安装依赖超时或失败，重试一次"
+            timeout 600 pnpm install --frozen-lockfile
+          }
       # 端到端测试里主站要一个 PostgreSQL：起一个只监听本机的容器，跑完删掉
       - name: 端到端测试用的 PostgreSQL
         run: |

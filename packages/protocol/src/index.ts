@@ -291,7 +291,10 @@ export type HostCommand =
   | {
       type: "prepare_sandbox";
       sessionId: string;
-      /** 第一个是主仓库，Agent 的工作目录。 */
+      /**
+       * 第一个是主仓库，Agent 的工作目录。可以是空的（不使用仓库，#191）：不克隆，Agent 在 /workspace 里工作，
+       * 回合结束不提交、不推送；Git 代理不放行任何仓库。
+       */
       repos: SessionRepo[];
       environmentId: string;
       /** 接口里的模型 ID（不带提供方）。 */
@@ -412,7 +415,7 @@ export interface PullRequestRef {
 export interface Session extends SessionState {
   shortId: string;
   title: string;
-  /** 第一个是主仓库。pullRequest：会话分支上最近的 PR，没有时为 null。 */
+  /** 第一个是主仓库；不使用仓库的会话是空的（#191）。pullRequest：会话分支上最近的 PR，没有时为 null。 */
   repos: Array<SessionRepo & { pullRequest: PullRequestRef | null }>;
   /** "提供方/模型"（parseModelRef）。 */
   model: string;

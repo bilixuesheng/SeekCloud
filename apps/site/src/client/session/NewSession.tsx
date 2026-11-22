@@ -34,6 +34,7 @@ interface Environment {
 }
 
 interface Choices {
+  /** 没有就是不使用仓库（#191）。 */
   repo?: Repo;
   branch?: string;
   model?: string;
@@ -59,7 +60,7 @@ function remember(choices: Choices) {
   } catch {}
 }
 
-/** 首页：写一句话，选仓库、分支、环境和模型，发起会话。 */
+/** 首页：写一句话，选仓库（可以不选，#191）、分支、环境和模型，发起会话。 */
 export function NewSession({
   nickname,
   onCreated,
@@ -72,6 +73,8 @@ export function NewSession({
   const [greeting] = useState(() => takeGreeting(nickname, localRegionName()));
   const greetingReady = useSerifReady(greeting);
   const [github, setGitHub] = useState<GitHubStatus>();
+  // GitHub 的状态回来（或者取失败）以前不能发送：免得记着的仓库还没认出来，就发成了不使用仓库的会话
+  const [githubChecked, setGitHubChecked] = useState(false);
   // 没发出去的字记在浏览器里：去别的会话看一眼再回来、刷新页面都还在。
   const [text, setText] = useDraft("new");
   const [repo, setRepo] = useState<Repo | undefined>(initial.repo);
@@ -102,14 +105,16 @@ export function NewSession({
   const [error, setError] = useState<string>();
 
   useEffect(() => {
-    api<GitHubStatus>("/api/github/status").then(
-      (status) => {
-        setGitHub(status);
-        // 先把仓库列表拉下来放着：点"选择仓库"时列表直接就在，不用打开以后再等
-        if (status.connected) prefetch([REPOS]);
-      },
-      () => undefined,
-    );
+    api<GitHubStatus>("/api/github/status")
+      .then(
+        (status) => {
+          setGitHub(status);
+          // 先把仓库列表拉下来放着：点"选择仓库"时列表直接就在，不用打开以后再等
+          if (status.connected) prefetch([REPOS]);
+        },
+        () => undefined,
+      )
+      .finally(() => setGitHubChecked(true));
     api<{ environments: Environment[] }>("/api/environments").then(
       (res) => {
         setEnvironments(res.environments);
@@ -134,30 +139,30 @@ export function NewSession({
     );
   }, [repo, github?.connected]);
 
-  const pick = (next: Repo) => {
+  const pick = (next: Repo | undefined) => {
     setRepo(next);
-    setBranch(next.defaultBranch);
-    setBranches([next.defaultBranch]);
+    setBranch(next?.defaultBranch ?? "");
+    setBranches(next ? [next.defaultBranch] : []);
     setPicking(false);
   };
 
+  // GitHub 的状态回来以前先摆好问候语和输入框，下面一行等状态回来再淡入，免得整块内容突然冒出来。
+  const connected = github?.connected ?? false;
+  // 没关联 GitHub 时记着的仓库用不上：发起不使用仓库的会话
+  const chosen = connected ? repo : undefined;
+
   const start = async () => {
-    if (!repo) {
-      setPicking(true);
-      return;
-    }
     setBusy(true);
     setError(undefined);
     try {
       const session = await api<Session>("/api/sessions", {
-        repo: repo.fullName,
-        baseBranch: branch,
+        ...(chosen ? { repo: chosen.fullName, baseBranch: branch } : {}),
         environmentId: environmentId || undefined,
         model: model || undefined,
         effort,
         text,
       });
-      remember({ repo, branch, model });
+      remember({ repo: chosen, branch: chosen ? branch : undefined, model });
       setText("");
       onCreated(session);
       handOffFirstMessage(session.shortId, text);
@@ -168,9 +173,6 @@ export function NewSession({
       setBusy(false);
     }
   };
-
-  // GitHub 的状态还没回来时先把问候语和输入框摆好，下面一行等状态回来再淡入，免得整块内容突然冒出来。
-  const connected = github?.connected ?? false;
 
   return (
     <section className="new-session">
@@ -189,14 +191,14 @@ export function NewSession({
           onSubmit={start}
           placeholder="描述任务或提出问题"
           busy={busy}
-          canSubmit={connected}
+          canSubmit={githubChecked}
           submitLabel="发起会话"
           autoFocus
           attach={{ vision: models.find((m) => m.id === model)?.vision ?? false }}
         />
         {/* 输入框下面：环境、仓库、分支一行；模型和思考强度靠右 */}
         <div className="composer-below">
-          {connected && (
+          {githubChecked && (
             <div className="composer-below-options">
               {environments.length > 0 && (
                 <OptionPicker
@@ -208,18 +210,21 @@ export function NewSession({
                   onOpen={() => setPicking(false)}
                 />
               )}
-              <button
-                type="button"
-                className={`chip repo-chip${picking ? " active" : ""}`}
-                aria-expanded={picking}
-                onClick={() => setPicking(!picking)}
-              >
-                <GitHubMark size={14} />
-                <span className="chip-text">{repo?.fullName ?? "选择仓库"}</span>
-                {repo && !repo.canPush && <span className="chip-badge">只读</span>}
-                <ChevronDownIcon />
-              </button>
-              {repo && (
+              {/* 没关联 GitHub 时只能不使用仓库（上面有关联 GitHub 的卡片） */}
+              {connected && (
+                <button
+                  type="button"
+                  className={`chip repo-chip${picking ? " active" : ""}`}
+                  aria-expanded={picking}
+                  onClick={() => setPicking(!picking)}
+                >
+                  <GitHubMark size={14} />
+                  <span className="chip-text">{repo?.fullName ?? "不使用仓库"}</span>
+                  {repo && !repo.canPush && <span className="chip-badge">只读</span>}
+                  <ChevronDownIcon />
+                </button>
+              )}
+              {chosen && (
                 <OptionPicker
                   icon={<BranchIcon />}
                   label="基础分支"
@@ -294,7 +299,8 @@ function RepoPicker({
   status: GitHubStatus;
   selected?: Repo;
   closing: boolean;
-  onPick: (repo: Repo) => void;
+  /** undefined 是不使用仓库。 */
+  onPick: (repo: Repo | undefined) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -371,6 +377,19 @@ function RepoPicker({
         </p>
       )}
       <ul className="repo-list">
+        {/* 不使用仓库（#191）：沙箱里不克隆，Agent 在空的工作目录里工作 */}
+        {!q && (
+          <li>
+            <button
+              type="button"
+              className={`repo${selected ? "" : " selected"}`}
+              onClick={() => onPick(undefined)}
+            >
+              <BoxIcon />
+              <span className="repo-name">不使用仓库</span>
+            </button>
+          </li>
+        )}
         {repos?.map((repo) => (
           <li key={repo.fullName}>
             <button

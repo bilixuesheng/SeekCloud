@@ -428,6 +428,12 @@ input:not([type="range"]):focus {
   font-size: 19px;
 }
 
+/* 两步验证那一步的"使用恢复码"和"返回" */
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+}
+
 .auth-footer {
   margin: 0;
   font-size: 12px;
@@ -3428,6 +3434,57 @@ details > summary::-webkit-details-marker {
   font-size: 12.5px;
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.settings-row-sub.warn {
+  color: var(--warning);
+}
+
+/* 两步验证（#100）：关闭的确认按钮、二维码、密钥、恢复码 */
+.primary.danger {
+  background: var(--danger);
+  box-shadow: none;
+}
+
+/* 卡片里单独一行的按钮（添加通行密钥）：不撑满整行 */
+.settings-card-action {
+  align-self: flex-start;
+}
+
+.qr-code {
+  width: 176px;
+  height: 176px;
+  align-self: center;
+  border-radius: 8px;
+}
+
+.secret-key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.secret-key-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+  padding: 12px 14px;
+  list-style: none;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.recovery-code {
+  font-size: 14px;
+  letter-spacing: 0.02em;
 }
 
 .settings-actions {

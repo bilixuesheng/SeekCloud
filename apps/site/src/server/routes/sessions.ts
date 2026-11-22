@@ -29,7 +29,7 @@ export const Session = z
     title: z.string(),
     status: z.enum(SESSION_STATUSES),
     detail: z.enum(SESSION_STATUS_DETAILS).nullable().openapi({ description: "状态的附加说明" }),
-    repos: z.array(Repo).openapi({ description: "第一个是主仓库" }),
+    repos: z.array(Repo).openapi({ description: "第一个是主仓库；不使用仓库的会话是空的" }),
     model: z.string(),
     effort: z.enum(THINKING_EFFORTS),
     environmentName: z.string().nullable().openapi({ description: "会话用的环境的名字" }),
@@ -61,20 +61,27 @@ const createSessionRoute = createRoute({
   summary: "发起会话",
   request: {
     body: json(
-      z.object({
-        repo: z.string().openapi({ example: "octocat/hello-world" }),
-        baseBranch: z.string(),
-        environmentId: z.string().optional().openapi({ description: "不填就用默认环境" }),
-        model: z.string().max(300).optional().openapi({
-          description: "提供方/模型（/api/models 的 id），不填就用默认模型",
-          example: "deepseek/deepseek-flash",
+      z
+        .object({
+          repo: z.string().optional().openapi({
+            example: "octocat/hello-world",
+            description: "不填就是不使用仓库：沙箱里不克隆，Agent 在空的工作目录里工作（#191）",
+          }),
+          baseBranch: z.string().optional().openapi({ description: "和 repo 一起填" }),
+          environmentId: z.string().optional().openapi({ description: "不填就用默认环境" }),
+          model: z.string().max(300).optional().openapi({
+            description: "提供方/模型（/api/models 的 id），不填就用默认模型",
+            example: "deepseek/deepseek-flash",
+          }),
+          effort: z
+            .enum(THINKING_EFFORTS)
+            .optional()
+            .openapi({ description: "思考强度，不填就用设置里的默认思考强度" }),
+          text: Text,
+        })
+        .refine((body) => (body.repo === undefined) === (body.baseBranch === undefined), {
+          message: "仓库和基础分支需要同时填写，或者都不填写",
         }),
-        effort: z
-          .enum(THINKING_EFFORTS)
-          .optional()
-          .openapi({ description: "思考强度，不填就用设置里的默认思考强度" }),
-        text: Text,
-      }),
     ),
   },
   responses: {
@@ -82,7 +89,7 @@ const createSessionRoute = createRoute({
     400: errorResponse("分支不存在或请求格式不对"),
     401: errorResponse("没有登录"),
     404: errorResponse("仓库或环境不存在"),
-    409: errorResponse("还没有关联 GitHub，或者还没有填模型服务的 API key"),
+    409: errorResponse("选了仓库但还没有关联 GitHub，或者还没有能用的模型"),
   },
 });
 

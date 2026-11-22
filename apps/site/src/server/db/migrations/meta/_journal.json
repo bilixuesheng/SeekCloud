@@ -99,6 +99,20 @@
       "when": 1795338322457,
       "tag": "0013_model_providers",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795343947451,
+      "tag": "0014_two_factor",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1795344747995,
+      "tag": "0015_passkeys",
+      "breakpoints": true
     }
   ]
 }
