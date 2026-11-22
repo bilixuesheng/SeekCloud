@@ -4319,20 +4319,14 @@ details > summary::-webkit-details-marker {
 }
 
 /*
- * 底部弹层：开和关是同一段滑动，同样的曲线、同样的时长（Motion.tsx 的 SHEET_MS），遮罩一起淡入淡出。
- * 拖动时去掉过渡，跟着手指走。
+ * 底部弹层：开和关的滑动、遮罩的淡入淡出都由 Motion.tsx 的 Sheet 用 Web Animations 播，这里只有停稳时的样子。
+ * 拖动时 Sheet 直接改位置，跟着手指走。
  */
 .sheet-scrim {
   position: fixed;
   inset: 0;
   z-index: 40;
   background: rgb(0 0 0 / 0.32);
-  opacity: 0;
-  transition: opacity 0.36s cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-.sheet-scrim.shown {
-  opacity: 1;
 }
 
 .sheet {
@@ -4347,16 +4341,6 @@ details > summary::-webkit-details-marker {
   border-radius: 18px 18px 0 0;
   background: var(--surface);
   box-shadow: 0 -8px 30px rgb(0 0 0 / 0.12);
-  transform: translateY(100%);
-  transition: transform 0.36s cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-.sheet.shown {
-  transform: none;
-}
-
-.sheet.dragging {
-  transition: none;
 }
 
 .sheet-drag {
