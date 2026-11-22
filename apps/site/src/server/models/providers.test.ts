@@ -5,6 +5,8 @@ import type { TestBrowser } from "../../testing/test-browser";
 import { modelProviders, sessions } from "../db/schema";
 import { configuredRouting } from "../gateway/trunk";
 import { CATALOG } from "./catalog";
+import { autoPlatformModel, platformCallCost } from "./providers";
+import type { ModelEntry } from "./types";
 
 /** 设置的"模型"（#113）：提供方的增、改、停用、删除，key 只写不读，环境变量，/api/models，路由。 */
 
@@ -500,25 +502,63 @@ describe("DeepSeek 的模型跟着它发布的列表", () => {
 });
 
 describe("平台调用的模型", () => {
-  it("自动：能用的模型里输入加输出最便宜的；选了的还能用就用它，不能用了退回自动", async () => {
+  const entry = (ref: string, cost: [number, number] | null, efforts: string[] = []) =>
+    ({ ref, cost, efforts }) as unknown as ModelEntry;
+
+  it("自动：只看能关掉思考的，按一次调用（约 2000 输入、20 输出 token）估价挑最便宜的；输入价格几乎决定一切", () => {
+    const choice = autoPlatformModel([
+      // 输出很贵但输入便宜：平台调用只输出几个字，它更省
+      entry("a/cheap-in", [0.1, 10]),
+      entry("b/cheap-out", [0.5, 0.5]),
+      // 最便宜，但关不掉思考：不选
+      entry("c/always-thinks", [0.01, 0.01], ["low", "high"]),
+      entry("d/no-price", null),
+    ]);
+    expect(choice).toMatchObject({ basis: "price", model: { ref: "a/cheap-in" } });
+    expect(platformCallCost(entry("x/y", [1, 2]))).toBeCloseTo((2000 + 40) / 1e6, 12);
+  });
+
+  it("自动：都没有价格时按列表顺序用第一个；一个能关掉思考的都没有时退回全部；没有模型时为空", () => {
+    expect(autoPlatformModel([entry("a/x", null), entry("b/y", null)])).toMatchObject({
+      basis: "order",
+      model: { ref: "a/x" },
+    });
+    expect(
+      autoPlatformModel([entry("a/x", [3, 3], ["high"]), entry("b/y", [1, 1], ["low", "high"])]),
+    ).toMatchObject({ basis: "price", model: { ref: "b/y" } });
+    expect(autoPlatformModel([])).toEqual({ basis: "none", model: undefined });
+  });
+
+  it("选了的还能用就用它，不能用了退回自动；自定义接口的模型填了价格才参与比较", async () => {
     const t = await createTestApp({ env: { GROQ_API_KEY: "gsk-env-0123456789" } });
     try {
       const { browser } = await t.adminWithGitHub("octo", "octo/app");
-      await browser.post(PROVIDERS, { kind: "catalog", id: "groq" });
-      const available = (await t.deps.models?.available()) ?? [];
-      const all = available.flatMap((p) => p.models).filter((m) => m.cost);
-      const cheapest = [...all].sort(
-        (a, b) =>
-          (a.cost?.[0] ?? 0) + (a.cost?.[1] ?? 0) - ((b.cost?.[0] ?? 0) + (b.cost?.[1] ?? 0)),
-      )[0];
       const userId = (await t.deps.db.select().from(sessions).limit(1))[0]?.userId ?? "x";
-      expect((await t.deps.models?.platformModel(userId))?.ref).toBe(cheapest?.ref);
+      const cheapestNow = async () => {
+        const all = ((await t.deps.models?.available()) ?? []).flatMap((p) => p.models);
+        return autoPlatformModel(all).model?.ref;
+      };
+      await browser.post(PROVIDERS, { kind: "catalog", id: "groq" });
+      expect((await t.deps.models?.platformModel(userId))?.ref).toBe(await cheapestNow());
       await send(browser, "PUT", "/api/settings/platform-model", {
         model: "deepseek/deepseek-v4-pro",
       });
       expect((await t.deps.models?.platformModel(userId))?.ref).toBe("deepseek/deepseek-v4-pro");
       await send(browser, "PATCH", `${PROVIDERS}/deepseek`, { enabled: false });
       expect((await t.deps.models?.platformModel(userId))?.provider).toBe("groq");
+      await send(browser, "PUT", "/api/settings/platform-model", { model: "auto" });
+      // 自定义接口的模型填了很低的价格：自动就用它
+      await browser.post(PROVIDERS, {
+        ...customBody,
+        models: [{ id: "tiny", input: ["text"], cost: [0.001, 0.002] }],
+      });
+      expect((await t.deps.models?.platformModel(userId))?.ref).toBe("my-gateway/tiny");
+      const view = (
+        (await (await browser.get(PROVIDERS)).json()) as {
+          providers: Array<{ id: string; models: Array<{ cost: unknown; listedCost: unknown }> }>;
+        }
+      ).providers.find((p) => p.id === "my-gateway");
+      expect(view?.models[0]).toMatchObject({ cost: [0.001, 0.002], listedCost: null });
     } finally {
       await t.close();
     }
@@ -575,6 +615,39 @@ describe("沙箱里的 dsh 用设置里的提供方（#188）", () => {
       expect(JSON.stringify(command.providers)).not.toContain("gateway.example");
       expect(JSON.stringify(command.providers)).not.toContain("gw-0123456789");
       expect(shortId).toBeTruthy();
+    } finally {
+      await t.close();
+    }
+  });
+});
+
+describe("推理等级按协议核对", () => {
+  it("Gemini 只收极低、低、中、高，参数值就是档位名，关不掉思考；换成 Gemini 时已有的模型也要适用", async () => {
+    const t = await createTestApp();
+    try {
+      const { browser } = await t.adminWithGitHub("octo", "octo/app");
+      const gemini = {
+        ...customBody,
+        id: "my-gemini",
+        api: "google-generative-ai",
+        models: [{ id: "g", input: ["text"], reasoningEfforts: { off: null, high: "high" } }],
+      };
+      const refused = await browser.post(PROVIDERS, gemini);
+      expect(refused.status).toBe(400);
+      expect(((await refused.json()) as { error: { message: string } }).error.message).toContain(
+        "Gemini",
+      );
+      const ok = await browser.post(PROVIDERS, {
+        ...gemini,
+        models: [{ id: "g", input: ["text"], reasoningEfforts: { low: "low", high: "high" } }],
+      });
+      expect(ok.status).toBe(201);
+      // OpenAI 兼容的接口带"关闭"，改成 Gemini 时不行
+      await browser.post(PROVIDERS, customBody);
+      const switched = await send(browser, "PATCH", `${PROVIDERS}/my-gateway`, {
+        api: "google-generative-ai",
+      });
+      expect(switched.status).toBe(400);
     } finally {
       await t.close();
     }

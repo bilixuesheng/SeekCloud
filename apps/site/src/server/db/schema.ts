@@ -98,7 +98,10 @@ export const loginSessions = pgTable("login_sessions", {
   client: text("client", { enum: ["browser", "app"] })
     .notNull()
     .default("browser"),
-  /** App 登录时传上来的设备名（手机型号这类），当普通文字显示。浏览器的为空。 */
+  /**
+   * App 登录时传上来的设备名（手机型号这类），当普通文字显示。浏览器的是从 User-Agent 认出来的"Chrome · macOS"，
+   * 认不出来时为空。
+   */
   deviceName: text("device_name"),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   lastIp: text("last_ip"),
@@ -445,6 +448,8 @@ export const providerModels = pgTable(
     reasoningEfforts: jsonb("reasoning_efforts").$type<ReasoningEfforts>(),
     // 请求兼容性开关（dsh 的 compat）。
     compat: jsonb("compat").$type<ModelCompat>(),
+    // 管理员填的价格：每百万 token 的输入、输出（美元）。平台调用选"自动"时按它比较；目录里的模型用目录的价格。
+    cost: jsonb("cost").$type<[number, number]>(),
     position: integer("position").notNull(),
   },
   (t) => [primaryKey({ columns: [t.providerId, t.modelId] })],

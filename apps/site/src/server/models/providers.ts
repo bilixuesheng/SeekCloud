@@ -114,10 +114,21 @@ function catalogApi(provider: CatalogProvider | undefined, id: string): ModelPro
   return first ?? "openai-completions";
 }
 
+/**
+ * 目录（或者 DeepSeek 内置的）里同一个提供方下的同一个模型：自己的列表里没写的项用它的。
+ * 自定义接口不按目录补：同一个模型在别人的网关上，上下文、价格都可能不一样，添加时已经让管理员看着填了。
+ */
+function listedModel(row: ProviderRow, modelId: string) {
+  if (row.kind === "catalog")
+    return catalogProvider(row.slug)?.models.find((m) => m.id === modelId);
+  if (row.kind === "deepseek") return DEEPSEEK_MODELS.find((m) => m.id === modelId);
+  return undefined;
+}
+
 /** 自己的列表里的一行整理成 ModelEntry。 */
 function fromSpec(row: ProviderRow, spec: typeof providerModels.$inferSelect): ModelEntry {
   const catalog = row.kind === "catalog" ? catalogProvider(row.slug) : undefined;
-  const known = catalog?.models.find((m) => m.id === spec.modelId);
+  const known = listedModel(row, spec.modelId);
   const api: ModelProtocol =
     row.kind === "deepseek"
       ? "anthropic-messages"
@@ -142,7 +153,7 @@ function fromSpec(row: ProviderRow, spec: typeof providerModels.$inferSelect): M
     maxTokens: spec.maxTokens ?? known?.maxTokens ?? DEFAULT_MAX_TOKENS,
     input: spec.input.length > 0 ? spec.input : (known?.input ?? ["text"]),
     efforts,
-    cost: known?.cost ?? null,
+    cost: spec.cost ?? known?.cost ?? null,
   };
 }
 
@@ -279,20 +290,60 @@ export class ModelCatalog {
   }
 
   /**
-   * 平台自己发起的调用用哪个模型：设置里选了、还能用就用它；"自动"（或者选的不在了）用最省的那个
-   * （有价钱的里面挑输入加输出最便宜的，都没有价钱就用第一个）。
+   * 平台自己发起的调用用哪个模型：设置里选了、还能用就用它；"自动"（或者选的不在了）按 autoPlatformModel 挑。
    */
   async platformModel(userId: string): Promise<ModelEntry | undefined> {
+    return (await this.platformChoice(userId)).model;
+  }
+
+  /** 同上，再说明是怎么挑的（设置页上显示"自动"现在用的是哪个、为什么）。 */
+  async platformChoice(userId: string): Promise<PlatformChoice> {
     const chosen = await readSetting(this.#deps, "platform_model", { userId });
     if (chosen !== "auto") {
       const found = await this.find(chosen);
-      if (found) return found;
+      if (found) return { model: found, basis: "chosen" };
     }
-    const all = (await this.available()).flatMap((p) => p.models);
-    const priced = all.filter((m) => m.cost);
-    const price = (m: ModelEntry) => (m.cost ? m.cost[0] + m.cost[1] : Infinity);
-    return [...priced].sort((a, b) => price(a) - price(b))[0] ?? all[0];
+    return autoPlatformModel((await this.available()).flatMap((p) => p.models));
   }
+}
+
+/**
+ * 平台调用一次大概的用量：判断是否在等输入时送去的是最后一条回复（截到几千字），起标题、置顶短标题送去的更短；
+ * 输出只有几个字。照这个估每次调用的价钱，输入价格几乎决定了一切。
+ */
+export const PLATFORM_CALL_TOKENS = { input: 2_000, output: 20 } as const;
+
+/** 估一次平台调用多少钱（美元）；没有价格时为空。 */
+export function platformCallCost(model: Pick<ModelEntry, "cost">): number | undefined {
+  if (!model.cost) return undefined;
+  const [input, output] = model.cost;
+  return (input * PLATFORM_CALL_TOKENS.input + output * PLATFORM_CALL_TOKENS.output) / 1_000_000;
+}
+
+/** 能不能不思考：平台调用都不开思考，关不掉思考的模型每次都要先想一通，慢、也费用量。 */
+export const canSkipThinking = (model: Pick<ModelEntry, "efforts">) =>
+  model.efforts.length === 0 || model.efforts.includes("off");
+
+export type PlatformChoice =
+  | { model: ModelEntry; basis: "chosen" | "price" | "order" }
+  | { model: undefined; basis: "none" };
+
+/**
+ * "自动"挑哪个模型：只看能关掉思考的；其中有价格的挑估出来最便宜的（价格来自 dsh 内置目录，自定义接口的模型要管理员
+ * 填了价格才算）；都没有价格时按模型列表的顺序用第一个。一个能关掉思考的都没有时，退回到全部模型里照同样的规矩挑。
+ */
+export function autoPlatformModel(models: ModelEntry[]): PlatformChoice {
+  const pick = (pool: ModelEntry[]): PlatformChoice | undefined => {
+    const priced = pool
+      .map((m) => ({ m, cost: platformCallCost(m) }))
+      .filter((x): x is { m: ModelEntry; cost: number } => x.cost !== undefined)
+      .sort((a, b) => a.cost - b.cost);
+    if (priced[0]) return { model: priced[0].m, basis: "price" };
+    return pool[0] ? { model: pool[0], basis: "order" } : undefined;
+  };
+  return (
+    pick(models.filter(canSkipThinking)) ?? pick(models) ?? { model: undefined, basis: "none" }
+  );
 }
 
 /**
@@ -358,9 +409,20 @@ export interface ModelSpecView {
   reasoningEfforts: ReasoningEfforts | null;
   compat: ModelCompat | null;
   efforts: ThinkingEffort[];
+  /** 管理员自己填的价格；没填时为空。 */
+  cost: [number, number] | null;
+  /** 目录（或 DeepSeek 内置）里的价格：自己没填价格时用它。 */
+  listedCost: [number, number] | null;
+  /** 上下文窗口没填、目录里也没有，用的是默认值（界面上提醒管理员填）。 */
+  unsized: boolean;
 }
 
-const specViewOf = (entry: ModelEntry, spec?: ModelSpec): ModelSpecView => ({
+const specViewOf = (
+  entry: ModelEntry,
+  listedCost: [number, number] | null,
+  spec?: ModelSpec,
+  unsized = false,
+): ModelSpecView => ({
   id: entry.id,
   name: entry.name,
   contextWindow: entry.contextWindow,
@@ -371,6 +433,9 @@ const specViewOf = (entry: ModelEntry, spec?: ModelSpec): ModelSpecView => ({
     (entry.efforts.length > 0 ? Object.fromEntries(entry.efforts.map((e) => [e, e])) : null),
   compat: spec?.compat ?? null,
   efforts: entry.efforts,
+  cost: spec?.cost ?? null,
+  listedCost,
+  unsized,
 });
 
 export async function providerView(
@@ -396,18 +461,28 @@ export async function providerView(
       .from(providerModels)
       .where(eq(providerModels.providerId, row.id))
       .orderBy(asc(providerModels.position));
-    models = specs.map((spec) =>
-      specViewOf(fromSpec(row, spec), {
-        id: spec.modelId,
-        input: spec.input,
-        reasoningEfforts: spec.reasoningEfforts,
-        compat: spec.compat,
-      }),
-    );
+    models = specs.map((spec) => {
+      const listed = listedModel(row, spec.modelId);
+      return specViewOf(
+        fromSpec(row, spec),
+        listed?.cost ?? null,
+        {
+          id: spec.modelId,
+          input: spec.input,
+          reasoningEfforts: spec.reasoningEfforts,
+          compat: spec.compat,
+          cost: spec.cost,
+        },
+        !spec.contextWindow && !listed?.contextWindow,
+      );
+    });
   } else if (row.kind === "deepseek") {
-    models = DEEPSEEK_MODELS.map((m) => specViewOf(m));
+    models = DEEPSEEK_MODELS.map((m) => specViewOf(m, m.cost));
   } else {
-    models = (await catalog.modelsOf(row)).map((m) => specViewOf(m));
+    const listed = catalogProvider(row.slug)?.models ?? [];
+    models = (await catalog.modelsOf(row)).map((m) =>
+      specViewOf(m, m.cost, undefined, !listed.find((x) => x.id === m.id)?.contextWindow),
+    );
   }
   const saved = row.apiKey ? deps.secrets.open(row.apiKey) : undefined;
   return {
@@ -445,8 +520,14 @@ export type ProviderError =
   | "catalog_not_found"
   | "invalid_models";
 
-/** 模型列表的检查：ID 不重复，推理等级至少一个 off 以外的、只有 off 能留空。 */
-export function checkModels(models: ModelSpec[]): string | undefined {
+/** Gemini 协议只认这四档、按档位名发送，也关不掉思考（dsh 的 protocol-rules）。 */
+export const GEMINI_LEVELS: readonly ThinkingEffort[] = ["minimal", "low", "medium", "high"];
+
+/**
+ * 模型列表的检查：ID 不重复，推理等级至少一个 off 以外的、只有 off 能留空；自定义接口按协议再查一遍
+ * （Gemini 只收四档、参数值就是档位名）。
+ */
+export function checkModels(models: ModelSpec[], api?: ModelProtocol | null): string | undefined {
   const ids = new Set<string>();
   for (const m of models) {
     if (ids.has(m.id)) return `模型 ${m.id} 重复`;
@@ -461,6 +542,14 @@ export function checkModels(models: ModelSpec[]): string | undefined {
         if (value === null && level !== "off") {
           return `模型 ${m.id} 的推理等级"${level}"要填参数值`;
         }
+      }
+      if (
+        api === "google-generative-ai" &&
+        levels.some(
+          ([level, value]) => !GEMINI_LEVELS.includes(level as ThinkingEffort) || value !== level,
+        )
+      ) {
+        return `模型 ${m.id} 的推理等级不适用于 Gemini API：只能选择极低、低、中、高，且无法关闭思考`;
       }
     }
   }
@@ -485,6 +574,7 @@ async function replaceModels(
       input: m.input,
       reasoningEfforts: m.reasoningEfforts ?? null,
       compat: m.compat ?? null,
+      cost: m.cost ?? null,
       position,
     })),
   );
@@ -516,7 +606,12 @@ export async function createProvider(
   if (input.kind === "custom" && (!input.models || input.models.length === 0)) {
     return { ok: false, error: "invalid_models", message: "请至少添加一个模型" };
   }
-  const invalid = input.models ? checkModels(input.models) : undefined;
+  const invalid = input.models
+    ? checkModels(
+        input.models,
+        input.kind === "custom" ? (input.api ?? "openai-completions") : null,
+      )
+    : undefined;
   if (invalid) return { ok: false, error: "invalid_models", message: invalid };
   if (await providerRow(deps, input.id)) return { ok: false, error: "provider_exists" };
   const now = deps.clock.now();
@@ -576,7 +671,25 @@ export async function updateProvider(
     if (row.kind === "custom" && patch.models.length === 0) {
       return { ok: false, error: "invalid_models", message: "请至少保留一个模型" };
     }
-    const invalid = checkModels(patch.models);
+    const invalid = checkModels(
+      patch.models,
+      row.kind === "custom" ? (patch.api ?? row.api) : null,
+    );
+    if (invalid) return { ok: false, error: "invalid_models", message: invalid };
+  } else if (row.kind === "custom" && patch.api && patch.api !== row.api) {
+    // 只换了协议：已有的模型也要适用于新的协议（比如换成 Gemini 时不能留着"关闭"）
+    const specs = await deps.db
+      .select()
+      .from(providerModels)
+      .where(eq(providerModels.providerId, row.id));
+    const invalid = checkModels(
+      specs.map((spec) => ({
+        id: spec.modelId,
+        input: spec.input,
+        reasoningEfforts: spec.reasoningEfforts,
+      })),
+      patch.api,
+    );
     if (invalid) return { ok: false, error: "invalid_models", message: invalid };
   }
   if (patch.resetModels && row.kind === "custom") {

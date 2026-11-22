@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { type ApiError, api } from "../api";
 import { setCached, useCached } from "../cached";
-import { ClockIcon } from "../Icons";
+import { toast, useErrorToast } from "../ui/toast";
 
 export const HOST_OFFLINE_GRACE = "/api/settings/host-offline-grace";
 
@@ -25,6 +25,7 @@ function HostOfflineGrace() {
   const seconds = loaded.data?.seconds;
   const [failed, setError] = useState<string>();
   const error = failed ?? loaded.error;
+  useErrorToast(error);
 
   const choose = async (next: number) => {
     if (seconds === undefined || next === seconds) return;
@@ -35,16 +36,13 @@ function HostOfflineGrace() {
       await api(HOST_OFFLINE_GRACE, { seconds: next }, "PUT");
     } catch (e) {
       setCached(HOST_OFFLINE_GRACE, { seconds: before });
-      setError((e as ApiError).message);
+      toast((e as ApiError).message, "error");
     }
   };
 
   return (
-    <section className="settings-group">
-      <div className="settings-group-head">
-        <ClockIcon />
-        <h2>宿主机断开后等待</h2>
-      </div>
+    <section className="settings-section settings-group">
+      <h2>宿主机断开后等待</h2>
       <fieldset className="segmented" disabled={seconds === undefined}>
         <legend className="visually-hidden">宿主机断开后等待</legend>
         {CHOICES.map((c) => (
@@ -64,11 +62,6 @@ function HostOfflineGrace() {
         宿主机与主站的连接断开超过此时长，宿主机上正在运行的会话将标记为失败。连接断开期间沙箱中的
         Agent 仍在运行，在此时长内重新连接，会话将照常继续。网络不稳定时可适当延长。
       </p>
-      {error && (
-        <p className="alert" role="alert">
-          {error}
-        </p>
-      )}
     </section>
   );
 }

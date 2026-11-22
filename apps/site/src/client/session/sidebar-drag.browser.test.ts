@@ -248,5 +248,42 @@ describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
         .map((s) => s.shortId);
       expect(recent.indexOf(ids.甲会话 as string)).toBe(recent.indexOf(ids.戊会话 as string) + 1);
     });
+
+    it("松手不等接口：会话马上在新位置（先藏着），浮起的那条滑过去，到了换成真的", async () => {
+      const from = await center(item("乙会话"));
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(from.x, from.y - 10, { steps: 3 });
+      await page.locator(".drag-ghost").waitFor();
+      await page.waitForTimeout(400);
+      const to = await center(item("丁会话"));
+      await page.mouse.move(to.x, to.y + 6, { steps: 10 });
+      await page.mouse.up();
+      // 松手的那一帧：列表里已经排在丁会话下面，这一行藏着，浮起的那条正滑过去
+      const order = await page
+        .locator('[data-drop="recent"] li[data-session]')
+        .evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.session));
+      expect(order.indexOf(ids.乙会话)).toBe(order.indexOf(ids.丁会话) + 1);
+      expect(await page.locator(`${item("乙会话")}.drag-landing`).count()).toBe(1);
+      expect(await page.locator(".drag-ghost.landing").count()).toBe(1);
+      await page.waitForTimeout(500);
+      expect(await page.locator(".drag-ghost").count()).toBe(0);
+      expect(await page.locator(`${item("乙会话")}.drag-landing`).count()).toBe(0);
+    });
+
+    it("按 Esc 取消：浮起的那条滑回原处，顺序不变", async () => {
+      const before = (await sessions()).map((s) => `${s.shortId}:${s.sortKey}`).sort();
+      const from = await center(item("丙会话"));
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(from.x, from.y + 60, { steps: 6 });
+      await page.locator(".drag-ghost").waitFor();
+      await page.keyboard.press("Escape");
+      expect(await page.locator(".drag-ghost.landing").count()).toBe(1);
+      await page.mouse.up();
+      await page.waitForTimeout(500);
+      expect(await page.locator(".drag-ghost").count()).toBe(0);
+      expect((await sessions()).map((s) => `${s.shortId}:${s.sortKey}`).sort()).toEqual(before);
+    });
   },
 );

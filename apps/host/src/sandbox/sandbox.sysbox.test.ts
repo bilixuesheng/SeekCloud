@@ -45,13 +45,14 @@ describe.skipIf(!enabled)("Sysbox 沙箱", { timeout: 300_000 }, () => {
     // 和正式环境一样加上防火墙：沙箱里的 Docker 照样拉得到镜像
     await applyFirewall({ bridge: net.bridge, gateway: net.gateway, ports: [], chain }, root);
     sandboxes = new Sandboxes(spec, docker);
-  });
+  }, 120_000);
+  // 删沙箱要等它里面的 Docker 停下、数据删完；存储在 XFS 上时要十几秒，不能用默认的 10 秒
   afterAll(async () => {
     if (!sandboxes) return;
     for (const s of await sandboxes.list()) await sandboxes.remove(s.sessionId);
     await removeFirewall({ bridge: net.bridge, chain }, root);
     await removeSandboxNetwork(spec.network, docker);
-  });
+  }, 120_000);
 
   const sh = async (script: string) => {
     const r = await sandboxes.exec(id, ["sh", "-c", script], { timeoutMs: 120_000 });

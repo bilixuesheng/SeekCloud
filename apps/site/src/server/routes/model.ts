@@ -6,6 +6,7 @@ import { upstreamErrors } from "../db/schema";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
 import { endpointOf, protocolOf } from "../gateway/trunk";
 import { catalogProvider } from "../models/catalog";
+import { recognizeModel, searchKnownModels } from "../models/known";
 import { probeModels } from "../models/probe";
 import {
   catalogList,
@@ -60,6 +61,9 @@ const EnvName = z
   .trim()
   .regex(ENV_NAME, { error: "环境变量名只能包含字母、数字和下划线" });
 
+/** 价格：每百万 token 的输入、输出（美元）。 */
+const Cost = z.tuple([z.number().min(0).max(10_000), z.number().min(0).max(10_000)]);
+
 const ModelSpec = z
   .object({
     id: z.string().trim().min(1, { error: "请填写模型 ID" }).max(200),
@@ -80,6 +84,9 @@ const ModelSpec = z
       .record(z.string().max(60), z.union([z.boolean(), z.number(), z.string().max(100)]))
       .nullish()
       .openapi({ description: "请求兼容性开关（dsh 的 compat）" }),
+    cost: Cost.nullish().openapi({
+      description: "每百万 token 的输入、输出价格（美元），选填。平台调用选“自动”时按它比较",
+    }),
   })
   .openapi("ModelSpec");
 
@@ -88,7 +95,33 @@ const ModelSpecView = ModelSpec.extend({
   contextWindow: z.number().int(),
   maxTokens: z.number().int(),
   efforts: z.array(z.enum(THINKING_EFFORTS)),
+  cost: Cost.nullable(),
+  listedCost: Cost.nullable().openapi({ description: "目录（或 DeepSeek 内置）里的价格" }),
+  unsized: z
+    .boolean()
+    .openapi({ description: "上下文窗口没填、目录里也没有，contextWindow 是默认值" }),
 }).openapi("ModelSpecView");
+
+const KnownModel = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    provider: z.string().openapi({ description: "资料来自目录里的哪个提供方" }),
+    providerName: z.string(),
+    api: z.enum(MODEL_PROTOCOLS),
+    contextWindow: z.number().int().nullable(),
+    maxTokens: z.number().int().nullable(),
+    input: z.array(z.enum(MODEL_INPUTS)),
+    efforts: z
+      .array(z.enum(THINKING_EFFORTS))
+      .openapi({ description: "能选的思考档位；只有 off 的是不思考的模型" }),
+    wire: z
+      .partialRecord(z.enum(THINKING_EFFORTS), z.string())
+      .optional()
+      .openapi({ description: "各档位发给接口的参数值里和档位名不一样的" }),
+    cost: Cost.nullable(),
+  })
+  .openapi("KnownModel", { description: "dsh 内置目录里认得出来的模型" });
 
 const Provider = z
   .object({
@@ -123,6 +156,12 @@ const Provider = z
   .openapi("ModelProvider", { description: "一个模型提供方，不含 key 的原文" });
 
 const IdParam = z.object({ id: z.string().regex(PROVIDER_ID) });
+
+/** 获取可用模型的结果里，认得出来的模型带上目录里的资料。 */
+const withKnown = (id: string) => {
+  const known = recognizeModel(id);
+  return known ? { known } : {};
+};
 
 const listRoute = createRoute({
   method: "get",
@@ -299,6 +338,26 @@ const checkUrlRoute = createRoute({
   },
 });
 
+const knownModelsRoute = createRoute({
+  method: "get",
+  path: "/settings/model-providers/known-models",
+  summary: "搜 dsh 内置目录里的模型",
+  description:
+    "添加模型时的候选：上下文窗口、最大输出、能不能看图、思考档位、价格都已知。provider 给了只搜目录里那个提供方的；" +
+    "不给就搜全部，同一个模型只留官方的那份。q 为空时列出全部（provider 不给时最多 limit 个）。",
+  request: {
+    query: z.object({
+      q: z.string().max(200).optional(),
+      provider: z.string().regex(PROVIDER_ID).optional(),
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+    }),
+  },
+  responses: {
+    200: { description: "匹配的模型", ...json(z.object({ models: z.array(KnownModel) })) },
+    401: errorResponse("没有登录"),
+  },
+});
+
 const probeRoute = createRoute({
   method: "post",
   path: "/settings/model-providers/probe",
@@ -331,6 +390,9 @@ const probeRoute = createRoute({
               name: z.string().optional(),
               contextWindow: z.number().int().optional(),
               maxTokens: z.number().int().optional(),
+              known: KnownModel.optional().openapi({
+                description: "按模型 ID 在 dsh 内置目录里认出来的资料；认不出来时没有",
+              }),
             }),
           ),
         }),
@@ -411,6 +473,11 @@ export function modelRoutes(
       );
       return c.json({ plaintext: url.protocol !== "https:", internal }, 200);
     })
+    .openapi(knownModelsRoute, async (c) => {
+      if (!(await deps.identity.currentUser(c))) return c.json(notLoggedIn, 401);
+      const { q, provider, limit } = c.req.valid("query");
+      return c.json({ models: searchKnownModels(q ?? "", { provider, limit }) }, 200);
+    })
     .openapi(probeRoute, async (c) => {
       const me = await deps.identity.currentUser(c);
       if (!me) return c.json(notLoggedIn, 401);
@@ -431,6 +498,7 @@ export function modelRoutes(
               name: m.name,
               ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
               ...(m.maxTokens ? { maxTokens: m.maxTokens } : {}),
+              ...withKnown(m.id),
             })),
           },
           200,
@@ -459,7 +527,7 @@ export function modelRoutes(
           : {}),
       });
       if (!result.ok) return c.json(apiError("probe_failed", result.message), 400);
-      return c.json({ models: result.models }, 200);
+      return c.json({ models: result.models.map((m) => ({ ...m, ...withKnown(m.id) })) }, 200);
     })
     .openapi(orderRoute, async (c) => {
       const me = await deps.identity.currentUser(c);

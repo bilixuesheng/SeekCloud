@@ -23,7 +23,7 @@ import {
 import { LoginPage } from "./LoginPage";
 import { Brand, Logo } from "./Logo";
 import { LegalLink } from "./legal/LegalPage";
-import { Collapse, useFlip, usePresence } from "./Motion";
+import { Collapse, reducedMotion, useFlip, usePresence } from "./Motion";
 import { rememberNickname } from "./nickname";
 import type { OverlayProps, PageProps } from "./registry";
 import { Slot, useRegistry } from "./registry";
@@ -32,7 +32,7 @@ import { GroupMenu, renameGroup } from "./session/GroupMenu";
 import { SessionList } from "./session/SessionList";
 import { sidebarSections, useCollapsed } from "./session/sidebar-sections";
 import { useSessions } from "./session/useSessions";
-import { type DragState, useSidebarDrag } from "./session/useSidebarDrag";
+import { type DragState, type Landing, useSidebarDrag } from "./session/useSidebarDrag";
 import { type Me, ShellProvider, type ShellValue } from "./shell";
 
 export function App() {
@@ -188,7 +188,11 @@ function DragOverlay({ drag, list }: { drag: DragState; list: HTMLElement | null
       {target && target.zone !== "new-group" && (
         <div className="drop-line" style={{ top: target.lineY - 1, left, width }} />
       )}
-      <div className="drag-ghost" style={{ top: drag.y - 26, left, width }} aria-hidden="true">
+      <div
+        className="drag-ghost"
+        style={{ top: drag.y - drag.grabOffset, left: drag.left, width: drag.width }}
+        aria-hidden="true"
+      >
         <span className="session-item-title">{drag.title}</span>
         <span className="session-item-repo">{drag.repo}</span>
       </div>
@@ -198,6 +202,79 @@ function DragOverlay({ drag, list }: { drag: DragState; list: HTMLElement | null
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * 松手以后浮起的那条怎么收（#153，2026-11-22 打磨）：滑到新位置或者滑回原处，同时放下（缩回、影子收起），
+ * 到了以后换成列表里真的那一行；放到"新分组"上时原地淡出。量位置在列表重排之后、侧栏的滑动动画开始之前
+ * （子组件的 layout effect 先跑），量到的是新位置。
+ */
+function LandingGhost({
+  landing,
+  list,
+  onDone,
+}: {
+  landing: Landing;
+  list: HTMLElement | null;
+  onDone: () => void;
+}) {
+  const ghost = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ghost.current;
+    const row = list?.querySelector<HTMLElement>(
+      `li[data-session="${CSS.escape(landing.shortId)}"]`,
+    );
+    const to = row?.getBoundingClientRect();
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      // 列表里那一行自己的滑动动画（useFlip）直接播完：它藏着跟过来，露出来时正好在新位置
+      for (const animation of row?.getAnimations() ?? []) animation.finish();
+      onDone();
+    };
+    if (!el || reducedMotion() || landing.kind === "fade" || !to || to.height === 0) {
+      const fade = el?.animate(
+        [
+          { opacity: 1, transform: "scale(1.03)", filter: "blur(0)" },
+          { opacity: 0, transform: "scale(0.96)", filter: "blur(3px)" },
+        ],
+        { duration: reducedMotion() ? 0 : 180, easing: "ease-in", fill: "forwards" },
+      );
+      if (fade) fade.onfinish = finish;
+      else finish();
+      return;
+    }
+    const dx = to.left - landing.left;
+    const dy = to.top - landing.top;
+    const distance = Math.hypot(dx, dy);
+    const animation = el.animate(
+      [
+        { transform: "translate(0, 0) scale(1.03)", boxShadow: "var(--shadow-lg)" },
+        { transform: `translate(${dx}px, ${dy}px) scale(1)`, boxShadow: "0 0 0 transparent" },
+      ],
+      {
+        // 远的多走一会儿，但不拖沓
+        duration: Math.min(320, 180 + distance * 0.25),
+        easing: "cubic-bezier(0.2, 0.9, 0.25, 1)",
+        fill: "forwards",
+      },
+    );
+    animation.onfinish = finish;
+    const timer = setTimeout(finish, 500);
+    return () => clearTimeout(timer);
+  }, [landing, list, onDone]);
+  return (
+    <div
+      ref={ghost}
+      className="drag-ghost landing"
+      style={{ top: landing.top, left: landing.left, width: landing.width }}
+      aria-hidden="true"
+    >
+      <span className="session-item-title">{landing.title}</span>
+      <span className="session-item-repo">{landing.repo}</span>
+    </div>
   );
 }
 
@@ -281,7 +358,7 @@ function Shell({
     const timer = setTimeout(() => setDragError(undefined), 4000);
     return () => clearTimeout(timer);
   }, [dragError]);
-  const drag = useSidebarDrag({
+  const { drag, landing, endLanding } = useSidebarDrag({
     list: sidebarList,
     sidebar: sidebarRef,
     sessions,
@@ -377,6 +454,7 @@ function Shell({
                 <SessionList
                   sessions={pinned}
                   draggingId={drag?.shortId}
+                  landingId={landing?.shortId}
                   loaded
                   currentId={currentId}
                   onPick={() => setDrawer(false)}
@@ -406,6 +484,7 @@ function Shell({
                   <SessionList
                     sessions={inGroup}
                     draggingId={drag?.shortId}
+                    landingId={landing?.shortId}
                     loaded
                     currentId={currentId}
                     onPick={() => setDrawer(false)}
@@ -430,6 +509,7 @@ function Shell({
                   currentId={currentId}
                   searching={query !== ""}
                   draggingId={drag?.shortId}
+                  landingId={landing?.shortId}
                   onPick={() => setDrawer(false)}
                 />
               </div>
@@ -472,6 +552,14 @@ function Shell({
             </div>
           )}
           {dragging && drag && <DragOverlay drag={drag} list={sidebarList.current} />}
+          {landing && (
+            <LandingGhost
+              key={`${landing.shortId}:${landing.kind}`}
+              landing={landing}
+              list={sidebarList.current}
+              onDone={endLanding}
+            />
+          )}
           {groupMenu && (
             <GroupMenu
               group={groups.find((g) => g.id === groupMenu.id) ?? groupMenu}

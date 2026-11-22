@@ -5,9 +5,11 @@ import {
   startAuthentication,
   startRegistration,
 } from "@simplewebauthn/browser";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { type ApiError, api } from "../api";
 import { shortDateTime } from "../session/relative-time";
+import { Modal } from "../ui/modal";
+import { toast } from "../ui/toast";
 import { CodeField } from "./TwoFactorSettings";
 
 /** 通行密钥（#100）：设置里添加、删除，登录页用它登录。 */
@@ -63,7 +65,6 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ tone: "alert" | "notice"; text: string }>();
   const supported = browserSupportsWebAuthn();
 
   const load = useCallback(
@@ -79,13 +80,12 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
     setName(next.kind === "add" ? "通行密钥" : "");
     setPassword("");
     setCode("");
-    setMessage(notice ? { tone: "notice", text: notice } : undefined);
+    if (notice) toast(notice);
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
-    setMessage(undefined);
     const reauth = { password, ...(twoFactor ? { code } : {}) };
     try {
       if (step.kind === "add") {
@@ -102,11 +102,16 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
       }
       await load();
     } catch (e) {
-      setMessage({ tone: "alert", text: passkeyErrorText(e as ApiError) });
+      toast(passkeyErrorText(e as ApiError), "error");
     } finally {
       setBusy(false);
     }
   };
+
+  // 关弹窗时还要画着刚才那一步，播完收起的动画
+  const lastStep = useRef<Step>(step);
+  if (step.kind !== "idle") lastStep.current = step;
+  const view = step.kind === "idle" ? lastStep.current : step;
 
   if (!list) return null;
   const unavailable = !list.available
@@ -134,21 +139,17 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
                   : "主站地址已变更，此通行密钥无法使用"}
               </span>
             </span>
-            {step.kind === "idle" && (
-              <button
-                type="button"
-                className="pill-button"
-                onClick={() => go({ kind: "delete", passkey: p })}
-              >
-                删除
-              </button>
-            )}
+            <button
+              type="button"
+              className="pill-button"
+              onClick={() => go({ kind: "delete", passkey: p })}
+            >
+              删除
+            </button>
           </div>
         ))}
-        {list.passkeys.length === 0 && step.kind === "idle" && (
-          <p className="settings-row-sub">尚未添加通行密钥。</p>
-        )}
-        {step.kind === "idle" && !unavailable && (
+        {list.passkeys.length === 0 && <p className="settings-row-sub">尚未添加通行密钥。</p>}
+        {!unavailable && (
           <button
             type="button"
             className="pill-button settings-card-action"
@@ -159,9 +160,13 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
         )}
         {unavailable && <p className="settings-hint">{unavailable}</p>}
 
-        {step.kind !== "idle" && (
+        <Modal
+          open={step.kind !== "idle"}
+          title={view.kind === "delete" ? "删除通行密钥" : "添加通行密钥"}
+          onClose={() => go({ kind: "idle" })}
+        >
           <form className="settings-form" onSubmit={submit}>
-            {step.kind === "add" ? (
+            {view.kind === "add" ? (
               <label className="field">
                 <span>名称</span>
                 <input
@@ -174,7 +179,7 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
               </label>
             ) : (
               <p className="settings-hint">
-                删除“{step.passkey.name}
+                删除“{view.kind === "delete" ? view.passkey.name : ""}
                 ”后，将无法再用它登录。设备上保存的通行密钥需要在设备上另行删除。
               </p>
             )}
@@ -203,19 +208,14 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
               </button>
               <button
                 type="submit"
-                className={step.kind === "delete" ? "primary danger" : "primary"}
+                className={view.kind === "delete" ? "primary danger" : "primary"}
                 disabled={busy}
               >
-                {busy ? "请稍候…" : step.kind === "add" ? "继续" : "删除"}
+                {busy ? "请稍候…" : view.kind === "add" ? "继续" : "删除"}
               </button>
             </div>
           </form>
-        )}
-        {message && (
-          <p className={message.tone} role={message.tone === "alert" ? "alert" : "status"}>
-            {message.text}
-          </p>
-        )}
+        </Modal>
       </div>
     </section>
   );

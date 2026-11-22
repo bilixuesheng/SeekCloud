@@ -6,6 +6,7 @@ import { recordAccess } from "../access-log";
 import type { AppDeps } from "../app";
 import { loginSessions, users } from "../db/schema";
 import { clientIp } from "../rate-limit";
+import { describeUserAgent } from "./user-agent";
 
 const COOKIE = "sc_login";
 const LOGIN_TTL_MS = 30 * 24 * 60 * 60_000;
@@ -38,7 +39,11 @@ export async function startLoginSession(
     tokenHash: hashToken(token),
     userId,
     client: client.kind,
-    deviceName: client.kind === "app" ? client.deviceName.slice(0, MAX_DEVICE_NAME) : null,
+    // 浏览器记下是什么浏览器、什么系统，设备列表上好分辨
+    deviceName:
+      client.kind === "app"
+        ? client.deviceName.slice(0, MAX_DEVICE_NAME)
+        : describeUserAgent(c.req.header("user-agent")),
     lastUsedAt: now,
     lastIp: clientIp(c),
     expiresAt: new Date(now.getTime() + LOGIN_TTL_MS),

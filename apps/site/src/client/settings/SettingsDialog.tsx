@@ -5,7 +5,7 @@ import { type ApiError, api } from "../api";
 import { prefetch, setCached, useCached } from "../cached";
 import type { GitHubStatus } from "../GitHubConnectCard";
 import { GitHubMark } from "../GitHubMark";
-import { CloseIcon, MoonIcon, SparkIcon } from "../Icons";
+import { CloseIcon } from "../Icons";
 import { LegalLink } from "../legal/LegalPage";
 import { type SettingsSectionEntry, type SettingsSectionProps, useRegistry } from "../registry";
 import { navigate } from "../router";
@@ -13,6 +13,9 @@ import { effortLabels } from "../session/ModelPicker";
 import { shortDateTime } from "../session/relative-time";
 import { reloadModels, useModels } from "../session/useModels";
 import { currentTheme, setTheme, type Theme } from "../theme";
+import { confirmDialog } from "../ui/confirm";
+import { Modal } from "../ui/modal";
+import { toast, useErrorToast } from "../ui/toast";
 import { MODEL_PROVIDERS } from "./ModelSettings";
 import { PasskeySection } from "./PasskeySettings";
 import { HOST_OFFLINE_GRACE } from "./SessionSettings";
@@ -164,11 +167,8 @@ export function GeneralSettings() {
 function ThemeSettings() {
   const [theme, setThemeState] = useState(currentTheme);
   return (
-    <section className="settings-group">
-      <div className="settings-group-head">
-        <MoonIcon />
-        <h2>外观</h2>
-      </div>
+    <section className="settings-section settings-group">
+      <h2>外观</h2>
       <fieldset className="theme-tiles">
         <legend className="visually-hidden">外观</legend>
         {themes.map((item) => (
@@ -211,6 +211,7 @@ function DefaultEffortSettings() {
   );
   const [failed, setError] = useState<string>();
   const error = failed ?? loaded.error;
+  useErrorToast(error);
 
   const choose = async (next: ThinkingEffort) => {
     if (!effort || next === effort) return;
@@ -222,16 +223,13 @@ function DefaultEffortSettings() {
       reloadModels();
     } catch (e) {
       setCached(DEFAULT_EFFORT, { effort: before });
-      setError((e as ApiError).message);
+      toast((e as ApiError).message, "error");
     }
   };
 
   return (
-    <section className="settings-group">
-      <div className="settings-group-head">
-        <SparkIcon size={16} />
-        <h2>默认思考强度</h2>
-      </div>
+    <section className="settings-section settings-group">
+      <h2>默认思考强度</h2>
       <fieldset className="segmented" disabled={!effort}>
         <legend className="visually-hidden">默认思考强度</legend>
         {(offered.length > 0 ? offered : THINKING_EFFORTS).map((e) => (
@@ -247,12 +245,9 @@ function DefaultEffortSettings() {
           </label>
         ))}
       </fieldset>
-      <p className="settings-group-hint">新会话默认使用这一档，已有的会话不受影响。</p>
-      {error && (
-        <p className="alert" role="alert">
-          {error}
-        </p>
-      )}
+      <p className="settings-group-hint">
+        新会话默认使用这一档；所选模型没有这一档时，用它最接近的一档。已有的会话不受影响。
+      </p>
     </section>
   );
 }
@@ -272,6 +267,7 @@ export function GitHubSettings({ notice, onGitHubChanged }: SettingsSectionProps
   const loaded = useCached<AiLabels>(AI_LABELS);
   const labels = loaded.data;
   const error = failed ?? loaded.error;
+  useErrorToast(error);
   const [saving, setSaving] = useState(false);
 
   const toggle = async (key: keyof AiLabels) => {
@@ -284,7 +280,7 @@ export function GitHubSettings({ notice, onGitHubChanged }: SettingsSectionProps
       setCached(AI_LABELS, await api<AiLabels>(AI_LABELS, next, "PUT"));
     } catch (e) {
       setCached(AI_LABELS, labels);
-      setError((e as ApiError).message);
+      toast((e as ApiError).message, "error");
     } finally {
       setSaving(false);
     }
@@ -292,12 +288,6 @@ export function GitHubSettings({ notice, onGitHubChanged }: SettingsSectionProps
 
   return (
     <>
-      {error && (
-        <p className="alert" role="alert">
-          {error}
-        </p>
-      )}
-
       <section className="settings-section">
         <h2>账号</h2>
         <ul className="settings-list">
@@ -366,17 +356,26 @@ function SwitchRow({
 /** 账户：昵称、密码、两步验证、通行密钥、登录状态、开源声明。 */
 export function AccountSettings({ notice, onSignedOut, onProfileChanged }: SettingsSectionProps) {
   const error = notice;
-  const [confirmLogout, setConfirmLogout] = useState(false);
+  useErrorToast(error);
   const [twoFactor, refreshTwoFactor] = useTwoFactor();
+  const logoutAll = async () => {
+    const ok = await confirmDialog({
+      title: "在所有设备上退出？",
+      body: "包括当前设备在内的所有浏览器和安卓 App 都将退出登录，需要重新输入密码。",
+      confirmText: "全部退出",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api("/api/auth/logout-all", {});
+      onSignedOut();
+    } catch (e) {
+      toast((e as ApiError).message, "error");
+    }
+  };
 
   return (
     <>
-      {error && (
-        <p className="alert" role="alert">
-          {error}
-        </p>
-      )}
-
       <section className="settings-section">
         <h2>昵称</h2>
         <NicknameRow onChanged={onProfileChanged} />
@@ -407,28 +406,9 @@ export function AccountSettings({ notice, onSignedOut, onProfileChanged }: Setti
                 包括当前设备。如怀疑账户被他人登录，请使用此功能。
               </span>
             </span>
-            {confirmLogout ? (
-              <span className="settings-actions">
-                <button
-                  type="button"
-                  className="pill-button"
-                  onClick={() => setConfirmLogout(false)}
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  className="pill-button danger"
-                  onClick={() => api("/api/auth/logout-all", {}).then(onSignedOut)}
-                >
-                  确认退出
-                </button>
-              </span>
-            ) : (
-              <button type="button" className="pill-button" onClick={() => setConfirmLogout(true)}>
-                全部退出
-              </button>
-            )}
+            <button type="button" className="pill-button" onClick={() => void logoutAll()}>
+              全部退出
+            </button>
           </li>
         </ul>
       </section>
@@ -457,14 +437,16 @@ interface LoginDevice {
   lastUsedAt: string | null;
 }
 
+/** 设备的名字：App 是它报的型号，浏览器是登录时认出来的"Chrome · macOS"（认不出来的、以前登录的叫"浏览器"）。 */
+const deviceLabel = (d: LoginDevice) =>
+  d.deviceName ?? (d.client === "app" ? "安卓设备" : "浏览器");
+
 /**
  * 登录着的设备（#177）：浏览器和安卓 App，每台一行，能单独退出。身份来源没有这个接口（下游换掉了）时不显示。
  * 退出的是当前这台时和退出登录一样。
  */
 function DeviceRows({ onSignedOut }: { onSignedOut: () => void }) {
   const [devices, setDevices] = useState<LoginDevice[]>();
-  const [confirming, setConfirming] = useState<string>();
-  const [failed, setFailed] = useState<string>();
 
   useEffect(() => {
     api<{ devices: LoginDevice[] }>("/api/auth/devices").then(
@@ -474,59 +456,48 @@ function DeviceRows({ onSignedOut }: { onSignedOut: () => void }) {
   }, []);
 
   const logOut = async (device: LoginDevice) => {
-    setFailed(undefined);
+    const name = deviceLabel(device);
+    const ok = await confirmDialog({
+      title: device.current ? "退出当前设备？" : `退出“${name}”？`,
+      body: device.current
+        ? "退出后需要重新输入密码才能登录。"
+        : "该设备将立即退出登录，正在打开的页面也会断开。",
+      confirmText: "退出",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api(`/api/auth/devices/${device.id}`, {}, "DELETE");
       if (device.current) return onSignedOut();
       setDevices((list) => list?.filter((d) => d.id !== device.id));
-      setConfirming(undefined);
+      toast(`已退出“${name}”。`);
     } catch (e) {
-      setFailed((e as ApiError).message);
+      toast((e as ApiError).message, "error");
     }
   };
 
   if (!devices?.length) return null;
+  // 当前这台排最前，别的按最近使用
+  const sorted = [...devices].sort((a, b) => Number(b.current) - Number(a.current));
   return (
     <>
-      {devices.map((d) => (
+      {sorted.map((d) => (
         <li key={d.id} className="settings-row">
           <span className="settings-row-text">
             <span className="settings-row-name">
-              {d.client === "app" ? (d.deviceName ?? "安卓设备") : "浏览器"}
-              {d.current && "（当前设备）"}
+              {deviceLabel(d)}
+              {d.current && <span className="provider-kind">当前设备</span>}
             </span>
             <span className="settings-row-sub">
               {d.client === "app" ? "安卓 App" : "网页"}
               {` · ${d.lastUsedAt ? "最后使用于" : "登录于"} ${shortDateTime(new Date(d.lastUsedAt ?? d.createdAt))}`}
             </span>
           </span>
-          {confirming === d.id ? (
-            <span className="settings-actions">
-              <button
-                type="button"
-                className="pill-button"
-                onClick={() => setConfirming(undefined)}
-              >
-                取消
-              </button>
-              <button type="button" className="pill-button danger" onClick={() => void logOut(d)}>
-                确认退出
-              </button>
-            </span>
-          ) : (
-            <button type="button" className="pill-button" onClick={() => setConfirming(d.id)}>
-              退出
-            </button>
-          )}
+          <button type="button" className="pill-button" onClick={() => void logOut(d)}>
+            退出
+          </button>
         </li>
       ))}
-      {failed && (
-        <li className="settings-row">
-          <p className="alert" role="alert">
-            {failed}
-          </p>
-        </li>
-      )}
     </>
   );
 }
@@ -539,6 +510,7 @@ function NicknameRow({ onChanged }: { onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [failed, setError] = useState<string>();
   const error = failed ?? me.error;
+  useErrorToast(error);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -550,7 +522,7 @@ function NicknameRow({ onChanged }: { onChanged: () => void }) {
       setEditing(false);
       onChanged();
     } catch (e) {
-      setError((e as ApiError).message);
+      toast((e as ApiError).message, "error");
     } finally {
       setBusy(false);
     }
@@ -600,11 +572,6 @@ function NicknameRow({ onChanged }: { onChanged: () => void }) {
           </div>
         </form>
       )}
-      {error && (
-        <p className="alert" role="alert">
-          {error}
-        </p>
-      )}
     </div>
   );
 }
@@ -617,7 +584,6 @@ function PasswordRow({ twoFactor }: { twoFactor: boolean }) {
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ tone: "alert" | "notice"; text: string }>();
 
   const close = () => {
     setEditing(false);
@@ -630,11 +596,10 @@ function PasswordRow({ twoFactor }: { twoFactor: boolean }) {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (next !== confirm) {
-      setMessage({ tone: "alert", text: "两次输入的新密码不一致" });
+      toast("两次输入的新密码不一致", "error");
       return;
     }
     setBusy(true);
-    setMessage(undefined);
     try {
       await api("/api/auth/password", {
         currentPassword: current,
@@ -642,9 +607,9 @@ function PasswordRow({ twoFactor }: { twoFactor: boolean }) {
         ...(twoFactor ? { code } : {}),
       });
       close();
-      setMessage({ tone: "notice", text: "密码已修改，其他设备已退出登录。" });
+      toast("密码已修改，其他设备已退出登录。");
     } catch (e) {
-      setMessage({ tone: "alert", text: (e as ApiError).message });
+      toast((e as ApiError).message, "error");
     } finally {
       setBusy(false);
     }
@@ -657,21 +622,13 @@ function PasswordRow({ twoFactor }: { twoFactor: boolean }) {
           <span className="settings-row-name">管理员密码</span>
           <span className="settings-row-sub">修改后，其他设备将退出登录。</span>
         </span>
-        {!editing && (
-          <button
-            type="button"
-            className="pill-button"
-            onClick={() => {
-              setEditing(true);
-              setMessage(undefined);
-            }}
-          >
-            修改
-          </button>
-        )}
+        <button type="button" className="pill-button" onClick={() => setEditing(true)}>
+          修改
+        </button>
       </div>
-      {editing && (
+      <Modal open={editing} title="修改管理员密码" onClose={close}>
         <form className="settings-form" onSubmit={submit}>
+          <p className="settings-hint">修改后，当前设备保持登录，其他设备将退出登录。</p>
           {/* 和登录页一样放一个看不见的用户名，密码管理器才能更新存着的密码 */}
           <input
             type="text"
@@ -725,12 +682,7 @@ function PasswordRow({ twoFactor }: { twoFactor: boolean }) {
             </button>
           </div>
         </form>
-      )}
-      {message && (
-        <p className={message.tone} role={message.tone === "alert" ? "alert" : "status"}>
-          {message.text}
-        </p>
-      )}
+      </Modal>
     </div>
   );
 }
@@ -744,8 +696,6 @@ function GitHubRow({
   onError: (message: string) => void;
 }) {
   const { data: status, error, reload: load } = useCached<GitHubStatus>(GITHUB_STATUS);
-  // 解除关联要点两下：第一下变成"确认解除"，免得误点。
-  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -753,14 +703,21 @@ function GitHubRow({
   }, [error, onError]);
 
   const unlink = async () => {
+    const ok = await confirmDialog({
+      title: "解除关联 GitHub？",
+      body: "解除后 DeepSeek 将无法访问你的仓库，正在使用仓库的会话也无法推送。之后可以随时重新关联。",
+      confirmText: "解除关联",
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await api("/api/github/unlink", {});
-      setConfirming(false);
       load();
       onChanged();
+      toast("已解除关联 GitHub。");
     } catch (e) {
-      onError((e as ApiError).message);
+      toast((e as ApiError).message, "error");
     } finally {
       setBusy(false);
     }
@@ -777,29 +734,12 @@ function GitHubRow({
         <span className="settings-row-sub">
           {/* 数据还没回来时先用一个空格占住这一行，回来以后不会把下面的内容往下顶 */}
           {status ? (login ?? "未关联") : "\u00a0"}
-          {confirming && " · 解除关联后 DeepSeek 将无法访问你的仓库"}
         </span>
       </span>
       {!status ? null : login ? (
-        confirming ? (
-          <span className="settings-actions">
-            <button type="button" className="pill-button" onClick={() => setConfirming(false)}>
-              取消
-            </button>
-            <button
-              type="button"
-              className="pill-button danger"
-              disabled={busy}
-              onClick={() => void unlink()}
-            >
-              确认解除
-            </button>
-          </span>
-        ) : (
-          <button type="button" className="pill-button" onClick={() => setConfirming(true)}>
-            解除关联
-          </button>
-        )
+        <button type="button" className="pill-button" disabled={busy} onClick={() => void unlink()}>
+          解除关联
+        </button>
       ) : (
         <a className="pill-button accent" href="/api/auth/github/start?next=/settings/github">
           关联

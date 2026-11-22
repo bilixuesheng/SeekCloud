@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { AppDeps } from "../app";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
+import { canSkipThinking, platformCallCost } from "../models/providers";
 import { normalizeModelRef, type Sessions } from "../sessions/sessions";
 import {
   AiLabelsValue,
@@ -130,12 +131,41 @@ const putDefaultModelRoute = createRoute({
   },
 });
 
+const PlatformCandidate = z
+  .object({
+    ref: z.string(),
+    name: z.string(),
+    providerName: z.string(),
+    cost: z
+      .tuple([z.number(), z.number()])
+      .nullable()
+      .openapi({ description: "每百万 token 的输入、输出价格（美元）；不知道时为空" }),
+    callCost: z.number().nullable().openapi({
+      description: "估一次平台调用的价钱（美元，约 2000 个输入 token、20 个输出 token）",
+    }),
+    canSkipThinking: z.boolean().openapi({ description: "能不能关掉思考" }),
+  })
+  .openapi("PlatformCandidate");
+
+const PlatformModelState = PlatformModel.extend({
+  resolved: z
+    .string()
+    .nullable()
+    .openapi({ description: "现在实际用的模型（提供方/模型）；一个能用的模型都没有时为空" }),
+  basis: z.enum(["chosen", "price", "order", "none"]).openapi({
+    description:
+      "chosen：用的是选的那个；price：自动，按目录或填写的价格挑了最省的；order：自动，没有价格，按列表顺序用了第一个；none：没有能用的模型",
+  }),
+  candidates: z.array(PlatformCandidate).openapi({ description: "能选的模型，按提供方和列表顺序" }),
+}).openapi("PlatformModelState");
+
 const getPlatformModelRoute = createRoute({
   method: "get",
   path: "/platform-model",
   summary: "平台自己发起的模型调用用哪个模型",
+  description: "连同现在实际用的是哪个、为什么，以及每个能选的模型的价格。",
   responses: {
-    200: { description: "没改过时是 auto", ...json(PlatformModel) },
+    200: { description: "没改过时是 auto", ...json(PlatformModelState) },
     401: errorResponse("没有登录"),
   },
 });
@@ -146,7 +176,7 @@ const putPlatformModelRoute = createRoute({
   summary: "修改平台自己发起的模型调用用哪个模型",
   request: { body: { ...json(PlatformModel), required: true } },
   responses: {
-    200: { description: "改好以后的值", ...json(PlatformModel) },
+    200: { description: "改好以后的值", ...json(PlatformModelState) },
     400: errorResponse("不支持这个模型"),
     401: errorResponse("没有登录"),
     403: errorResponse("这项设置不能修改（主干里不会出现）"),
@@ -223,7 +253,7 @@ export function settingsRoutes(deps: AppDeps, sessions: Sessions) {
     .openapi(getPlatformModelRoute, async (c) => {
       const me = await deps.identity.currentUser(c);
       if (!me) return c.json(notLoggedIn, 401);
-      return c.json({ model: await readSetting(deps, "platform_model", { userId: me.id }) }, 200);
+      return c.json(await platformState(me.id), 200);
     })
     .openapi(putPlatformModelRoute, async (c) => {
       const me = await deps.identity.currentUser(c);
@@ -236,6 +266,31 @@ export function settingsRoutes(deps: AppDeps, sessions: Sessions) {
       if (!(await writeSetting(deps, "platform_model", { userId: me.id }, chosen))) {
         return c.json(locked, 403);
       }
-      return c.json({ model: chosen }, 200);
+      return c.json(await platformState(me.id), 200);
     });
+
+  /** 平台调用的模型：设置的值、现在实际用的、怎么挑的、能选的模型和价格。 */
+  async function platformState(userId: string) {
+    const models = sessions.models;
+    const [model, choice, available] = await Promise.all([
+      readSetting(deps, "platform_model", { userId }),
+      models.platformChoice(userId),
+      models.available(),
+    ]);
+    return {
+      model,
+      resolved: choice.model?.ref ?? null,
+      basis: choice.basis,
+      candidates: available.flatMap(({ row, models: list }) =>
+        list.map((m) => ({
+          ref: m.ref,
+          name: m.name,
+          providerName: row.name,
+          cost: m.cost,
+          callCost: platformCallCost(m) ?? null,
+          canSkipThinking: canSkipThinking(m),
+        })),
+      ),
+    };
+  }
 }

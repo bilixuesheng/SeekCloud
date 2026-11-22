@@ -7,6 +7,7 @@ import {
   type DropZone,
   dropTarget,
   type PointerKind,
+  placeLocally,
   rubberBand,
   shouldClose,
 } from "./drag-gesture";
@@ -15,6 +16,9 @@ import type { Session } from "./types";
 /**
  * 侧栏的拖动（#153）。判定规则在 drag-gesture.ts；这里接指针事件、画浮起来的会话和插入线、
  * 靠近上下边时自己滚、松手时调放置的接口。
+ *
+ * 动画（2026-11-22 用户要求打磨）：浮起的那条从会话原来的位置浮起（手指抓在哪儿就还在哪儿），松手时先在本地
+ * 放好（不等接口），浮起的那条从松手处滑进新位置再换成真的；取消时滑回原处。接口失败就放回原来的位置。
  *
  * 列表上要有的标记：会话的 <li data-session="短ID">（已归档的加 data-archived，不能拖），
  * 能放下的块 data-drop="pinned" | "group:<id>" | "recent" | "new-group"（浮着的加 data-floating，
@@ -29,7 +33,27 @@ export interface DragState {
   fromPinned: boolean;
   x: number;
   y: number;
+  /** 手指离会话上边多远：浮起的那条跟着手指走，抓的位置不变。 */
+  grabOffset: number;
+  /** 会话在页面里的左边和宽度：浮起的那条和它对齐。 */
+  left: number;
+  width: number;
   target: DropTarget | undefined;
+}
+
+/**
+ * 松手以后浮起的那条怎么收：settle 滑到新位置，back 滑回原处（取消、没放下），
+ * fade 原地淡出（放到"新分组"上，分组要等接口建好才有）。
+ */
+export interface Landing {
+  shortId: string;
+  title: string;
+  repo: string;
+  kind: "settle" | "back" | "fade";
+  /** 松手时浮起那条的位置（页面坐标）。 */
+  top: number;
+  left: number;
+  width: number;
 }
 
 interface Pending {
@@ -41,6 +65,8 @@ interface Pending {
   lastT: number;
   velocity: number;
   session?: Session;
+  /** 按下时手指下的会话那一行。 */
+  row?: HTMLElement;
   mode: "pending" | "drag" | "swipe-close";
 }
 
@@ -57,6 +83,7 @@ export function useSidebarDrag(options: {
   onError: (message: string) => void;
 }) {
   const [drag, setDrag] = useState<DragState>();
+  const [landing, setLanding] = useState<Landing>();
   const latest = useRef(options);
   latest.current = options;
   const pending = useRef<Pending | undefined>(undefined);
@@ -105,13 +132,43 @@ export function useSidebarDrag(options: {
   }, []);
 
   const finishDrag = useCallback(
-    async (state: DragState | undefined) => {
+    async (state: DragState | undefined, cancelled = false) => {
       cancelAnimationFrame(scrollFrame.current);
       setDrag(undefined);
       sidebarStyle("translateX(0)", true);
-      if (!state?.target) return;
+      if (!state) return;
+      const ghost = {
+        shortId: state.shortId,
+        title: state.title,
+        repo: state.repo,
+        top: state.y - state.grabOffset,
+        left: state.left,
+        width: state.width,
+      };
+      if (cancelled || !state.target) {
+        setLanding({ ...ghost, kind: "back" });
+        return;
+      }
       const { zone, after } = state.target;
-      const { upsert, onGroupCreated, onError } = latest.current;
+      const { upsert, onGroupCreated, onError, sessions } = latest.current;
+      const original = sessions.find((s) => s.shortId === state.shortId);
+      // 先在本地放好，浮起的那条滑进新位置；接口回来再换成主站的，失败了放回去
+      if (zone !== "new-group" && original) {
+        const items = zones(state.shortId).find((z) => z.id === zone)?.items ?? [];
+        const keys = new Map(sessions.map((s) => [s.shortId, s.sortKey]));
+        upsert(
+          placeLocally(
+            original,
+            state.target,
+            items.map((i) => i.shortId),
+            keys,
+            new Date(),
+          ),
+        );
+        setLanding({ ...ghost, kind: "settle" });
+      } else {
+        setLanding({ ...ghost, kind: "fade" });
+      }
       try {
         let groupId: string | undefined;
         let section: string;
@@ -133,10 +190,11 @@ export function useSidebarDrag(options: {
         });
         upsert(session);
       } catch (e) {
+        if (original) upsert(original);
         onError((e as ApiError).message);
       }
     },
-    [sidebarStyle],
+    [sidebarStyle, zones],
   );
 
   useEffect(() => {
@@ -146,7 +204,12 @@ export function useSidebarDrag(options: {
 
     const update = (x: number, y: number) => {
       if (!current) return;
-      current = { ...current, x, y, target: dropTarget(zones(current.shortId), y) };
+      const target = dropTarget(zones(current.shortId), y);
+      // 换到另一块上（置顶、某个分组、最近）时轻轻震一下
+      if (target?.zone !== current.target?.zone && target && pending.current?.kind !== "mouse") {
+        navigator.vibrate?.(4);
+      }
+      current = { ...current, x, y, target };
       setDrag(current);
     };
 
@@ -183,6 +246,8 @@ export function useSidebarDrag(options: {
         p.mode = gesture;
         if (gesture === "drag" && p.session) {
           const s = p.session;
+          const listRect = list.getBoundingClientRect();
+          const row = p.row?.getBoundingClientRect();
           current = {
             shortId: s.shortId,
             title: s.title,
@@ -190,9 +255,15 @@ export function useSidebarDrag(options: {
             fromPinned: s.pinnedAt !== null,
             x: e.clientX,
             y: e.clientY,
+            grabOffset: row ? p.startY - row.top : 26,
+            left: row?.left ?? listRect.left + 8,
+            width: row?.width ?? listRect.width - 16,
             target: undefined,
           };
+          setLanding(undefined);
           setDrag(current);
+          // 手机上轻轻震一下：浮起来了（iOS 的浏览器没有这个接口，什么都不做）
+          if (p.kind !== "mouse") navigator.vibrate?.(8);
           // 先让"拖到这里"和"新分组"画出来，再算放到哪里
           requestAnimationFrame(() => current && update(e.clientX, e.clientY));
           scrollFrame.current = requestAnimationFrame(scrollLoop);
@@ -235,7 +306,7 @@ export function useSidebarDrag(options: {
         suppressClick.current = performance.now();
         const state = current;
         current = undefined;
-        void finishDrag(cancelled ? undefined : state);
+        void finishDrag(state, cancelled);
       }
     };
     const onUp = (e: PointerEvent) => end(e, false);
@@ -259,6 +330,7 @@ export function useSidebarDrag(options: {
         lastT: performance.now(),
         velocity: 0,
         session,
+        row: li ?? undefined,
         mode: "pending",
       };
       window.addEventListener("pointermove", onMove, { passive: false });
@@ -273,9 +345,10 @@ export function useSidebarDrag(options: {
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && current) {
+        const state = current;
         current = undefined;
         pending.current = undefined;
-        void finishDrag(undefined);
+        void finishDrag(state, true);
       }
     };
     // 链接自己的拖动（拖出网址）不要
@@ -300,5 +373,5 @@ export function useSidebarDrag(options: {
     };
   }, [options.list, zones, finishDrag, sidebarStyle]);
 
-  return drag;
+  return { drag, landing, endLanding: useCallback(() => setLanding(undefined), []) };
 }

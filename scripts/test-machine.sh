@@ -437,7 +437,7 @@ open_url "https://github.com/${REPO}/settings/actions"
 step "往下找到 \"Fork pull request workflows from outside collaborators\" 这一栏"
 step "选 \"Require approval for all outside collaborators\""
 step "点这一栏下面的 Save"
-pause "改好了按回车"
+pause "改好了按回车（以前运行这个脚本时已经改过的，直接按回车）"
 
 # ── 7 ────────────────────────────────────────────────────────────────────
 stage "注册成仓库的 GitHub Runner"

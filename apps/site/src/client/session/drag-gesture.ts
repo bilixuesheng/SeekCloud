@@ -96,3 +96,46 @@ export function autoScrollSpeed(y: number, top: number, bottom: number, edge = 4
   if (y > bottom - edge) return max * Math.min(1, (y - (bottom - edge)) / edge);
   return 0;
 }
+
+/** 两个排序值中间的值，和主站放置时的算法一样（server/sessions/sidebar.ts 的 keyBetween）。 */
+export function keyBetween(
+  above: number | undefined,
+  below: number | undefined,
+  options: { now: number; recentTop: boolean },
+): number {
+  if (above !== undefined && below !== undefined) return (above + below) / 2;
+  if (above !== undefined) return above - 1000;
+  if (below !== undefined) {
+    return options.recentTop ? Math.max(options.now, below + 1) : below + 1000;
+  }
+  return options.now;
+}
+
+/**
+ * 松手时先在本地放好（不等接口）：放到哪一类、挨着谁，算出新的置顶、分组和排序值。接口回来以后换成主站的。
+ * items 是那一块里的会话（不含正在拖的）从上到下的短 ID，keys 是它们的排序值。
+ */
+export function placeLocally<
+  S extends { shortId: string; pinnedAt: string | null; groupId: string | null; sortKey: number },
+>(
+  session: S,
+  target: { zone: string; after: string | null },
+  items: string[],
+  keys: Map<string, number>,
+  now: Date,
+): S {
+  const i = target.after === null ? -1 : items.indexOf(target.after);
+  const above = i >= 0 ? keys.get(items[i] as string) : undefined;
+  const below = keys.get(items[i + 1] as string);
+  const sortKey = keyBetween(above, below, {
+    now: now.getTime(),
+    recentTop: target.zone === "recent",
+  });
+  if (target.zone === "pinned") {
+    return { ...session, pinnedAt: session.pinnedAt ?? now.toISOString(), groupId: null, sortKey };
+  }
+  if (target.zone.startsWith("group:")) {
+    return { ...session, pinnedAt: null, groupId: target.zone.slice("group:".length), sortKey };
+  }
+  return { ...session, pinnedAt: null, groupId: null, sortKey };
+}
