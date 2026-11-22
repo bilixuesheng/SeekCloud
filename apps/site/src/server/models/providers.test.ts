@@ -524,3 +524,59 @@ describe("平台调用的模型", () => {
     }
   });
 });
+
+describe("沙箱里的 dsh 用设置里的提供方（#188）", () => {
+  it("准备沙箱时带上能用的提供方（不带地址、不带 key）；改了提供方给沙箱开着的会话发 set_models", async () => {
+    const t = await createTestApp();
+    try {
+      const { browser } = await t.adminWithGitHub("octo", "octo/app");
+      const res = await browser.post("/api/sessions", {
+        repo: "octo/app",
+        baseBranch: "main",
+        text: "看看",
+      });
+      const { shortId } = (await res.json()) as { shortId: string };
+      await t.host.idle();
+      const prepared = t.host.last("prepare_sandbox");
+      expect(prepared.providers).toEqual([
+        {
+          id: "deepseek",
+          kind: "deepseek",
+          name: "DeepSeek 官方",
+          models: [
+            expect.objectContaining({ id: "deepseek-flash", input: ["text", "image"] }),
+            expect.objectContaining({ id: "deepseek-v4-pro" }),
+          ],
+        },
+      ]);
+      expect(JSON.stringify(prepared.providers)).not.toContain("model.test");
+
+      const before = t.host.commands.length;
+      await browser.post(PROVIDERS, customBody);
+      await new Promise((r) => setTimeout(r, 50));
+      const sent = t.host.commands.slice(before).filter((c) => c.type === "set_models");
+      expect(sent).toHaveLength(1);
+      const command = sent[0] as Extract<(typeof sent)[number], { type: "set_models" }>;
+      expect(command.sessionId).toBe(prepared.sessionId);
+      const gateway = command.providers.find((p) => p.id === "my-gateway");
+      expect(gateway).toMatchObject({
+        kind: "custom",
+        api: "openai-completions",
+        models: [
+          { id: "chat-small", input: ["text"] },
+          {
+            id: "reasoner",
+            name: "推理模型",
+            contextWindow: 200_000,
+            reasoningEfforts: { off: null, high: "high", max: "xhigh" },
+          },
+        ],
+      });
+      expect(JSON.stringify(command.providers)).not.toContain("gateway.example");
+      expect(JSON.stringify(command.providers)).not.toContain("gw-0123456789");
+      expect(shortId).toBeTruthy();
+    } finally {
+      await t.close();
+    }
+  });
+});

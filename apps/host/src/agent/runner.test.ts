@@ -194,13 +194,20 @@ describe("运行器", { timeout: 30_000 }, () => {
     await until(() => rpc(entries).length === 1, "回显");
   });
 
-  it("dsh 起不来（程序不存在）：报错误条目", async () => {
-    const { daemon, until } = await setup();
+  it("dsh 起不来（程序不存在）：报错误条目；之后不当它还在跑，新连上的看到没在跑，能重新起", async () => {
+    const { daemon, until, startFake } = await setup();
     const { link, entries } = daemon();
     await until(() => link.connected, "连上");
     link.send({ op: "start", args: ["/no/such/dsh"] });
     await until(() => entries.some((e) => e.type === "error" || e.type === "exit"), "错误");
     expect(entries.some((e) => e.type === "error")).toBe(true);
+    link.stop();
+    // 守护进程重连（或者下一个回合）：运行器不能还说 dsh 在跑，不然守护进程要等一个永远不会来的退出
+    const next = daemon();
+    await until(() => next.welcomes.length > 0, "打招呼");
+    expect(next.welcomes.at(-1)?.welcome.running).toBe(false);
+    startFake(next.link);
+    await until(() => next.entries.some((e) => e.type === "started"), "重新起来");
   });
 
   it("连接被对面重置（守护进程那头没读完就断了）：运行器不退出，照样能连", async () => {

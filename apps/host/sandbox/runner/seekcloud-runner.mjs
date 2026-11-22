@@ -135,7 +135,11 @@ async function serve() {
       return;
     }
     child = proc;
-    proc.on("error", (error) => emit({ type: "error", text: `dsh 起不来：${error.message}` }));
+    proc.on("error", (error) => {
+      // 根本没起来（可执行文件不在这些）：不会再有 exit，这里就当它不在了，下次 hello 说没在跑、能重新 start
+      if (child === proc && proc.pid === undefined) child = undefined;
+      emit({ type: "error", text: `dsh 起不来：${error.message}` });
+    });
     proc.stdin.on("error", () => {});
     if (proc.pid !== undefined) emit({ type: "started", pid: proc.pid });
     lines(proc.stdout).on("line", (line) => emit({ type: "rpc", line }));

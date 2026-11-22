@@ -3,7 +3,7 @@ import type { HostEvent, SafeError, ThinkingEffort } from "@seekcloud/protocol";
 import { DshEventMapper } from "./dsh-events";
 import { type RunnerEntry, RunnerLink } from "./runner-link";
 
-/** dsh 的 provider 是哪个：平台的模型 ID 和 dsh 官方目录里的一样（deepseek-flash、deepseek-v4-pro）。 */
+/** 没说用哪个路由时（旧版本的主站）：DeepSeek 官方，模型 ID 和 dsh 官方目录里的一样。 */
 const PROVIDER = "deepseek-official";
 
 /** 怎么在沙箱里起 dsh（由调用方按沙箱算好）。 */
@@ -32,11 +32,25 @@ export interface DshAgentOptions {
   connectTimeoutMs?: number;
 }
 
+/** dsh 进程用的路由：initialize 是整个进程的，这几样变了要重启 dsh。 */
+interface Route {
+  provider: string;
+  model: string;
+  effort: ThinkingEffort | undefined;
+  config: string;
+}
+
 export interface TurnInput {
   turnId: string;
   text: string;
   model: string;
   effort: ThinkingEffort;
+  /** dsh 里的路由名（#188）：DeepSeek 是 deepseek-official，别的提供方是 Provider ID。不填是 DeepSeek。 */
+  provider?: string;
+  /** 为假时不带思考强度（模型没声明推理等级）。不填是带。 */
+  reasoning?: boolean;
+  /** 模型配置的版本（agent/models-config.ts）：变了要重启 dsh 才读得到新的配置。 */
+  config?: string;
   /** 会话的第一个回合：dsh 那边还没有这个会话，不用 resume。 */
   firstTurn: boolean;
   /** 会话的第几个回合，回合结束时补提交的说明里用（agent/turn-end.ts）。 */
@@ -71,7 +85,7 @@ export class DshAgent {
   #pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   /** 运行器那边 dsh 在不在跑、跑的是哪个模型（我们起的才知道；守护进程重启后认回来的不知道）。 */
   #running = false;
-  #route: { model: string; effort: ThinkingEffort } | undefined;
+  #route: Route | undefined;
   #initialized = false;
   #starting: { resolve: (pid: number) => void; reject: (e: Error) => void } | undefined;
   #exited: (() => void)[] = [];
@@ -165,7 +179,12 @@ export class DshAgent {
   }
 
   async #ensureDsh(input: TurnInput): Promise<void> {
-    const route = { model: input.model, effort: input.effort };
+    const route: Route = {
+      provider: input.provider ?? PROVIDER,
+      model: input.model,
+      effort: input.reasoning === false ? undefined : input.effort,
+      config: input.config ?? "",
+    };
     if (this.#running && this.#initialized && this.#route && !sameRoute(this.#route, route)) {
       // 换了模型或思考强度：initialize 是整个进程的，重启 dsh
       await this.#stopDsh();
@@ -177,9 +196,9 @@ export class DshAgent {
     await this.#startDsh();
     await this.#request("initialize", {
       cwd: this.#options.launch().workingDirectory,
-      provider: PROVIDER,
+      provider: route.provider,
       model: input.model,
-      reasoningEffort: input.effort,
+      ...(route.effort ? { reasoningEffort: route.effort } : {}),
       approvalRequests: false,
     });
     this.#route = route;
@@ -369,7 +388,8 @@ export class DshAgent {
   }
 }
 
-const sameRoute = (
-  a: { model: string; effort: ThinkingEffort },
-  b: { model: string; effort: ThinkingEffort },
-) => a.model === b.model && a.effort === b.effort;
+const sameRoute = (a: Route, b: Route) =>
+  a.provider === b.provider &&
+  a.model === b.model &&
+  a.effort === b.effort &&
+  a.config === b.config;

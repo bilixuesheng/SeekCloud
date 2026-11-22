@@ -253,6 +253,33 @@ export interface AiLabels {
 /** 没有下发过开关时（比如旧版本的主站）按都开处理。 */
 export const DEFAULT_AI_LABELS: AiLabels = { signature: true, commitTrailer: true };
 
+/**
+ * 沙箱里的 dsh 能用的一个模型提供方（#188）：只有 Provider ID、协议和模型，不带地址、不带 key。
+ * 宿主机把它写进 dsh 的配置，地址指到宿主机本地的 /v1/providers/<id>（经主站的透明转发，主站换上真 key）。
+ * - deepseek：内置的 DeepSeek 官方（dsh 的 llm-deepseek）；models 是现在能用的列表；
+ * - catalog：dsh 目录里的提供方（pi-ai），models 为空时用目录的列表；
+ * - custom：自定义接口，api 和 models 都有。
+ */
+export interface SandboxProvider {
+  id: string;
+  kind: "deepseek" | "catalog" | "custom";
+  name: string;
+  api?: ModelProtocol;
+  models?: SandboxModel[];
+}
+
+/** SandboxProvider 里的一个模型（dsh 的模型条目，没写的项由 dsh 用目录或默认值）。 */
+export interface SandboxModel {
+  id: string;
+  name?: string;
+  contextWindow?: number;
+  maxTokens?: number;
+  input?: Array<"text" | "image">;
+  /** 推理等级：档位到发给接口的参数值；为空是没声明（dsh 里没有推理等级，开始回合时不传思考强度）。 */
+  reasoningEfforts?: Partial<Record<ThinkingEffort, string | null>>;
+  compat?: Record<string, string | number | boolean>;
+}
+
 /** 提交的作者和提交者。 */
 export interface Committer {
   name: string;
@@ -279,6 +306,10 @@ export type HostCommand =
        */
       committer?: Committer;
       /**
+       * 沙箱里的 dsh 能用的模型提供方（#188）。旧版本的主站不填，宿主机只配 DeepSeek 官方。
+       */
+      providers?: SandboxProvider[];
+      /**
        * Agent 的会话文件（上一次回合结束时宿主机发来的 agent.archive）。沙箱是新建的（被回收过）时宿主机放回去，
        * Agent 接着原来的对话；沙箱还在时不用。还没有过回合的会话不带。
        */
@@ -286,6 +317,10 @@ export type HostCommand =
     }
   /** 管理员在设置里改了 AI 标识的开关：运行中的会话跟着变，不用重开。 */
   | { type: "set_ai_labels"; sessionId: string; aiLabels: AiLabels }
+  /**
+   * 管理员在设置里改了模型提供方（#188）：沙箱还开着的会话换上新的配置，从下一个回合起生效（宿主机重启 dsh）。
+   */
+  | { type: "set_models"; sessionId: string; providers: SandboxProvider[] }
   /**
    * 下发或刷新用户的 GitHub 访问令牌，给宿主机上的 Git 代理用（ADR 0003）。
    * 宿主机只放在内存里；令牌快过期时主站刷新后再发一次。

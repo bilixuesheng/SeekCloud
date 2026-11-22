@@ -179,6 +179,36 @@ describe("模型网关的宿主机这一半：沙箱的 /v1/… 转给主站", (
     expect(site.requests.at(-1)?.url).toBe("/api/gateway/v1/files?after_id=file_1&limit=2");
   });
 
+  it.each([
+    ["OpenAI 系（Authorization: Bearer）", { authorization: `Bearer ${SESSION_TOKEN}` }, ""],
+    ["Anthropic（x-api-key）", { "x-api-key": SESSION_TOKEN }, ""],
+    ["Gemini（x-goog-api-key）", { "x-goog-api-key": SESSION_TOKEN }, ""],
+    ["Gemini（查询参数 key）", {}, `&key=${SESSION_TOKEN}`],
+  ])(
+    "别的提供方（#188）：%s 都认；转给主站的透明转发，令牌不往主站带",
+    async (_name, headers: Record<string, string>, extra) => {
+      const before = site.requests.length;
+      const res = await fetch(
+        `${proxyUrl}/v1/providers/my-gateway/models/m:streamGenerateContent?alt=sse${extra}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", ...headers },
+          body: JSON.stringify({ contents: [] }),
+        },
+      );
+      expect(res.status).toBe(200);
+      const got = site.requests[before];
+      expect(got?.url).toBe(
+        "/api/gateway/providers/my-gateway/models/m:streamGenerateContent?alt=sse",
+      );
+      expect(got?.headers.authorization).toBe(`Bearer ${CREDENTIAL}`);
+      expect(got?.headers["x-seekcloud-session"]).toBe("s1");
+      const sent = JSON.stringify(got?.headers);
+      expect(sent).not.toContain(SESSION_TOKEN);
+      expect(got?.url).not.toContain(SESSION_TOKEN);
+    },
+  );
+
   it("会话令牌不对、会话已经结束：拒绝，不转给主站", async () => {
     const before = site.requests.length;
     const wrong = await fetch(`${proxyUrl}/v1/messages`, {

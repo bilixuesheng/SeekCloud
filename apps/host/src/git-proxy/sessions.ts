@@ -1,4 +1,4 @@
-import type { AiLabels, Committer, SessionRepo } from "@seekcloud/protocol";
+import type { AiLabels, Committer, SandboxProvider, SessionRepo } from "@seekcloud/protocol";
 import type { MountedRepo } from "./rules";
 
 export interface GitSession {
@@ -14,6 +14,8 @@ export interface GitSession {
   committer?: Committer;
   /** 仓库的完整信息（基础分支、会话分支）：回合开始、结束时整理工作区用（agent/turn-end.ts）。 */
   workspace?: SessionRepo[];
+  /** 沙箱里的 dsh 能用的模型提供方（#188），主站下发。旧版本的主站不发：只配 DeepSeek 官方。 */
+  providers?: SandboxProvider[];
 }
 
 /** 正在运行的会话。全部在内存里：宿主机重启后由主站重新下发。 */
@@ -29,6 +31,7 @@ export class GitSessions {
       ...session,
       githubToken: old?.githubToken,
       aiLabels: session.aiLabels ?? old?.aiLabels,
+      providers: session.providers ?? old?.providers,
     };
     this.#byId.set(entry.sessionId, entry);
     this.#byToken.set(entry.sessionToken, entry);
@@ -44,6 +47,12 @@ export class GitSessions {
   setAiLabels(sessionId: string, aiLabels: AiLabels): void {
     const session = this.#byId.get(sessionId);
     if (session) session.aiLabels = aiLabels;
+  }
+
+  /** 主站下发新的模型提供方（管理员改了设置）：下一个回合开始时写进 dsh 的配置、重启 dsh。 */
+  setProviders(sessionId: string, providers: SandboxProvider[]): void {
+    const session = this.#byId.get(sessionId);
+    if (session) session.providers = providers;
   }
 
   remove(sessionId: string): void {

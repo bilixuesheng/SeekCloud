@@ -46,6 +46,10 @@ export class FakeModelServer {
         body,
       });
       if (req.method === "POST" && req.url?.endsWith("/v1/messages")) return this.#stream(res);
+      // OpenAI Chat Completions（#188：dsh 的 pi-ai 适配器连自定义接口时说这个）
+      if (req.method === "POST" && req.url?.split("?")[0]?.endsWith("/chat/completions")) {
+        return this.#completions(res, body);
+      }
       res.writeHead(404, { "content-type": "application/json" });
       res.end('{"error":{"type":"not_found_error","message":"not found"}}');
     });
@@ -59,6 +63,55 @@ export class FakeModelServer {
   async close(): Promise<void> {
     this.#server.closeAllConnections();
     await new Promise<void>((done) => this.#server.close(() => done()));
+  }
+
+  /** OpenAI Chat Completions 的请求（POST …/chat/completions）。 */
+  completions(): RecordedRequest[] {
+    return this.requests.filter(
+      (r) => r.method === "POST" && (r.path.split("?")[0] ?? "").endsWith("/chat/completions"),
+    );
+  }
+
+  /** Chat Completions：回脚本里的正文（只认 text），流式时一块一块地回，最后带用量和 [DONE]。 */
+  #completions(res: http.ServerResponse, body: unknown) {
+    const step: ScriptedReply = this.script.shift() ?? { text: this.reply };
+    const text = step.text ?? this.reply;
+    const stream = (body as { stream?: unknown } | null)?.stream === true;
+    const usage = { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 };
+    if (!stream) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          id: "chatcmpl-fake",
+          object: "chat.completion",
+          model: "fake",
+          choices: [
+            { index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" },
+          ],
+          usage,
+        }),
+      );
+      return;
+    }
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    const chunk = (delta: object, finish: string | null, extra: object = {}) =>
+      res.write(
+        `data: ${JSON.stringify({
+          id: "chatcmpl-fake",
+          object: "chat.completion.chunk",
+          model: "fake",
+          choices: [{ index: 0, delta, finish_reason: finish }],
+          ...extra,
+        })}\n\n`,
+      );
+    chunk({ role: "assistant", content: "" }, null);
+    chunk({ content: text }, null);
+    chunk({}, "stop");
+    res.write(
+      `data: ${JSON.stringify({ id: "chatcmpl-fake", object: "chat.completion.chunk", choices: [], usage })}\n\n`,
+    );
+    res.write("data: [DONE]\n\n");
+    res.end();
   }
 
   /** 调模型的请求（POST /v1/messages）的请求体。 */

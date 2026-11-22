@@ -3,10 +3,18 @@ import type { GitSessions } from "../git-proxy/sessions";
 import { type SandboxGit, sandboxGitEnv, WORKSPACE, workspaceDirs } from "../sandbox/provision";
 import type { Sandboxes } from "../sandbox/sandboxes";
 import { DshAgent, type TurnInput } from "./dsh-agent";
+import {
+  dshRoute,
+  MODEL_KEY_ENV,
+  MODELS_PATCH_PATH,
+  modelsPatch,
+  modelsVersion,
+} from "./models-config";
 import { branchDiffs, finishTurn, type SandboxExec, turnStart } from "./turn-end";
 
 /** 守护进程处理主站的命令时用到的 Agent 操作（commands.ts）。测试里可以换成假的。 */
 export interface AgentHost {
+  /** input.provider 是主站说的提供方（Provider ID）；换成 dsh 的路由名由这里做。 */
   startTurn(sessionId: string, input: TurnInput): Promise<void>;
   inject(sessionId: string, turnId: string, text: string): Promise<void>;
   stopTurn(sessionId: string, turnId: string): Promise<void>;
@@ -85,7 +93,21 @@ export class SandboxAgents implements AgentHost {
           })
         : new Map<string, string>();
     this.#turns.set(sessionId, { turnId: input.turnId, starts, turnNumber: input.turnNumber });
-    await this.#agent(sessionId).startTurn(input);
+    // 模型配置（#188）：每个回合开始前写一遍（准备沙箱、管理员改了设置以后都在这里生效），变了 dsh 会重启
+    const providers = this.deps.sessions.get(sessionId)?.providers;
+    const { git } = this.deps;
+    await this.deps.sandboxes.writeFile(
+      sessionId,
+      MODELS_PATCH_PATH,
+      modelsPatch(providers ?? [], `http://${git.proxy.host}:${git.proxy.port}`),
+    );
+    const { route, reasoning } = dshRoute(providers, input.provider, input.model);
+    await this.#agent(sessionId).startTurn({
+      ...input,
+      provider: route,
+      reasoning,
+      config: modelsVersion(providers),
+    });
   }
 
   /** Agent 的会话文件打包发给主站（沙箱被回收以后靠它接着原来的对话）。太大的不发。 */
@@ -231,7 +253,16 @@ export class SandboxAgents implements AgentHost {
         const session = sessions.get(sessionId);
         const token = session?.sessionToken ?? "";
         return {
-          args: [IMAGE.dsh, "--profile", "sdk", "--patch", IMAGE.baseline],
+          // 模型配置在前，基线配置最后（基线关掉的东西谁都打不开）
+          args: [
+            IMAGE.dsh,
+            "--profile",
+            "sdk",
+            "--patch",
+            MODELS_PATCH_PATH,
+            "--patch",
+            IMAGE.baseline,
+          ],
           cwd: IMAGE.cwd,
           env: {
             // git 的钩子、代理的 CA（sandbox/provision.ts）；dsh 跑的命令都继承这些
@@ -241,6 +272,8 @@ export class SandboxAgents implements AgentHost {
             DSH_PERMISSION_MODE: "danger-full-access",
             DEEPSEEK_BASE_URL: `http://${git.proxy.host}:${git.proxy.port}`,
             DEEPSEEK_API_KEY: token,
+            // 别的提供方的 key（#188）：也是会话临时令牌，宿主机按协议的认证头认
+            [MODEL_KEY_ENV]: token,
           },
           // 主仓库（第一个仓库）；没有仓库的会话在 /workspace
           workingDirectory: workspaceDirs(session?.repos ?? [])[0] ?? WORKSPACE,

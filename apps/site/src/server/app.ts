@@ -220,7 +220,10 @@ export function createApp(deps: AppDeps) {
   app.route("/api", sessionRoutes(deps, sessions));
   app.route("/api", sidebarRoutes(deps, sessions));
   app.route("/api", meRoutes(deps));
-  app.route("/api", modelRoutes(deps, models));
+  app.route(
+    "/api",
+    modelRoutes(deps, models, () => sessions.modelsChanged()),
+  );
 
   app.onError(handleError);
   app.notFound((c) => c.json(apiError("not_found", "接口不存在"), 404));

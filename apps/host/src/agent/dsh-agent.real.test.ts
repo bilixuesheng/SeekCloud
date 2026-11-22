@@ -8,6 +8,7 @@ import type { AgentEvent, HostEvent } from "@seekcloud/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { FakeModelServer } from "../testing/fake-model-server";
 import { DshAgent } from "./dsh-agent";
+import { dshRoute, MODEL_KEY_ENV, modelsPatch } from "./models-config";
 
 /**
  * 测试缝 ③：Agent 适配接口的契约测试（#25）。真的 dsh、真的运行器（本机进程），模型服务是假的、按脚本回复。
@@ -16,6 +17,8 @@ import { DshAgent } from "./dsh-agent";
 const DSH = process.env.SEEKCLOUD_DSH_BIN;
 const RUNNER = join(import.meta.dirname, "../../sandbox/runner/seekcloud-runner.mjs");
 const BASELINE = join(import.meta.dirname, "../../sandbox/dsh/baseline.patch.yml");
+/** 别的提供方的 key（宿主机给的是会话临时令牌）。 */
+const MODEL_TOKEN = "session-token-for-providers";
 
 describe.skipIf(!DSH)("Agent 适配接口（dsh）", { timeout: 120_000 }, () => {
   const model = new FakeModelServer();
@@ -69,6 +72,7 @@ describe.skipIf(!DSH)("Agent 适配接口（dsh）", { timeout: 120_000 }, () =>
           DSH_HOME: join(root, "home", ".dsh"),
           DEEPSEEK_API_KEY: "fake-key",
           DEEPSEEK_BASE_URL: url,
+          [MODEL_KEY_ENV]: MODEL_TOKEN,
           DSH_PERMISSION_MODE: "danger-full-access",
         },
         workingDirectory: join(root, "repo"),
@@ -270,5 +274,66 @@ describe.skipIf(!DSH)("Agent 适配接口（dsh）", { timeout: 120_000 }, () =>
       error: { code: "internal" },
     });
     expect(s.logs.some((l) => l.includes(end.error?.ref ?? "?"))).toBe(true);
+  });
+
+  it("别的提供方（#188）：自定义的 OpenAI 兼容接口经宿主机的 /v1/providers/<id> 调，key 是会话令牌，模型和路由照配置", async () => {
+    const patch = join(root, "models.patch.yml");
+    await writeFile(
+      patch,
+      modelsPatch(
+        [
+          {
+            id: "my-gateway",
+            kind: "custom",
+            name: "公司网关",
+            api: "openai-completions",
+            models: [{ id: "gw-model", name: "网关模型", input: ["text"] }],
+          },
+        ],
+        url,
+      ),
+    );
+    const s = agentFor(randomUUID(), [
+      DSH as string,
+      "--profile",
+      "sdk",
+      "--patch",
+      patch,
+      "--patch",
+      BASELINE,
+    ]);
+    const before = model.completions().length;
+    model.script = [{ text: "网关回的话" }];
+    const route = dshRoute(
+      [
+        {
+          id: "my-gateway",
+          kind: "custom",
+          name: "公司网关",
+          api: "openai-completions",
+          models: [{ id: "gw-model" }],
+        },
+      ],
+      "my-gateway",
+      "gw-model",
+    );
+    await s.agent.startTurn({
+      ...turn("t11", "用网关的模型", true, "gw-model"),
+      provider: route.route,
+      reasoning: route.reasoning,
+      config: "v1",
+    });
+    const end = await s.ended("t11");
+    expect(end, [...s.logs, ...runnerLog].join("\n")).toEqual({
+      type: "turn.ended",
+      reason: "completed",
+    });
+    const request = model.completions().at(before);
+    expect(request?.path).toMatch(/^\/v1\/providers\/my-gateway\/chat\/completions/);
+    expect(request?.headers.authorization).toBe(`Bearer ${MODEL_TOKEN}`);
+    expect((request?.body as { model?: string } | undefined)?.model).toBe("gw-model");
+    expect(
+      s.agentEvents("t11").some((e) => e.type === "message" && e.text.includes("网关回的话")),
+    ).toBe(true);
   });
 });

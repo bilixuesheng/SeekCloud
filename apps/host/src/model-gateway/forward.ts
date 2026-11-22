@@ -33,18 +33,25 @@ function reply(res: ServerResponse, status: number, type: string, message: strin
   res.end(JSON.stringify({ type: "error", error: { type, message } }));
 }
 
-/** 会话临时令牌：dsh 调 Messages、Files 时放在 x-api-key 里，调联网工具时放在 Authorization: Bearer 里。 */
-function sessionToken(req: IncomingMessage): string | undefined {
-  const apiKey = req.headers["x-api-key"];
-  if (typeof apiKey === "string" && apiKey) return apiKey;
+/**
+ * 会话临时令牌：dsh 把它当 API key 用，放在哪里看协议（#188）：Anthropic（DeepSeek 的 Messages、Files）在
+ * x-api-key，OpenAI 系和联网工具在 Authorization: Bearer，Gemini 在 x-goog-api-key 或者查询参数 key。
+ */
+function sessionToken(req: IncomingMessage, url: URL): string | undefined {
+  for (const name of ["x-api-key", "x-goog-api-key"]) {
+    const value = req.headers[name];
+    if (typeof value === "string" && value) return value;
+  }
   const auth = req.headers.authorization ?? "";
-  return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : undefined;
+  if (auth.startsWith("Bearer ")) return auth.slice("Bearer ".length).trim();
+  return url.searchParams.get("key") ?? undefined;
 }
 
 /**
  * 模型网关在宿主机这一半（#26，ADR 0003）：沙箱里的 dsh 把模型、Files、联网搜索和抓取的请求发到宿主机本地的
  * /v1/…（和 Git 代理同一个端口，dsh 的接口地址设成这个端口），宿主机核对会话临时令牌，换上自己的宿主机凭据和
- * 会话 ID，转给主站的 /api/gateway/v1/…。请求体和响应都边收边转，流式回复不攒整段。
+ * 会话 ID，转给主站的 /api/gateway/v1/…；别的提供方的 /v1/providers/<id>/… 转给 /api/gateway/providers/<id>/…
+ * （#188）。请求体和响应都边收边转，流式回复不攒整段。
  *
  * 会话临时令牌只在宿主机这里认，不往主站带；主站只认宿主机凭据，并核对会话是不是在这台宿主机上。
  */
@@ -66,7 +73,7 @@ export async function forwardToGateway(
     req.resume();
     return reply(res, 404, "not_found_error", "没有这个地址");
   }
-  const token = sessionToken(req);
+  const token = sessionToken(req, url);
   const session = token ? sessions.byToken(token) : undefined;
   if (!session) {
     req.resume();
@@ -86,7 +93,13 @@ export async function forwardToGateway(
     const value = req.headers[name];
     if (value !== undefined) headers[name] = value;
   }
-  const target = new URL(`${SITE_GATEWAY_PATH}${url.pathname}${url.search}`, link.siteUrl);
+  // 别的提供方（#188）：/v1/providers/<id>/… 转给主站的透明转发 /api/gateway/providers/<id>/…；
+  // 查询参数里的 key（Gemini 的写法，里面是会话令牌）不往主站带。
+  url.searchParams.delete("key");
+  const path = url.pathname.startsWith("/v1/providers/")
+    ? url.pathname.slice("/v1".length)
+    : url.pathname;
+  const target = new URL(`${SITE_GATEWAY_PATH}${path}${url.search}`, link.siteUrl);
   const client = target.protocol === "https:" ? https : http;
   const upstream = client.request(target, { method: req.method, headers });
 
