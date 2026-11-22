@@ -5818,3 +5818,284 @@ button.changes-path:hover {
 .add-provider-tabs {
   margin-bottom: 4px;
 }
+
+/* ---- 通知（ui/toast.tsx）：右下角，可以堆叠；带着模糊浮上来，走的时候模糊淡出、下面的合拢 ---- */
+.toast-stack {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast-slot {
+  display: grid;
+  grid-template-rows: 1fr;
+  width: 100%;
+  transition:
+    grid-template-rows 0.26s var(--ease-out),
+    margin 0.26s var(--ease-out);
+  margin-top: 8px;
+}
+
+.toast-slot.leaving {
+  grid-template-rows: 0fr;
+  margin-top: 0;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 11px 10px 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: var(--shadow-lg);
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.5;
+  pointer-events: auto;
+  animation: toast-in 0.34s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.toast-slot.leaving .toast {
+  animation: toast-out 0.24s ease-in both;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+    filter: blur(8px);
+  }
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateX(12px) scale(0.97);
+    filter: blur(6px);
+  }
+}
+
+.toast-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 999px;
+}
+
+.toast.success .toast-icon {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.toast.error .toast-icon {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.toast.info .toast-icon {
+  display: none;
+}
+
+.toast-text {
+  flex: 1;
+  min-width: 0;
+  padding-top: 1px;
+  overflow-wrap: anywhere;
+}
+
+.toast-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+}
+
+.toast-close:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+@media (max-width: 640px) {
+  .toast-stack {
+    right: 16px;
+    left: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    width: auto;
+    align-items: stretch;
+  }
+}
+
+/* ---- 确认弹窗（ui/confirm.tsx）：背景变暗、轻微模糊，窗口带着模糊浮现、缩放到位 ---- */
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(12 16 28 / 28%);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: confirm-backdrop-in 0.24s ease-out both;
+}
+
+.confirm-backdrop.closing {
+  animation: confirm-backdrop-out 0.22s ease-in both;
+}
+
+@keyframes confirm-backdrop-in {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+    -webkit-backdrop-filter: blur(0);
+  }
+}
+
+@keyframes confirm-backdrop-out {
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0);
+    -webkit-backdrop-filter: blur(0);
+  }
+}
+
+.confirm-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(400px, 100%);
+  padding: 22px 22px 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: confirm-in 0.32s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.confirm-dialog.closing {
+  animation: confirm-out 0.2s ease-in both;
+}
+
+@keyframes confirm-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+    filter: blur(8px);
+  }
+}
+
+@keyframes confirm-out {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+    filter: blur(6px);
+  }
+}
+
+.confirm-dialog h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.confirm-body {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 480px) {
+  .confirm-actions > button {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast-slot.leaving .toast,
+  .confirm-backdrop,
+  .confirm-backdrop.closing,
+  .confirm-dialog,
+  .confirm-dialog.closing {
+    animation-duration: 0.01s;
+  }
+
+  .toast-slot {
+    transition: none;
+  }
+}
+
+/* ---- 弹窗（ui/modal.tsx）：和确认弹窗同一套进出，内容可以滚 ---- */
+.confirm-dialog.modal {
+  width: min(460px, 100%);
+  max-height: min(86vh, 760px);
+  padding: 18px 20px 20px;
+  overflow: hidden;
+  outline: none;
+}
+
+.confirm-dialog.modal.wide {
+  width: min(620px, 100%);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  margin: 0 -20px;
+  padding: 4px 20px 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 弹窗里的表单不要卡片的边框和内边距 */
+.modal-body > .settings-form {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+@media (max-width: 480px) {
+  .confirm-backdrop {
+    padding: 12px;
+  }
+}

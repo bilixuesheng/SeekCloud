@@ -5,6 +5,7 @@ import { setCached, useCached } from "../cached";
 const EXPORTS = "/api/account/export";
 
 import { shortDateTime } from "../session/relative-time";
+import { toast, useErrorToast } from "../ui/toast";
 
 interface ExportView {
   id: string;
@@ -32,6 +33,7 @@ export function ExportData() {
   const [busy, setBusy] = useState(false);
   const [failed, setError] = useState<string>();
   const error = failed ?? loaded.error;
+  useErrorToast(error);
 
   // 正在打包时每 5 秒看一次，好了就换成下载按钮。
   const working = overview?.latest?.status === "pending" || overview?.latest?.status === "building";
@@ -47,7 +49,7 @@ export function ExportData() {
     try {
       setCached(EXPORTS, await api<Overview>(EXPORTS, {}));
     } catch (e) {
-      setError((e as ApiError).message);
+      toast((e as ApiError).message, "error");
       load();
     } finally {
       setBusy(false);
@@ -92,11 +94,6 @@ export function ExportData() {
           </button>
         )}
       </div>
-      {error && (
-        <p className="alert" role="alert">
-          {error}
-        </p>
-      )}
     </div>
   );
 }

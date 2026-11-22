@@ -1,8 +1,10 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { encode } from "uqr";
 import { type ApiError, api } from "../api";
 import { useCopy } from "../copy";
 import { CheckIcon, CopyIcon } from "../Icons";
+import { Modal } from "../ui/modal";
+import { toast } from "../ui/toast";
 
 /** 两步验证开了没有（/api/auth/two-factor）。 */
 export interface TwoFactorState {
@@ -48,7 +50,6 @@ export function TwoFactorRow({
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ tone: "alert" | "notice"; text: string }>();
   // 开启时连着输错几次：多半是服务器的时间不准
   const [wrongCodes, setWrongCodes] = useState(0);
 
@@ -57,31 +58,29 @@ export function TwoFactorRow({
     setPassword("");
     setCode("");
     setWrongCodes(0);
-    setMessage(notice ? { tone: "notice", text: notice } : undefined);
+    if (notice) toast(notice);
   };
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
-    setMessage(undefined);
     try {
       await action();
     } catch (e) {
       const err = e as ApiError;
       if (err.code === "setup_expired") {
         go({ kind: "password" });
-        setMessage({ tone: "alert", text: "设置已超时，请重新输入密码。" });
+        toast("设置已超时，请重新输入密码。", "error");
       } else if (step.kind === "scan" && err.code === "wrong_code") {
         const n = wrongCodes + 1;
         setWrongCodes(n);
-        setMessage({
-          tone: "alert",
-          text:
-            n >= 2
-              ? "验证码错误。如果多次输入仍然错误，请检查服务器的时间是否准确。"
-              : "验证码错误。",
-        });
+        toast(
+          n >= 2
+            ? "验证码错误。如果多次输入仍然错误，请检查服务器的时间是否准确。"
+            : "验证码错误。",
+          "error",
+        );
       } else {
-        setMessage({ tone: "alert", text: err.message });
+        toast(err.message, "error");
       }
     } finally {
       setBusy(false);
@@ -136,6 +135,18 @@ export function TwoFactorRow({
       取消
     </button>
   );
+  // 关弹窗时还要画着最后一步，播完收起的动画
+  const lastStep = useRef<Step>(step);
+  if (step.kind !== "idle") lastStep.current = step;
+  const view = step.kind === "idle" ? lastStep.current : step;
+  const titles: Record<Step["kind"], string> = {
+    idle: "两步验证",
+    password: "开启两步验证",
+    scan: "开启两步验证",
+    codes: "保存恢复码",
+    disable: "关闭两步验证",
+    regenerate: "重新生成恢复码",
+  };
 
   return (
     <div className="settings-card">
@@ -146,86 +157,86 @@ export function TwoFactorRow({
             {sub}
           </span>
         </span>
-        {step.kind === "idle" &&
-          (state.enabled ? (
-            <span className="settings-actions">
-              <button
-                type="button"
-                className="pill-button"
-                onClick={() => go({ kind: "regenerate" })}
-              >
-                重新生成恢复码
-              </button>
-              <button type="button" className="pill-button" onClick={() => go({ kind: "disable" })}>
-                关闭
-              </button>
-            </span>
-          ) : (
-            <button type="button" className="pill-button" onClick={() => go({ kind: "password" })}>
-              开启
+        {state.enabled ? (
+          <span className="settings-actions">
+            <button
+              type="button"
+              className="pill-button"
+              onClick={() => go({ kind: "regenerate" })}
+            >
+              重新生成恢复码
             </button>
-          ))}
+            <button type="button" className="pill-button" onClick={() => go({ kind: "disable" })}>
+              关闭
+            </button>
+          </span>
+        ) : (
+          <button type="button" className="pill-button" onClick={() => go({ kind: "password" })}>
+            开启
+          </button>
+        )}
       </div>
 
-      {step.kind === "password" && (
-        <form className="settings-form" onSubmit={submit}>
-          <PasswordField value={password} onChange={setPassword} />
-          <div className="settings-form-actions">
-            {cancel}
-            <button type="submit" className="primary" disabled={busy}>
-              {busy ? "请稍候…" : "继续"}
-            </button>
-          </div>
-        </form>
-      )}
+      <Modal
+        open={step.kind !== "idle"}
+        title={titles[view.kind]}
+        onClose={() => go({ kind: "idle" })}
+      >
+        {view.kind === "password" && (
+          <form className="settings-form" onSubmit={submit}>
+            <PasswordField value={password} onChange={setPassword} />
+            <div className="settings-form-actions">
+              {cancel}
+              <button type="submit" className="primary" disabled={busy}>
+                {busy ? "请稍候…" : "继续"}
+              </button>
+            </div>
+          </form>
+        )}
 
-      {step.kind === "scan" && (
-        <form className="settings-form" onSubmit={submit}>
-          <p className="settings-hint">
-            请使用验证器 App（如 Google Authenticator、Microsoft
-            Authenticator、1Password）扫描二维码，或手动输入密钥，然后填写 App 中显示的 6 位验证码。
-          </p>
-          <QrCode text={step.otpauthUrl} />
-          <SecretKey secret={step.secret} />
-          <CodeField value={code} onChange={setCode} label="验证码" />
-          <div className="settings-form-actions">
-            {cancel}
-            <button type="submit" className="primary" disabled={busy}>
-              {busy ? "请稍候…" : "确认开启"}
-            </button>
-          </div>
-        </form>
-      )}
+        {view.kind === "scan" && (
+          <form className="settings-form" onSubmit={submit}>
+            <p className="settings-hint">
+              请使用验证器 App（如 Google Authenticator、Microsoft
+              Authenticator、1Password）扫描二维码，或手动输入密钥，然后填写 App 中显示的 6
+              位验证码。
+            </p>
+            <QrCode text={view.otpauthUrl} />
+            <SecretKey secret={view.secret} />
+            <CodeField value={code} onChange={setCode} label="验证码" />
+            <div className="settings-form-actions">
+              {cancel}
+              <button type="submit" className="primary" disabled={busy}>
+                {busy ? "请稍候…" : "确认开启"}
+              </button>
+            </div>
+          </form>
+        )}
 
-      {step.kind === "codes" && (
-        <RecoveryCodes codes={step.codes} onDone={() => go({ kind: "idle" })} />
-      )}
+        {view.kind === "codes" && (
+          <RecoveryCodes codes={view.codes} onDone={() => go({ kind: "idle" })} />
+        )}
 
-      {(step.kind === "disable" || step.kind === "regenerate") && (
-        <form className="settings-form" onSubmit={submit}>
-          {step.kind === "disable" && (
-            <p className="settings-hint">关闭后，登录时只需输入密码，恢复码全部作废。</p>
-          )}
-          <PasswordField value={password} onChange={setPassword} />
-          <CodeField value={code} onChange={setCode} label="验证码或恢复码" />
-          <div className="settings-form-actions">
-            {cancel}
-            <button
-              type="submit"
-              className={step.kind === "disable" ? "primary danger" : "primary"}
-              disabled={busy}
-            >
-              {busy ? "请稍候…" : step.kind === "disable" ? "关闭两步验证" : "重新生成"}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {message && (
-        <p className={message.tone} role={message.tone === "alert" ? "alert" : "status"}>
-          {message.text}
-        </p>
-      )}
+        {(view.kind === "disable" || view.kind === "regenerate") && (
+          <form className="settings-form" onSubmit={submit}>
+            {view.kind === "disable" && (
+              <p className="settings-hint">关闭后，登录时只需输入密码，恢复码全部作废。</p>
+            )}
+            <PasswordField value={password} onChange={setPassword} />
+            <CodeField value={code} onChange={setCode} label="验证码或恢复码" />
+            <div className="settings-form-actions">
+              {cancel}
+              <button
+                type="submit"
+                className={view.kind === "disable" ? "primary danger" : "primary"}
+                disabled={busy}
+              >
+                {busy ? "请稍候…" : view.kind === "disable" ? "关闭两步验证" : "重新生成"}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }
