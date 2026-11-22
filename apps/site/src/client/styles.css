@@ -680,6 +680,12 @@ input:not([type="range"]):focus {
 /* 原来的位置淡下去，留着空档 */
 .session-list li.drag-source {
   opacity: 0.28;
+  transition: opacity 0.18s ease-out;
+}
+
+/* 松手以后浮起的那条正滑过去：列表里这一行先藏着 */
+.session-list li.drag-landing {
+  opacity: 0;
 }
 
 /* 手指在哪一块上，那一块浅浅地亮一下 */
@@ -756,8 +762,22 @@ input:not([type="range"]):focus {
   border-radius: 9px;
   background: var(--surface);
   box-shadow: var(--shadow-lg);
-  transform: scale(1.02);
+  transform: scale(1.03);
   pointer-events: none;
+  /* 从列表里那一行的位置浮起来：放大一点、影子变深 */
+  animation: drag-lift 0.18s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  will-change: transform;
+}
+
+.drag-ghost.landing {
+  animation: none;
+}
+
+@keyframes drag-lift {
+  from {
+    transform: scale(1);
+    box-shadow: 0 0 0 transparent;
+  }
 }
 
 /* 放下去会在哪：一条插入线 */
@@ -768,6 +788,16 @@ input:not([type="range"]):focus {
   border-radius: 1px;
   background: var(--accent);
   pointer-events: none;
+  /* 插入线换位置时滑过去，不跳 */
+  transition: top 0.12s ease-out;
+  animation: drop-line-in 0.14s ease-out both;
+}
+
+@keyframes drop-line-in {
+  from {
+    opacity: 0;
+    transform: scaleX(0.6);
+  }
 }
 
 /* 从置顶里拖出来时手指旁边的提示 */
@@ -806,8 +836,11 @@ input:not([type="range"]):focus {
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar-drop-zone,
-  .sidebar-new-group {
+  .sidebar-new-group,
+  .drag-ghost,
+  .drop-line {
     animation: none;
+    transition: none;
   }
 }
 

@@ -57,6 +57,7 @@ export function SessionList({
   searching = false,
   flip = true,
   draggingId,
+  landingId,
   onPick,
 }: {
   sessions: Session[];
@@ -68,6 +69,8 @@ export function SessionList({
   flip?: boolean;
   /** 正在拖的会话（#153）：原来的位置淡下去，留着空档。 */
   draggingId?: string;
+  /** 刚松手、浮起的那条正滑过去的会话：列表里这一行先藏着，滑到了再露出来。 */
+  landingId?: string;
   /** 点了某个会话之后（手机上用来收起侧栏）。 */
   onPick?: () => void;
 }) {
@@ -95,7 +98,13 @@ export function SessionList({
               data-flip={flip ? session.shortId : undefined}
               data-session={session.shortId}
               data-archived={session.status === "archived" ? "" : undefined}
-              className={draggingId === session.shortId ? "drag-source" : undefined}
+              className={
+                draggingId === session.shortId
+                  ? "drag-source"
+                  : landingId === session.shortId
+                    ? "drag-landing"
+                    : undefined
+              }
             >
               <a
                 href={`/s/${session.shortId}`}

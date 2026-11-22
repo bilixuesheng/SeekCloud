@@ -4,6 +4,7 @@ import {
   classifyGesture,
   type DropZone,
   dropTarget,
+  placeLocally,
   rubberBand,
   shouldClose,
 } from "./drag-gesture";
@@ -109,5 +110,59 @@ describe("放到哪里", () => {
     expect(autoScrollSpeed(10, 0, 400)).toBeLessThan(0);
     expect(autoScrollSpeed(0, 0, 400)).toBeLessThan(autoScrollSpeed(30, 0, 400));
     expect(autoScrollSpeed(395, 0, 400)).toBeGreaterThan(0);
+  });
+});
+
+describe("松手时先在本地放好", () => {
+  const now = new Date("2026-11-22T10:00:00Z");
+  const s = { shortId: "x", pinnedAt: null, groupId: "g0", sortKey: 5 };
+  const keys = new Map([
+    ["a", 3000],
+    ["b", 2000],
+    ["c", 1000],
+  ]);
+
+  it("排序值取前后两个的中间；放在最上面、最下面时隔开一段；和主站的算法一样", () => {
+    const items = ["a", "b", "c"];
+    expect(placeLocally(s, { zone: "pinned", after: "a" }, items, keys, now).sortKey).toBe(2500);
+    expect(placeLocally(s, { zone: "pinned", after: null }, items, keys, now).sortKey).toBe(4000);
+    expect(placeLocally(s, { zone: "pinned", after: "c" }, items, keys, now).sortKey).toBe(0);
+    // "最近"的最上面：至少是现在的毫秒数（和有新动静时一样）
+    expect(placeLocally(s, { zone: "recent", after: null }, items, keys, now).sortKey).toBe(
+      now.getTime(),
+    );
+    expect(placeLocally(s, { zone: "group:g1", after: null }, [], keys, now).sortKey).toBe(
+      now.getTime(),
+    );
+  });
+
+  it("放到哪一类：置顶记下置顶时间、分组记下分组、最近两样都清掉", () => {
+    expect(placeLocally(s, { zone: "pinned", after: null }, [], keys, now)).toMatchObject({
+      pinnedAt: now.toISOString(),
+      groupId: null,
+    });
+    expect(placeLocally(s, { zone: "group:g1", after: null }, [], keys, now)).toMatchObject({
+      pinnedAt: null,
+      groupId: "g1",
+    });
+    expect(
+      placeLocally(
+        { ...s, pinnedAt: "2026-01-01T00:00:00Z" },
+        { zone: "recent", after: null },
+        [],
+        keys,
+        now,
+      ),
+    ).toMatchObject({ pinnedAt: null, groupId: null });
+    // 本来就置顶的，在置顶里换位置：置顶时间不变
+    expect(
+      placeLocally(
+        { ...s, pinnedAt: "2026-01-01T00:00:00Z" },
+        { zone: "pinned", after: "a" },
+        ["a"],
+        keys,
+        now,
+      ).pinnedAt,
+    ).toBe("2026-01-01T00:00:00Z");
   });
 });
