@@ -10,6 +10,7 @@ import type {
 import { SESSION_STATUSES, TURN_END_REASONS } from "@seekcloud/protocol";
 import {
   boolean,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -142,6 +143,24 @@ export const dataExports = pgTable(
 
 export const sessionStatus = pgEnum("session_status", SESSION_STATUSES);
 
+/**
+ * 侧栏里的分组（#153）：一个分组一个标题，在置顶和"最近"之间，按 sort_key 从小到大排（新建的在最后）。
+ * 删掉分组时里面的会话回到"最近"。
+ */
+export const sessionGroups = pgTable(
+  "session_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sortKey: doublePrecision("sort_key").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("session_groups_user").on(t.userId)],
+);
+
 /** 会话。对外（网址、接口、会话分支名）用短 ID，内部和宿主机之间用 id。 */
 export const sessions = pgTable(
   "sessions",
@@ -162,8 +181,13 @@ export const sessions = pgTable(
     effort: text("effort").$type<ThinkingEffort>().notNull(),
     // 最后一条会话事件的序号。追加事件时在这一行上加锁取号，保证序号连续、不重复。
     lastSeq: integer("last_seq").notNull().default(0),
-    // 置顶的时间：侧栏里置顶的会话放在最上面一组，按这个时间排（后置顶的在前）。没置顶时为空。
+    // 置顶的时间：侧栏里置顶的会话放在最上面一组。没置顶时为空。置顶的不在分组里。
     pinnedAt: timestamp("pinned_at", { withTimezone: true }),
+    // 在侧栏的哪个分组里（#153）；没分组（在"最近"或置顶里）时为空。
+    groupId: uuid("group_id").references(() => sessionGroups.id, { onDelete: "set null" }),
+    // 侧栏里的顺序（#153）：置顶、每个分组、"最近"里都按它从大到小排。"最近"里的会话有新动静时记成
+    // 当时的毫秒数，回到最上面；拖动时取前后两个的中间值（sidebar.ts）。
+    sortKey: doublePrecision("sort_key").notNull().default(0),
     // 有新内容（照 Claude）：回合结束或会话失败时没人开着这个会话就标上，打开就消掉；也能在菜单里手动标。
     unread: boolean("unread").notNull().default(false),
     // 沙箱在哪台宿主机上。派给宿主机时记下；宿主机只能上报自己名下的会话的事件。

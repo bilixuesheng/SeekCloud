@@ -15,6 +15,7 @@ describe("两个人互相看不到对方的数据", () => {
   let session: { shortId: string; sessionId: string; queueId: string; envId: string };
   let exportId: string;
   let errorRef: string;
+  let groupId: string;
 
   beforeAll(async () => {
     t = await createTestApp({ identity: identity.attach });
@@ -39,6 +40,11 @@ describe("两个人互相看不到对方的数据", () => {
     expect(queued.status).toBe(202);
     const queueId = ((await queued.json()) as { queued: { id: string } }).queued.id;
     session = { shortId, sessionId, queueId, envId: envs[0].id };
+
+    // 甲在侧栏里建了一个分组。
+    const group = await alice.post("/api/session-groups", { name: "甲的分组" });
+    expect(group.status).toBe(201);
+    groupId = ((await group.json()) as { id: string }).id;
 
     // 甲有一份打包好的数据导出。
     expect((await alice.post("/api/account/export")).status).toBe(202);
@@ -85,6 +91,20 @@ describe("两个人互相看不到对方的数据", () => {
       "GET /api/account/export/{id}/download": () =>
         bob.get(`/api/account/export/${exportId}/download`),
       "GET /api/model-errors/{ref}": () => bob.get(`/api/model-errors/${errorRef}`),
+      "POST /api/sessions/{shortId}/place": () =>
+        bob.post(`${s}/place`, { section: "pinned", after: null }),
+      "PATCH /api/session-groups/{id}": () =>
+        bob.request(`/api/session-groups/${groupId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "乙改的分组" }),
+        }),
+      "DELETE /api/session-groups/{id}": () =>
+        bob.request(`/api/session-groups/${groupId}`, {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        }),
     };
   };
 
@@ -127,6 +147,28 @@ describe("两个人互相看不到对方的数据", () => {
       `/api/sessions/${session.shortId}/queue/${session.queueId}/withdraw`,
     );
     expect(withdraw.status).toBe(200);
+  });
+
+  it("侧栏的分组：乙看不到甲的分组，也不能把自己的会话放进甲的分组；甲的分组没被改名、没被删", async () => {
+    const bobGroups = (await (await bob.get("/api/session-groups")).json()).groups as {
+      id: string;
+    }[];
+    expect(bobGroups.map((g) => g.id)).not.toContain(groupId);
+    const own = await bob.post("/api/sessions", {
+      repo: "bob/app",
+      baseBranch: "main",
+      text: "乙自己的",
+    });
+    const { shortId } = (await own.json()) as { shortId: string };
+    const placed = await bob.post(`/api/sessions/${shortId}/place`, {
+      section: "group",
+      groupId,
+      after: null,
+    });
+    expect(placed.status).toBe(404);
+    expect((await placed.json()).error.code).toBe("group_not_found");
+    const aliceGroups = (await (await alice.get("/api/session-groups")).json()).groups;
+    expect(aliceGroups).toEqual([expect.objectContaining({ id: groupId, name: "甲的分组" })]);
   });
 
   it("会话列表和列表的事件流里只有自己的会话", async () => {

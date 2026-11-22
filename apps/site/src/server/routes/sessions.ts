@@ -23,7 +23,7 @@ const Repo = z.object({
   access: z.enum(REPO_ACCESS),
 });
 
-const Session = z
+export const Session = z
   .object({
     shortId: z.string().openapi({ description: "会话短 ID，网址和会话分支名里用它" }),
     title: z.string(),
@@ -37,6 +37,11 @@ const Session = z
       .string()
       .nullable()
       .openapi({ format: "date-time", description: "置顶的时间，没置顶时为 null" }),
+    groupId: z
+      .string()
+      .nullable()
+      .openapi({ description: "在侧栏的哪个分组里；置顶的、在“最近”里的为 null" }),
+    sortKey: z.number().openapi({ description: "侧栏里的顺序：每一类里按它从大到小排" }),
     unread: z.boolean().openapi({ description: "有新内容（回合结束时没人开着这个会话）" }),
     createdAt: z.string().openapi({ format: "date-time" }),
     updatedAt: z.string().openapi({ format: "date-time" }),
@@ -123,7 +128,8 @@ const sessionListStreamRoute = createRoute({
   path: "/sessions/stream",
   summary: "会话列表的变化（SSE）",
   description:
-    "连上后先发一条 snapshot（全部会话），之后每当某个会话有变化，发一条 session（这个会话的最新内容）。",
+    "连上后先发一条 snapshot（全部会话和侧栏的分组），之后每当某个会话有变化，发一条 session（这个会话的最新内容）；" +
+    "会话被删了发 removed；分组建了、改名了、删了，发一条 groups（全部分组）。",
   responses: {
     200: eventStreamBody("事件流"),
     401: errorResponse("没有登录"),
@@ -478,13 +484,24 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
       if (!user) return c.json(notLoggedIn, 401);
       return eventStream(deps, c, async (stream) => {
         let snapshotSent = false;
+        let groupsChanged = false;
         const changed = new Set<string>();
         const push = guarded(stream, async () => {
           if (!snapshotSent) {
             changed.clear();
+            groupsChanged = false;
             const all = await sessions.list(user.id);
-            await stream.writeSSE({ event: "snapshot", data: JSON.stringify({ sessions: all }) });
+            const groups = await sessions.sidebar.groups(user.id);
+            await stream.writeSSE({
+              event: "snapshot",
+              data: JSON.stringify({ sessions: all, groups }),
+            });
             snapshotSent = true;
+          }
+          if (groupsChanged) {
+            groupsChanged = false;
+            const groups = await sessions.sidebar.groups(user.id);
+            await stream.writeSSE({ event: "groups", data: JSON.stringify({ groups }) });
           }
           for (const shortId of [...changed]) {
             changed.delete(shortId);
@@ -498,8 +515,15 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
           changed.add(shortId);
           void push();
         });
+        const unsubscribeGroups = sessions.subscribeGroups(user.id, () => {
+          groupsChanged = true;
+          void push();
+        });
         void push();
-        return unsubscribe;
+        return () => {
+          unsubscribe();
+          unsubscribeGroups();
+        };
       });
     })
     .openapi(getSessionRoute, async (c) => {

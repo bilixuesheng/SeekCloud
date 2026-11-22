@@ -1,3 +1,5 @@
+import type { SessionGroup } from "@seekcloud/protocol";
+import type { ReactNode } from "react";
 import {
   type ComponentType,
   useCallback,
@@ -13,6 +15,7 @@ import {
   CloseIcon,
   LogoutIcon,
   MenuIcon,
+  MoreIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
@@ -25,7 +28,9 @@ import { rememberNickname } from "./nickname";
 import type { OverlayProps, PageProps } from "./registry";
 import { Slot, useRegistry } from "./registry";
 import { isOverlay, navigate, pathOf, type Route, setOverlayOpen, useRoute } from "./router";
+import { GroupMenu } from "./session/GroupMenu";
 import { SessionList } from "./session/SessionList";
+import { sidebarSections, useCollapsed } from "./session/sidebar-sections";
 import { useSessions } from "./session/useSessions";
 import { type Me, ShellProvider, type ShellValue } from "./shell";
 
@@ -70,6 +75,56 @@ export function App() {
 }
 
 /** 侧栏左上角的标志：回首页。点了侧栏照样收起（手机上不做主区域的过渡，见 newSession）。 */
+/**
+ * 侧栏里能折叠的一类（置顶、每个分组，#153）：标题点了折叠或展开，记在这台设备上（useCollapsed）。
+ * 分组的标题右边有"⋯"（重命名、删除）。
+ */
+function SidebarSection({
+  id,
+  name,
+  collapsed,
+  onToggle,
+  onMore,
+  children,
+}: {
+  id: string;
+  name: string;
+  collapsed: boolean;
+  onToggle: () => void;
+  onMore?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="sidebar-group" data-flip={`section:${id}`}>
+      <div className="sidebar-section-head">
+        <button
+          type="button"
+          className="sidebar-section-toggle"
+          aria-expanded={!collapsed}
+          onClick={onToggle}
+        >
+          <span className="sidebar-section-name">{name}</span>
+          <span className="sidebar-section-chevron">
+            <ChevronRightIcon />
+          </span>
+        </button>
+        {onMore && (
+          <button
+            type="button"
+            className="sidebar-section-more"
+            aria-label={`分组菜单：${name}`}
+            aria-haspopup="dialog"
+            onClick={onMore}
+          >
+            <MoreIcon />
+          </button>
+        )}
+      </div>
+      <Collapse open={!collapsed}>{children}</Collapse>
+    </div>
+  );
+}
+
 function HomeLink({ onClick }: { onClick: () => void }) {
   return (
     <a
@@ -110,29 +165,18 @@ function Shell({
   const overlay = usePresence(overlayRoute, 200);
   const lastOverlay = useRef<Route>(route);
   if (overlayRoute) lastOverlay.current = route;
-  const { sessions, loaded, upsert } = useSessions();
+  const { sessions, groups, loaded, upsert } = useSessions();
   const [drawer, setDrawer] = useState(false);
   const [search, setSearch] = useState("");
   const currentId = page.page === "session" ? page.params.id : undefined;
   const query = search.trim().toLowerCase();
-  const shown = query
-    ? sessions.filter(
-        (s) =>
-          s.title.toLowerCase().includes(query) ||
-          s.repos.some((r) => r.fullName.toLowerCase().includes(query)),
-      )
-    : sessions;
-  // 置顶的放在最上面一组（后置顶的在前），已归档的收在列表最下面的一组里；搜索时不分组，一起搜
-  const pinned = query
-    ? []
-    : shown
-        .filter((s) => s.pinnedAt !== null && s.status !== "archived")
-        .sort((a, b) => (b.pinnedAt ?? "").localeCompare(a.pinnedAt ?? ""));
-  const archived = query ? [] : shown.filter((s) => s.status === "archived");
-  const listed = query
-    ? shown
-    : shown.filter((s) => s.status !== "archived" && s.pinnedAt === null);
+  // 侧栏从上到下：置顶、各个分组、最近，已归档的收在最下面（#153）；搜索时不分类，一起搜
+  const sections = sidebarSections(sessions, groups, query);
+  const { pinned, archived, recent: listed } = sections;
   const [showArchived, setShowArchived] = useState(false);
+  const [collapsed, toggleCollapsed] = useCollapsed();
+  const [groupMenu, setGroupMenu] = useState<SessionGroup>();
+  const [groupMenuOpen, setGroupMenuOpen] = useState(false);
   // 侧栏开着时换页（回首页、删掉正在看的会话）不做主区域的过渡：侧栏自己滑走就是过渡（router.ts）
   useLayoutEffect(() => setOverlayOpen(drawer), [drawer]);
   // 置顶、取消置顶、会话换位置时平滑地滑过去（Motion.tsx 的 useFlip）
@@ -146,6 +190,7 @@ function Shell({
     me,
     notice,
     sessions,
+    groups,
     upsert,
     openDrawer: () => setDrawer(true),
     overlayOpen: overlayRoute,
@@ -196,20 +241,46 @@ function Shell({
           </label>
           <div className="sidebar-list" ref={sidebarList}>
             {pinned.length > 0 && (
-              <>
-                <div className="sidebar-section" data-flip="section:pinned">
-                  已置顶
-                </div>
+              <SidebarSection
+                id="pinned"
+                name="已置顶"
+                collapsed={collapsed.has("pinned")}
+                onToggle={() => toggleCollapsed("pinned")}
+              >
                 <SessionList
                   sessions={pinned}
                   loaded
                   currentId={currentId}
                   onPick={() => setDrawer(false)}
                 />
-              </>
+              </SidebarSection>
             )}
-            {/* 会话都置顶了时不显示空的"最近" */}
-            {(listed.length > 0 || pinned.length === 0) && (
+            {sections.groups.map(({ group, sessions: inGroup }) => (
+              <SidebarSection
+                key={group.id}
+                id={`group:${group.id}`}
+                name={group.name}
+                collapsed={collapsed.has(`group:${group.id}`)}
+                onToggle={() => toggleCollapsed(`group:${group.id}`)}
+                onMore={() => {
+                  setGroupMenu(group);
+                  setGroupMenuOpen(true);
+                }}
+              >
+                {inGroup.length > 0 ? (
+                  <SessionList
+                    sessions={inGroup}
+                    loaded
+                    currentId={currentId}
+                    onPick={() => setDrawer(false)}
+                  />
+                ) : (
+                  <p className="session-list-empty">分组中暂无会话。</p>
+                )}
+              </SidebarSection>
+            ))}
+            {/* 会话都置顶了或都在分组里时不显示空的"最近" */}
+            {(listed.length > 0 || (pinned.length === 0 && sections.groups.length === 0)) && (
               <>
                 <div className="sidebar-section" data-flip="section:recent">
                   最近
@@ -249,6 +320,13 @@ function Shell({
               </div>
             )}
           </div>
+          {groupMenu && (
+            <GroupMenu
+              group={groups.find((g) => g.id === groupMenu.id) ?? groupMenu}
+              open={groupMenuOpen}
+              onClose={() => setGroupMenuOpen(false)}
+            />
+          )}
           <Slot name="sidebar-foot" />
           <AccountFoot
             name={me.nickname ?? me.githubLogin ?? "管理员"}

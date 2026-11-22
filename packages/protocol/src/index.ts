@@ -341,13 +341,30 @@ export interface Session extends SessionState {
   effort: ThinkingEffort;
   /** 会话用的环境的名字；环境被删掉了时为 null。 */
   environmentName: string | null;
-  /** 置顶的时间，没置顶时为 null。归档时自动取消置顶。 */
+  /** 置顶的时间，没置顶时为 null。归档时自动取消置顶。置顶的不在分组里。 */
   pinnedAt: string | null;
+  /** 在侧栏的哪个分组里（#153，SessionGroup 的 id）；置顶的、在"最近"里的为 null。 */
+  groupId: string | null;
+  /**
+   * 侧栏里的顺序（#153）：置顶、每个分组、"最近"里都按它从大到小排。"最近"里的会话有新动静时变大，
+   * 回到最上面；拖动以后由主站算。
+   */
+  sortKey: number;
   /** 有新内容：回合结束时没人开着这个会话就为真，打开就消掉；也能在菜单里手动标。 */
   unread: boolean;
   createdAt: string;
   updatedAt: string;
 }
+
+/** 侧栏里的一个分组（#153）。分组之间按 sortKey 从小到大排（新建的在最后）。 */
+export interface SessionGroup {
+  id: string;
+  name: string;
+  sortKey: number;
+}
+
+/** 分组名最长这么多字。 */
+export const MAX_GROUP_NAME = 40;
 
 /** 置顶的一条消息：seq 是那条 Agent 回复的事件序号；title 是短标题，为 null 表示还在生成。 */
 export interface MessagePin {
