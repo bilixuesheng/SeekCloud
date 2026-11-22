@@ -47,19 +47,3 @@ export function statusMark(
   if (unread) return "unread";
   return null;
 }
-
-const beijing = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: "Asia/Shanghai",
-  month: "numeric",
-  day: "numeric",
-});
-
-/** 会话列表里的时间："刚刚"、"5 分钟前"……更早的显示北京时间的日期。 */
-export function relativeTime(iso: string, now = Date.now()): string {
-  const minutes = Math.floor((now - new Date(iso).getTime()) / 60_000);
-  if (minutes < 1) return "刚刚";
-  if (minutes < 60) return `${minutes} 分钟前`;
-  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} 小时前`;
-  if (minutes < 7 * 24 * 60) return `${Math.floor(minutes / (24 * 60))} 天前`;
-  return beijing.format(new Date(iso));
-}

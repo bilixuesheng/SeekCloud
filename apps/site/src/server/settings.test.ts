@@ -203,3 +203,31 @@ describe("设置：平台调用的模型（#140）", () => {
     expect((await put(t.browser(), { model: "auto" })).status).toBe(401);
   });
 });
+
+describe("设置：界面语言（#135）", () => {
+  let t: TestApp;
+  beforeAll(async () => {
+    t = await createTestApp();
+  });
+  afterAll(() => t.close());
+
+  const putLanguage = (b: TestBrowser, body: unknown) =>
+    b.request("/api/settings/language", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("没改过是跟随浏览器；改了跟着管理员存，换一台设备登录读到的也是它；不支持的语言 400；没登录不行", async () => {
+    const browser = await t.admin();
+    expect(await (await browser.get("/api/settings/language")).json()).toEqual({
+      language: "auto",
+    });
+    expect((await putLanguage(browser, { language: "en" })).status).toBe(200);
+    const another = await t.admin();
+    expect(await (await another.get("/api/settings/language")).json()).toEqual({ language: "en" });
+    expect((await putLanguage(browser, { language: "ja" })).status).toBe(400);
+    expect((await t.browser().get("/api/settings/language")).status).toBe(401);
+    expect((await putLanguage(t.browser(), { language: "en" })).status).toBe(401);
+  });
+});

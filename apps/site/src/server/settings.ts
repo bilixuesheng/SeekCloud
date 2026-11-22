@@ -30,6 +30,9 @@ export const HostOfflineGraceValue = z
     error: "不支持这个时长",
   });
 
+/** 界面语言：跟随浏览器、简体中文、英文（和浏览器端 i18n/catalog.ts 的 LANGUAGE_SETTINGS 一致）。 */
+export const LanguageValue = z.enum(["auto", "zh-CN", "en"]);
+
 /** 所有的设置项：键、形状、主干的默认值。加一项设置就在这里加一行。 */
 export const SETTINGS = {
   /** AI 标识的两个开关，默认都开。 */
@@ -50,6 +53,11 @@ export const SETTINGS = {
    * 空的、或者那个模型不能用了，用第一个能用的模型。
    */
   default_model: { shape: z.string().max(300), fallback: "" as string },
+  /**
+   * 界面语言（#135）：auto 是跟随浏览器（中文浏览器用中文，别的用英文）。跟着管理员存在主站，换一台设备登录也记得；
+   * 浏览器里另存一份，免得刷新时先闪一下别的语言。
+   */
+  language: { shape: LanguageValue, fallback: "auto" as z.infer<typeof LanguageValue> },
   /**
    * 模型提供方（设置的"模型"：提供方、key、模型列表，#113）。内容存在 model_providers、provider_models 两张表里，
    * 不在这一项；这一项只用来问规则能不能改（SettingsPolicy.canWrite），下游可以不让普通用户改。

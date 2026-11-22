@@ -1,10 +1,11 @@
 import type { SessionState } from "@seekcloud/protocol";
 import { useState } from "react";
 import { MoreIcon, WarningIcon } from "../Icons";
+import { listTime } from "../i18n/format";
 import { navigate } from "../router";
 import { PullRequestBadge } from "./PullRequestBadge";
 import { SessionMenu } from "./SessionHeader";
-import { relativeTime, type Session, statusMark, statusText } from "./types";
+import { type Session, statusMark, statusText } from "./types";
 
 /** 呼吸一次的时长，和 styles.css 里 .session-pulse 的一样。 */
 const PULSE_MS = 1300;
@@ -124,7 +125,7 @@ export function SessionList({
                 </span>
                 <span className="session-item-meta">
                   <span className="session-item-repo">{session.repos[0]?.fullName}</span>
-                  <span className="session-item-time">{relativeTime(session.updatedAt)}</span>
+                  <span className="session-item-time">{listTime(session.updatedAt)}</span>
                 </span>
               </a>
               <button

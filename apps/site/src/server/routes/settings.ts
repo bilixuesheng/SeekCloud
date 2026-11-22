@@ -8,6 +8,7 @@ import {
   EffortValue,
   HOST_OFFLINE_GRACE_CHOICES,
   HostOfflineGraceValue,
+  LanguageValue,
   readSetting,
   writeSetting,
 } from "../settings";
@@ -131,6 +132,34 @@ const putDefaultModelRoute = createRoute({
   },
 });
 
+const Language = z.object({ language: LanguageValue }).openapi("Language", {
+  description: "界面语言：auto（跟随浏览器）、zh-CN（简体中文）、en（English）",
+});
+
+const getLanguageRoute = createRoute({
+  method: "get",
+  path: "/language",
+  summary: "界面语言",
+  responses: {
+    200: { description: "没改过时是 auto", ...json(Language) },
+    401: errorResponse("没有登录"),
+  },
+});
+
+const putLanguageRoute = createRoute({
+  method: "put",
+  path: "/language",
+  summary: "修改界面语言",
+  description: "跟着管理员存，换一台设备登录也用它。",
+  request: { body: { ...json(Language), required: true } },
+  responses: {
+    200: { description: "改好以后的值", ...json(Language) },
+    400: errorResponse("不支持这种语言"),
+    401: errorResponse("没有登录"),
+    403: errorResponse("这项设置不能修改（主干里不会出现）"),
+  },
+});
+
 const PlatformCandidate = z
   .object({
     ref: z.string(),
@@ -231,6 +260,20 @@ export function settingsRoutes(deps: AppDeps, sessions: Sessions) {
         return c.json(locked, 403);
       }
       return c.json({ seconds }, 200);
+    })
+    .openapi(getLanguageRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      return c.json({ language: await readSetting(deps, "language", { userId: me.id }) }, 200);
+    })
+    .openapi(putLanguageRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      const { language } = c.req.valid("json");
+      if (!(await writeSetting(deps, "language", { userId: me.id }, language))) {
+        return c.json(locked, 403);
+      }
+      return c.json({ language }, 200);
     })
     .openapi(getDefaultModelRoute, async (c) => {
       const me = await deps.identity.currentUser(c);

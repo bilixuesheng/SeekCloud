@@ -20,6 +20,7 @@ import {
   SearchIcon,
   SettingsIcon,
 } from "./Icons";
+import { syncLanguageWithSite } from "./i18n/sync";
 import { LoginPage } from "./LoginPage";
 import { Brand, Logo } from "./Logo";
 import { LegalLink } from "./legal/LegalPage";
@@ -47,6 +48,8 @@ export function App() {
       (res) => {
         rememberNickname(res.nickname);
         setMe(res);
+        // 界面语言跟着管理员存在主站：换了设备登录也用它（#135）
+        void syncLanguageWithSite();
       },
       (e: ApiError) => setMe(e.code === "setup_required" ? "setup" : null),
     );

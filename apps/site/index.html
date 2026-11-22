@@ -9,9 +9,12 @@
     <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="icon" href="/favicon-16.png" sizes="16x16" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <title>SeekCloud</title>
-    <!-- 设置里选的外观：在页面画出来之前设好。放在单独的文件里，内容安全策略不允许内联脚本 -->
+    <!-- PWA 清单中英各一份（名字和说明不同），locale-boot.js 按界面语言换成对应的那份 -->
+    <link rel="manifest" href="/manifest.zh-CN.webmanifest" />
+    <title>云上求索</title>
+    <!-- 设置里选的外观、界面语言：在页面画出来之前设好。放在单独的文件里，内容安全策略不允许内联脚本 -->
     <script src="/theme-boot.js"></script>
+    <script src="/locale-boot.js"></script>
   </head>
   <body>
     <div id="root"></div>

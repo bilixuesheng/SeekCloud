@@ -1,21 +1,23 @@
-import { THINKING_EFFORTS, type ThinkingEffort } from "@seekcloud/protocol";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { type ApiError, api } from "../api";
 import { prefetch, setCached, useCached } from "../cached";
 import type { GitHubStatus } from "../GitHubConnectCard";
 import { GitHubMark } from "../GitHubMark";
 import { CloseIcon } from "../Icons";
+import { pageTitle, t, useLocale } from "../i18n";
+import { shortDateTime } from "../i18n/format";
 import { LegalLink } from "../legal/LegalPage";
-import { type SettingsSectionEntry, type SettingsSectionProps, useRegistry } from "../registry";
+import {
+  type SettingsSectionEntry,
+  type SettingsSectionProps,
+  sectionName,
+  useRegistry,
+} from "../registry";
 import { navigate } from "../router";
-import { effortLabels } from "../session/ModelPicker";
-import { shortDateTime } from "../session/relative-time";
-import { reloadModels, useModels } from "../session/useModels";
-import { currentTheme, setTheme, type Theme } from "../theme";
 import { confirmDialog } from "../ui/confirm";
 import { Modal } from "../ui/modal";
 import { toast, useErrorToast } from "../ui/toast";
+import { DEFAULT_EFFORT, LANGUAGE } from "./GeneralSettings";
 import { MODEL_PROVIDERS } from "./ModelSettings";
 import { PasskeySection } from "./PasskeySettings";
 import { HOST_OFFLINE_GRACE } from "./SessionSettings";
@@ -24,7 +26,6 @@ import { CodeField, TwoFactorRow, useTwoFactor } from "./TwoFactorSettings";
 /** 设置窗口里各分类用到的接口。 */
 const AI_LABELS = "/api/settings/ai-labels";
 const GITHUB_STATUS = "/api/github/status";
-const DEFAULT_EFFORT = "/api/settings/default-effort";
 const ME = "/api/me";
 const EXPORTS = "/api/account/export";
 
@@ -64,6 +65,7 @@ export function SettingsDialog({
   closing?: boolean;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
+  const locale = useLocale();
   const sections = useRegistry().settingsSections;
   const current = resolveSection(sections, section);
   const Content = current?.component;
@@ -74,6 +76,7 @@ export function SettingsDialog({
       AI_LABELS,
       GITHUB_STATUS,
       DEFAULT_EFFORT,
+      LANGUAGE,
       ME,
       EXPORTS,
       HOST_OFFLINE_GRACE,
@@ -85,12 +88,17 @@ export function SettingsDialog({
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
     dialog.current?.focus();
-    document.title = "设置 · SeekCloud";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.title = "SeekCloud";
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // 标题跟着界面语言：设置 · 云上求索 / Settings · SeekCloud
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 换了语言要重新设标题
+  useEffect(() => {
+    document.title = t("settings.windowTitle");
+    return () => {
+      document.title = pageTitle();
+    };
+  }, [locale]);
 
   return (
     <div
@@ -104,17 +112,22 @@ export function SettingsDialog({
         className={`settings-dialog${closing ? " closing" : ""}`}
         role="dialog"
         aria-modal="true"
-        aria-label="设置"
+        aria-label={t("settings.title")}
         tabIndex={-1}
       >
         <header className="dialog-head">
-          <h1>设置</h1>
-          <button type="button" className="icon-button" aria-label="关闭" onClick={onClose}>
+          <h1>{t("settings.title")}</h1>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={t("common.close")}
+            onClick={onClose}
+          >
             <CloseIcon size={16} />
           </button>
         </header>
         <div className="settings-body">
-          <nav className="settings-nav" aria-label="设置分类">
+          <nav className="settings-nav" aria-label={t("settings.nav")}>
             {sections.map((item) => (
               <a
                 key={item.id}
@@ -127,7 +140,7 @@ export function SettingsDialog({
                 }}
               >
                 {item.icon}
-                {item.name}
+                {sectionName(item)}
               </a>
             ))}
           </nav>
@@ -144,111 +157,6 @@ export function SettingsDialog({
         </div>
       </div>
     </div>
-  );
-}
-
-const themes: Array<{ id: Theme; name: string }> = [
-  { id: "light", name: "浅色" },
-  { id: "dark", name: "深色" },
-  { id: "system", name: "跟随系统" },
-];
-
-/** 通用：外观和默认思考强度。 */
-export function GeneralSettings() {
-  return (
-    <>
-      <ThemeSettings />
-      <DefaultEffortSettings />
-    </>
-  );
-}
-
-/** 外观：三个缩略图就是单选项；缩略图里画一个小窗口，颜色写死，不跟着当前外观变。 */
-function ThemeSettings() {
-  const [theme, setThemeState] = useState(currentTheme);
-  return (
-    <section className="settings-section settings-group">
-      <h2>外观</h2>
-      <fieldset className="theme-tiles">
-        <legend className="visually-hidden">外观</legend>
-        {themes.map((item) => (
-          <label
-            key={item.id}
-            className={`theme-tile ${item.id}${theme === item.id ? " current" : ""}`}
-          >
-            <input
-              type="radio"
-              name="theme"
-              value={item.id}
-              checked={theme === item.id}
-              onChange={() => setTheme(item.id, () => flushSync(() => setThemeState(item.id)))}
-            />
-            <span className="theme-thumb" aria-hidden="true">
-              <span className="theme-window">
-                <i />
-                <i />
-                <b />
-              </span>
-            </span>
-            <span className="theme-name">{item.name}</span>
-          </label>
-        ))}
-      </fieldset>
-    </section>
-  );
-}
-
-/**
- * 新会话默认的思考强度：能用的模型支持的档位一排（只有 DeepSeek 时是四档），点了当场保存，没存上就拨回去并说明原因。
- * 存好以后重新取模型列表，首页的弹层和"恢复默认"跟着用新的值。
- */
-function DefaultEffortSettings() {
-  const loaded = useCached<{ effort: ThinkingEffort }>(DEFAULT_EFFORT);
-  const effort = loaded.data?.effort;
-  const models = useModels()?.models;
-  const offered = THINKING_EFFORTS.filter(
-    (e) => e === effort || (models ?? []).some((m) => m.efforts.includes(e)),
-  );
-  const [failed, setError] = useState<string>();
-  const error = failed ?? loaded.error;
-  useErrorToast(error);
-
-  const choose = async (next: ThinkingEffort) => {
-    if (!effort || next === effort) return;
-    const before = effort;
-    setCached(DEFAULT_EFFORT, { effort: next });
-    setError(undefined);
-    try {
-      await api(DEFAULT_EFFORT, { effort: next }, "PUT");
-      reloadModels();
-    } catch (e) {
-      setCached(DEFAULT_EFFORT, { effort: before });
-      toast((e as ApiError).message, "error");
-    }
-  };
-
-  return (
-    <section className="settings-section settings-group">
-      <h2>默认思考强度</h2>
-      <fieldset className="segmented" disabled={!effort}>
-        <legend className="visually-hidden">默认思考强度</legend>
-        {(offered.length > 0 ? offered : THINKING_EFFORTS).map((e) => (
-          <label key={e} className={`segment ${e}${effort === e ? " current" : ""}`}>
-            <input
-              type="radio"
-              name="default-effort"
-              value={e}
-              checked={effort === e}
-              onChange={() => void choose(e)}
-            />
-            <span className="segment-label">{effortLabels[e]}</span>
-          </label>
-        ))}
-      </fieldset>
-      <p className="settings-group-hint">
-        新会话默认使用这一档；所选模型没有这一档时，用它最接近的一档。已有的会话不受影响。
-      </p>
-    </section>
   );
 }
 

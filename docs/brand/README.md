@@ -43,6 +43,22 @@
 - 新会话页的问候语可以有文采（"路漫漫其修远兮"），但不能俏皮（不写"周末也在折腾？"这类）。
 - 例外：Agent 回复里的内容是模型生成的，不受这条约束；回复下方的"DeepSeek 是 AI 并且可能会犯错。"这句是用户指定的原文（2026-11-08），不改；Agent 工作时的状态写"深度求索中"（2026-11-08 用户指定）。
 
+### 英文
+
+界面文案中英两份，写在 `apps/site/src/client/i18n/` 的文案目录里（`zh.ts` 是基准，`en.ts` 的键必须一样，#135）。英文照下面写：
+
+- **简洁、克制**，陈述事实和结果，不寒暄（不写"Oops!""Great!"）。
+- **句子式大小写**：只有第一个词和专有名词首字母大写。按钮写"Export data"，不写"Export Data"；标题、标签页、菜单项也一样。
+- **称呼用"you"**，不用"the user"；不用感叹号。
+- **按钮用动词开头**："Sign in""Add model""Delete provider"。
+- **错误提示**先说发生了什么，再说怎么办："Incorrect code.""Too many attempts. Try again in 30 seconds."
+- **单复数**：数量会变的写成 `{ one, other }`（"1 minute ago""5 minutes ago"），不写"minute(s)"。
+- **数字和单位**按英文习惯（"8 characters""128K tokens"），标点用半角，省略号用"…"（一个字符，和中文一样）。
+- **品牌名**：英文界面用 SeekCloud，中文界面用"云上求索"（2026-11-18 定的）；文案里用 `{brand}`，不写死。
+- **固定的说法**：回复下方的提示写"DeepSeek is AI and can make mistakes."；Agent 工作时的状态写"Seeking…"（照中文原文译的，规格 #134）。
+- **问候语**另写一套，不直译中文的；可以有文采，不能俏皮。
+- **术语对照**：`GLOSSARY.md` 里每个术语后面括号里的英文就是界面上用的英文（Session、Turn、Sandbox、Environment、Provider、Usage……），不另起名字；界面上首字母不大写（"Start a session"），专有名词除外。
+
 ## 生成标志用的提示词
 
 ```text

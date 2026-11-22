@@ -373,6 +373,18 @@ input:not([type="range"]):focus {
   justify-content: center;
   gap: 24px;
   padding: 40px 16px calc(24px + env(safe-area-inset-bottom));
+  position: relative;
+}
+
+/* 登录页右上角切换界面语言（#135）：不抢眼，图标加一个小下拉框 */
+.auth-language {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
 }
 
 .auth-hero {
@@ -6606,6 +6618,17 @@ button.changes-path:hover {
   .select-list.closing {
     animation-duration: 0.01s;
   }
+}
+
+/* 登录页右上角的语言切换：下拉框不要边框，指上去才有底色 */
+.auth-language .select.small .select-button {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.auth-language .select.small .select-button:hover {
+  background: var(--hover);
 }
 
 /* ---- 模型提供方卡片（settings/models/ProviderCard.tsx）：直接列出模型，下面一排操作 ---- */

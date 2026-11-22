@@ -1,6 +1,7 @@
 import { fitEffort, type ThinkingEffort } from "@seekcloud/protocol";
 import { type CSSProperties, Fragment, type RefObject, useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../Icons";
+import { t } from "../i18n";
 import { Pages, reducedMotion, usePresence } from "../Motion";
 import { useClaimTouch } from "../touch";
 
@@ -16,15 +17,13 @@ export interface ModelInfo {
   efforts: ThinkingEffort[];
 }
 
-export const effortLabels: Record<ThinkingEffort, string> = {
-  off: "关闭",
-  minimal: "极低",
-  low: "低",
-  medium: "中",
-  high: "高",
-  xhigh: "很高",
-  max: "最高",
-};
+/**
+ * 思考强度每一档的名字（关闭、低、中、高……）：从文案目录现取，换了界面语言跟着变（#135）。
+ * 写成对象是为了原来的 effortLabels[档位] 写法不用改。
+ */
+export const effortLabels = new Proxy({} as Record<ThinkingEffort, string>, {
+  get: (_, level) => t(`effort.${String(level) as ThinkingEffort}`),
+});
 
 /** 拉到"最高"时，档位名的位置换成这句话，过一会儿再换回来。 */
 export const MAX_HINT = "思考时间更长，用量更多。";

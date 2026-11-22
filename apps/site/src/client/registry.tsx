@@ -44,12 +44,17 @@ export interface SettingsSectionProps {
 export interface SettingsSectionEntry {
   /** 地址里的那一段：/settings/<id>。 */
   id: string;
-  name: string;
+  /** 显示的名字。写成函数时每次画都现取，跟着界面语言变（主干的几类从文案目录取，#135）。 */
+  name: string | (() => string);
   icon: ReactNode;
   component: ComponentType<SettingsSectionProps>;
   /** 排在哪：小的在前。主干的几类是 10、20、30、40，下游插在中间或者放到后面。 */
   order: number;
 }
+
+/** 设置分类显示的名字。 */
+export const sectionName = (entry: SettingsSectionEntry): string =>
+  typeof entry.name === "function" ? entry.name() : entry.name;
 
 /**
  * 插槽：页面上留出来的几个位置，登记进来的组件按 order 依次显示，没有组件时不占位置。

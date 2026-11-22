@@ -1,7 +1,7 @@
 import { MODEL_PROTOCOLS, type ModelProtocol } from "@seekcloud/protocol";
 import { useState } from "react";
 import { type ApiError, api } from "../../api";
-import { shortDateTime } from "../../session/relative-time";
+import { shortDateTime } from "../../i18n/format";
 import { confirmDialog } from "../../ui/confirm";
 import { Modal } from "../../ui/modal";
 import { Select } from "../../ui/select";
