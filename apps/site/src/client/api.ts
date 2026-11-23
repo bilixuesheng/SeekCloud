@@ -1,3 +1,5 @@
+import { t } from "./i18n";
+
 export interface ApiError {
   code: string;
   /** 主站给的说明（中文）；界面上优先用文案目录里按 code 写好的（i18n/errors.ts 的 errorText）。 */
@@ -24,7 +26,7 @@ export async function api<T = unknown>(
   if (!res.ok) {
     const error = (data as { error?: ApiError } | undefined)?.error ?? {
       code: "network",
-      message: "网络异常，请稍后重试",
+      message: t("error.network"),
     };
     const retryAfter = Number(res.headers.get("retry-after"));
     throw retryAfter > 0 ? { ...error, retryAfter } : error;

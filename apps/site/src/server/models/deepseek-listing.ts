@@ -128,7 +128,6 @@ export function decodeListing(body: unknown, dshVersion: string): ModelEntry[] {
       provider: DEEPSEEK_PROVIDER,
       id,
       name: name ?? builtin?.name ?? id,
-      ...(builtin?.description ? { description: builtin.description } : {}),
       api: "anthropic-messages",
       contextWindow:
         contextWindow ?? builtin?.contextWindow ?? DEEPSEEK_MODELS[0]?.contextWindow ?? 0,

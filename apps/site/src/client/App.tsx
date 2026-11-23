@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { type ApiError, api } from "./api";
-import { takeAuthResult } from "./auth-results";
+import { authResultText, takeAuthResult } from "./auth-results";
 import {
   ChevronRightIcon,
   CloseIcon,
@@ -20,6 +20,8 @@ import {
   SearchIcon,
   SettingsIcon,
 } from "./Icons";
+import { useT } from "./i18n";
+import { errorText } from "./i18n/errors";
 import { syncLanguageWithSite } from "./i18n/sync";
 import { LoginPage } from "./LoginPage";
 import { Brand, Logo } from "./Logo";
@@ -39,7 +41,10 @@ import { type Me, ShellProvider, type ShellValue } from "./shell";
 export function App() {
   // undefined：还在问；null：没登录；"setup"：还没设置管理员密码。
   const [me, setMe] = useState<Me | "setup" | null>();
-  const [notice] = useState(takeAuthResult);
+  // 地址里关联 GitHub 的结果只读一次；提示的话按当前语言取，换了语言跟着换
+  const [authResult] = useState(takeAuthResult);
+  useT();
+  const notice = authResultText(authResult);
   const route = useRoute();
   const registry = useRegistry();
 
@@ -106,6 +111,7 @@ function SidebarSection({
   onRename?: (name: string) => Promise<void>;
   children: ReactNode;
 }) {
+  const t = useT();
   return (
     <div
       className={`sidebar-group${active ? " drop-active" : ""}`}
@@ -133,7 +139,7 @@ function SidebarSection({
           <button
             type="button"
             className="sidebar-section-more"
-            aria-label={`分组菜单：${name}`}
+            aria-label={t("sidebar.groupOptions", { name })}
             aria-haspopup="dialog"
             onClick={onMore}
           >
@@ -154,6 +160,7 @@ function GroupNameInput({
   name: string;
   onDone: (name: string) => Promise<void>;
 }) {
+  const t = useT();
   const [value, setValue] = useState(name);
   const done = useRef(false);
   const finish = (next: string) => {
@@ -164,7 +171,7 @@ function GroupNameInput({
   return (
     <input
       className="sidebar-group-name-input"
-      aria-label="分组名"
+      aria-label={t("group.name")}
       value={value}
       maxLength={MAX_GROUP_NAME}
       // biome-ignore lint/a11y/noAutofocus: 刚建好的分组，名字马上要改（照 Claude）
@@ -182,6 +189,7 @@ function GroupNameInput({
 
 /** 拖动时浮起来的会话、插入线和"松手取消置顶"的提示。都不接指针事件。 */
 function DragOverlay({ drag, list }: { drag: DragState; list: HTMLElement | null }) {
+  const t = useT();
   const rect = list?.getBoundingClientRect();
   const left = (rect?.left ?? 0) + 8;
   const width = (rect?.width ?? 280) - 16;
@@ -201,7 +209,7 @@ function DragOverlay({ drag, list }: { drag: DragState; list: HTMLElement | null
       </div>
       {drag.fromPinned && target && target.zone !== "pinned" && (
         <div className="drag-unpin" style={{ top: drag.y + 30, left: Math.max(8, drag.x - 60) }}>
-          松手取消置顶
+          {t("sidebar.releaseToUnpin")}
         </div>
       )}
     </>
@@ -322,6 +330,7 @@ function Shell({
   onSignedOut: () => void;
   onProfileChanged: () => void;
 }) {
+  const t = useT();
   const route = useRoute();
   const registry = useRegistry();
   // 设置这类弹窗盖在原来的页面上：记住打开之前在哪一页，底下照常显示它，关掉时回去。
@@ -400,7 +409,7 @@ function Shell({
         <aside
           ref={sidebarRef}
           className={`sidebar${drawer ? " open" : ""}${dragging ? " dragging" : ""}`}
-          aria-label="会话列表"
+          aria-label={t("sidebar.label")}
           inert={overlayRoute}
         >
           <div className="sidebar-head">
@@ -408,7 +417,7 @@ function Shell({
             <button
               type="button"
               className="icon-button sidebar-close"
-              aria-label="收起会话列表"
+              aria-label={t("sidebar.close")}
               onClick={() => setDrawer(false)}
             >
               <CloseIcon size={18} />
@@ -419,14 +428,14 @@ function Shell({
             <span className="new-session-icon">
               <PlusIcon size={14} />
             </span>
-            新会话
+            {t("sidebar.newSession")}
           </button>
           <label className="sidebar-search">
             <SearchIcon />
             <input
               type="search"
-              placeholder="搜索会话"
-              aria-label="搜索会话"
+              placeholder={t("sidebar.search")}
+              aria-label={t("sidebar.search")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -443,13 +452,13 @@ function Shell({
                 className={`sidebar-drop-zone${dropZone === "pinned" ? " active" : ""}`}
                 data-drop="pinned"
               >
-                拖到这里置顶
+                {t("sidebar.dropToPin")}
               </div>
             )}
             {pinned.length > 0 && (
               <SidebarSection
                 id="pinned"
-                name="已置顶"
+                name={t("sidebar.pinned")}
                 collapsed={collapsed.has("pinned")}
                 onToggle={() => toggleCollapsed("pinned")}
                 active={dropZone === "pinned"}
@@ -476,7 +485,9 @@ function Shell({
                 onRename={async (name) => {
                   setEditingGroup(undefined);
                   if (name === group.name) return;
-                  await renameGroup(group.id, name).catch((e: ApiError) => setDragError(e.message));
+                  await renameGroup(group.id, name).catch((e: ApiError) =>
+                    setDragError(errorText(e)),
+                  );
                 }}
                 onMore={() => {
                   setGroupMenu(group);
@@ -493,7 +504,7 @@ function Shell({
                     onPick={() => setDrawer(false)}
                   />
                 ) : (
-                  <p className="session-list-empty">分组中暂无会话。</p>
+                  <p className="session-list-empty">{t("sidebar.groupEmpty")}</p>
                 )}
               </SidebarSection>
             ))}
@@ -504,7 +515,7 @@ function Shell({
                 data-drop="recent"
               >
                 <div className="sidebar-section" data-flip="section:recent">
-                  最近
+                  {t("sidebar.recent")}
                 </div>
                 <SessionList
                   sessions={listed}
@@ -528,7 +539,7 @@ function Shell({
                   <span className="sidebar-archived-chevron">
                     <ChevronRightIcon />
                   </span>
-                  已归档
+                  {t("sidebar.archived")}
                   <span className="sidebar-archived-count">{archived.length}</span>
                 </button>
                 <Collapse open={showArchived}>
@@ -551,7 +562,7 @@ function Shell({
               data-floating
             >
               <PlusIcon size={14} />
-              新分组
+              {t("sidebar.newGroup")}
             </div>
           )}
           {dragging && drag && <DragOverlay drag={drag} list={sidebarList.current} />}
@@ -572,7 +583,7 @@ function Shell({
           )}
           <Slot name="sidebar-foot" />
           <AccountFoot
-            name={me.nickname ?? me.githubLogin ?? "管理员"}
+            name={me.nickname ?? me.githubLogin ?? t("account.admin")}
             onSettings={() => {
               navigate("/settings/general");
               setDrawer(false);
@@ -584,7 +595,7 @@ function Shell({
         <button
           type="button"
           className={`scrim${drawer ? " open" : ""}`}
-          aria-label="收起会话列表"
+          aria-label={t("sidebar.close")}
           aria-hidden={!drawer}
           tabIndex={drawer ? 0 : -1}
           onClick={() => setDrawer(false)}
@@ -596,14 +607,19 @@ function Shell({
             <button
               type="button"
               className="icon-button"
-              aria-label="会话列表"
+              aria-label={t("sidebar.label")}
               aria-expanded={drawer}
               onClick={() => setDrawer(true)}
             >
               <MenuIcon />
             </button>
-            <span className="mobile-title">新会话</span>
-            <button type="button" className="icon-button" aria-label="新会话" onClick={newSession}>
+            <span className="mobile-title">{t("sidebar.newSession")}</span>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={t("sidebar.newSession")}
+              onClick={newSession}
+            >
               <PlusIcon size={20} />
             </button>
           </header>
@@ -635,6 +651,7 @@ function AccountFoot({
   onSettings: () => void;
   onSignedOut: () => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   // 收起时也有动画，和弹出一样快（.popover.closing）
   const menu = usePresence(open, 180);
@@ -668,7 +685,7 @@ function AccountFoot({
             }}
           >
             <SettingsIcon />
-            设置
+            {t("settings.title")}
           </button>
           <div className="popover-divider" />
           <button
@@ -677,7 +694,7 @@ function AccountFoot({
             onClick={() => api("/api/auth/logout", {}).then(onSignedOut)}
           >
             <LogoutIcon />
-            退出登录
+            {t("account.signOut")}
           </button>
           <div className="account-menu-legal">
             <LegalLink doc="licenses" newTab />
@@ -701,8 +718,8 @@ function AccountFoot({
       <button
         type="button"
         className="icon-button"
-        aria-label="设置"
-        title="设置"
+        aria-label={t("settings.title")}
+        title={t("settings.title")}
         onClick={onSettings}
       >
         <SettingsIcon />

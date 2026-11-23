@@ -1553,7 +1553,8 @@ export class Sessions {
         })),
       model: r.model,
       effort: r.effort,
-      environmentName: (r.environmentId && environmentNames.get(r.environmentId)) || null,
+      // 空名字是默认环境（界面按语言显示名字），不能当成没有
+      environmentName: r.environmentId ? (environmentNames.get(r.environmentId) ?? null) : null,
       pinnedAt: r.pinnedAt?.toISOString() ?? null,
       groupId: r.groupId,
       sortKey: r.sortKey,

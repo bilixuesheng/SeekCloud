@@ -11,33 +11,14 @@ import { describe, expect, it } from "vitest";
  * 还没迁的文件先列在豁免清单里，#136 一页一页迁完，清单为空。清单里的文件已经没有汉字了，也会失败：提醒把它从清单里删掉。
  */
 const PENDING = new Set([
-  "App.tsx",
-  "GitHubConnectCard.tsx",
-  "api.ts",
-  "auth-results.ts",
-  "copy.tsx",
   "legal/LegalPage.tsx",
   "legal/licenses.ts",
-  "registry.tsx",
-  "session/AwaitingInputHint.tsx",
   "session/ChangesCard.tsx",
   "session/ChangesPanel.tsx",
-  "session/Composer.tsx",
-  "session/GroupMenu.tsx",
   "session/Markdown.tsx",
-  "session/ModelPicker.tsx",
-  "session/NewSession.tsx",
-  "session/OptionPicker.tsx",
-  "session/PullRequestBadge.tsx",
-  "session/SessionHeader.tsx",
-  "session/SessionList.tsx",
   "session/SessionPage.tsx",
   "session/errors.ts",
-  "session/greetings.ts",
-  "session/region.ts",
   "session/timeline.ts",
-  "session/types.ts",
-  "session/useSidebarDrag.ts",
   "settings/DataSettings.tsx",
   "settings/ModelSettings.tsx",
   "settings/PasskeySettings.tsx",
@@ -51,13 +32,10 @@ const PENDING = new Set([
   "settings/models/ProviderCard.tsx",
   "settings/models/tokens.ts",
   "settings/models/url-check.ts",
-  "ui/confirm.tsx",
-  "ui/modal.tsx",
-  "ui/toast.tsx",
 ]);
 
-/** 本身就是文案的文件（目录，和各种语言用自己的文字写的名字）。 */
-const CATALOGS = new Set(["i18n/zh.ts", "i18n/catalog.ts"]);
+/** 本身就是文案的文件（目录、中文的问候语，和各种语言用自己的文字写的名字）。 */
+const CATALOGS = new Set(["i18n/zh.ts", "i18n/catalog.ts", "i18n/greetings-zh.ts"]);
 
 /** 给开发者看的话（控制台提示、程序用错时抛的错）不是界面文案：那一行或上一行写上这个注释就不算。 */
 const NOT_UI = "不是界面文案";

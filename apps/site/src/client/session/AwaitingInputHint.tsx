@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronDownIcon } from "../Icons";
-import { listTime } from "../i18n/format";
+import { tRich, useT } from "../i18n";
+import { waitedTime } from "../i18n/format";
 import { Collapse } from "../Motion";
 import { navigate } from "../router";
 import { useShell } from "../shell";
@@ -12,6 +13,7 @@ import { useShell } from "../shell";
  */
 export function AwaitingInputHint() {
   const { sessions } = useShell();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const waiting = sessions
     .filter((s) => s.detail === "awaiting_input" && s.status !== "archived")
@@ -28,13 +30,9 @@ export function AwaitingInputHint() {
         >
           <span className="session-awaiting" aria-hidden="true" />
           <span className="awaiting-hint-text">
-            {only ? (
-              <>
-                <strong>{only.title}</strong> 正在等你输入
-              </>
-            ) : (
-              `有 ${waiting.length} 个会话在等你输入`
-            )}
+            {only
+              ? tRich("awaiting.one", { title: <strong>{only.title}</strong> })
+              : t("awaiting.many", { count: waiting.length })}
           </span>
           {!only && (
             <span className={`awaiting-hint-chevron${open ? " open" : ""}`}>
@@ -49,7 +47,7 @@ export function AwaitingInputHint() {
                 <li key={s.shortId}>
                   <button type="button" onClick={() => navigate(`/s/${s.shortId}`)}>
                     <span className="awaiting-hint-title">{s.title}</span>
-                    <span className="awaiting-hint-time">{waitedFor(s.updatedAt)}</span>
+                    <span className="awaiting-hint-time">{waitedTime(s.updatedAt)}</span>
                   </button>
                 </li>
               ))}
@@ -59,11 +57,4 @@ export function AwaitingInputHint() {
       </div>
     </Collapse>
   );
-}
-
-/** 等了多久："刚刚""等了 5 分钟""等了 2 小时"……更早的写日期（会话列表的时间去掉"前"）。 */
-function waitedFor(iso: string): string {
-  const text = listTime(iso);
-  if (text === "刚刚") return text;
-  return text.endsWith("前") ? `等了 ${text.slice(0, -1)}` : text;
 }

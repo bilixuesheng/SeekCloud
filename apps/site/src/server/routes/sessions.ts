@@ -101,7 +101,6 @@ const ModelInfo = z
     /** 接口里的模型 ID。 */
     model: z.string(),
     name: z.string(),
-    description: z.string(),
     input: z.array(z.enum(MODEL_INPUTS)),
     vision: z.boolean().openapi({ description: "能不能看图（input 里有 image）" }),
     contextWindow: z.number().int(),
@@ -506,7 +505,6 @@ export function sessionRoutes(deps: AppDeps, sessions: Sessions) {
               providerName: row.name,
               model: m.id,
               name: m.name,
-              description: m.description ?? "",
               input: m.input,
               vision: m.input.includes("image"),
               contextWindow: m.contextWindow,

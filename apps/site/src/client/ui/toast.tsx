@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CheckIcon, CloseIcon, WarningIcon } from "../Icons";
+import { useT } from "../i18n";
 
 /**
  * 通知（2026-11-22 用户要求）：操作的结果不直接插在页面里，在右下角弹出一条（手机上在底部），可以堆叠，
@@ -75,6 +76,7 @@ function resumeAll() {
 }
 
 export function ToastHost() {
+  const t = useT();
   const [list, setList] = useState(items);
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -108,7 +110,7 @@ export function ToastHost() {
             <button
               type="button"
               className="toast-close"
-              aria-label="关闭通知"
+              aria-label={t("common.dismiss")}
               onClick={() => dismissToast(item.id)}
             >
               <CloseIcon size={14} />

@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useT } from "../i18n";
 
 /**
  * 确认弹窗（2026-11-22 用户要求）：退出登录、删除这类要再确认一次的操作，弹出一个窗口问，不在原地把按钮换成
@@ -34,6 +35,7 @@ export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
 }
 
 export function ConfirmHost() {
+  const t = useT();
   const [pending, setPending] = useState<Pending>();
   const [closing, setClosing] = useState(false);
   const confirmButton = useRef<HTMLButtonElement>(null);
@@ -106,7 +108,7 @@ export function ConfirmHost() {
         {pending.body && <div className="confirm-body">{pending.body}</div>}
         <div className="confirm-actions">
           <button type="button" className="secondary" onClick={() => close(false)}>
-            {pending.cancelText ?? "取消"}
+            {pending.cancelText ?? t("common.cancel")}
           </button>
           <button
             ref={confirmButton}
@@ -114,7 +116,7 @@ export function ConfirmHost() {
             className={pending.danger ? "primary danger" : "primary"}
             onClick={() => close(true)}
           >
-            {pending.confirmText ?? "确定"}
+            {pending.confirmText ?? t("common.ok")}
           </button>
         </div>
       </div>

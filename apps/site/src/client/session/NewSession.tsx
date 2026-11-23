@@ -7,6 +7,8 @@ import { useSerifReady } from "../fonts";
 import { GitHubConnectCard, type GitHubStatus } from "../GitHubConnectCard";
 import { GitHubMark } from "../GitHubMark";
 import { BoxIcon, BranchIcon, ChevronDownIcon } from "../Icons";
+import { useLocale, useT } from "../i18n";
+import { errorText } from "../i18n/errors";
 import { Logo } from "../Logo";
 import { usePresence } from "../Motion";
 import { Slot } from "../registry";
@@ -16,8 +18,8 @@ import { handOffFirstMessage } from "./first-message";
 import { takeGreeting } from "./greetings";
 import { ModelPicker } from "./ModelPicker";
 import { OptionPicker } from "./OptionPicker";
-import { localRegionName } from "./region";
-import type { Session } from "./types";
+import { localRegion } from "./region";
+import { environmentLabel, type Session } from "./types";
 import { useModels } from "./useModels";
 
 interface Repo {
@@ -69,9 +71,17 @@ export function NewSession({
   nickname: string | null;
   onCreated: (session: Session) => void;
 }) {
+  const t = useT();
   const [initial] = useState(remembered);
-  const [greeting] = useState(() => takeGreeting(nickname, localRegionName()));
-  const greetingReady = useSerifReady(greeting);
+  // 问候语按界面语言挑；在首页上开着设置换了语言，回来看到的是新语言的一句
+  const locale = useLocale();
+  const [greeting, setGreeting] = useState(() => ({
+    locale,
+    text: takeGreeting(nickname, localRegion()),
+  }));
+  if (greeting.locale !== locale)
+    setGreeting({ locale, text: takeGreeting(nickname, localRegion()) });
+  const greetingReady = useSerifReady(greeting.text);
   const [github, setGitHub] = useState<GitHubStatus>();
   // GitHub 的状态回来（或者取失败）以前不能发送：免得记着的仓库还没认出来，就发成了不使用仓库的会话
   const [githubChecked, setGitHubChecked] = useState(false);
@@ -169,7 +179,7 @@ export function NewSession({
       handOffFocus();
       navigate(`/s/${session.shortId}`);
     } catch (e) {
-      setError((e as ApiError).message);
+      setError(errorText(e as ApiError));
       setBusy(false);
     }
   };
@@ -179,7 +189,7 @@ export function NewSession({
       <div className="greeting">
         {/* 首页用原图；发起会话时它挪到会话页底部（同名的 view transition），在那里变小以后才换成会动的鲸鱼 */}
         <Logo size={64} transitionName="seekcloud-whale" />
-        <h1 className={`serif-text${greetingReady ? "" : " pending"}`}>{greeting}</h1>
+        <h1 className={`serif-text${greetingReady ? "" : " pending"}`}>{greeting.text}</h1>
       </div>
       {/* 问候语下方（插槽，registry.tsx）："有会话在等你输入"的提示放这里 */}
       <Slot name="home-below-greeting" />
@@ -189,10 +199,10 @@ export function NewSession({
           value={text}
           onChange={setText}
           onSubmit={start}
-          placeholder="描述任务或提出问题"
+          placeholder={t("newSession.placeholder")}
           busy={busy}
           canSubmit={githubChecked}
-          submitLabel="发起会话"
+          submitLabel={t("newSession.submit")}
           autoFocus
           attach={{ vision: models.find((m) => m.id === model)?.vision ?? false }}
         />
@@ -203,9 +213,13 @@ export function NewSession({
               {environments.length > 0 && (
                 <OptionPicker
                   icon={<BoxIcon />}
-                  label="环境"
+                  label={t("environment.label")}
+                  searchLabel={t("environment.search")}
                   value={environmentId}
-                  options={environments.map((env) => ({ value: env.id, text: env.name }))}
+                  options={environments.map((env) => ({
+                    value: env.id,
+                    text: environmentLabel(env.name),
+                  }))}
                   onChange={setEnvironmentId}
                   onOpen={() => setPicking(false)}
                 />
@@ -219,21 +233,24 @@ export function NewSession({
                   onClick={() => setPicking(!picking)}
                 >
                   <GitHubMark size={14} />
-                  <span className="chip-text">{repo?.fullName ?? "不使用仓库"}</span>
-                  {repo && !repo.canPush && <span className="chip-badge">只读</span>}
+                  <span className="chip-text">{repo?.fullName ?? t("newSession.noRepo")}</span>
+                  {repo && !repo.canPush && (
+                    <span className="chip-badge">{t("repo.readOnly")}</span>
+                  )}
                   <ChevronDownIcon />
                 </button>
               )}
               {chosen && (
                 <OptionPicker
                   icon={<BranchIcon />}
-                  label="基础分支"
+                  label={t("newSession.baseBranch")}
+                  searchLabel={t("newSession.searchBranches")}
                   value={branch}
                   options={branches.map((b) => ({ value: b, text: b }))}
                   onChange={setBranch}
                   onOpen={() => setPicking(false)}
                   searchable
-                  emptyText="未找到匹配的分支。"
+                  emptyText={t("newSession.noBranchMatch")}
                 />
               )}
             </div>
@@ -245,7 +262,7 @@ export function NewSession({
               className="chip model-trigger"
               onClick={() => navigate("/settings/model")}
             >
-              <span className="chip-text">选择模型</span>
+              <span className="chip-text">{t("newSession.chooseModel")}</span>
             </button>
           )}
           {modelList && models.length > 0 && (
@@ -303,6 +320,7 @@ function RepoPicker({
   onPick: (repo: Repo | undefined) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   // 不搜的时候用预先拉好的列表（打开首页时就开始拉了）；搜的时候先在这份里筛，服务器的结果（含公开仓库）回来再换上
   const all = useCached<{ repos: Repo[] }>(REPOS);
@@ -344,7 +362,7 @@ function RepoPicker({
           setFound({ q, repos: res.repos });
           setSearchError(undefined);
         },
-        (e: ApiError) => setSearchError(e.message),
+        (e: ApiError) => setSearchError(errorText(e)),
       );
     }, 250);
     return () => clearTimeout(timer);
@@ -354,14 +372,14 @@ function RepoPicker({
     <section
       ref={root}
       className={`popover repo-picker${closing ? " closing" : ""}`}
-      aria-label="选择仓库"
+      aria-label={t("repoPicker.title")}
     >
       <input
         ref={search}
         className="popover-search"
         type="search"
-        placeholder="搜索仓库（含公开仓库）"
-        aria-label="搜索仓库"
+        placeholder={t("repoPicker.search")}
+        aria-label={t("repoPicker.searchLabel")}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => e.key === "Escape" && onClose()}
@@ -372,9 +390,7 @@ function RepoPicker({
         </p>
       )}
       {repos && repos.length === 0 && (
-        <p className="popover-empty">
-          {query ? "未找到匹配的仓库。" : "暂无已安装 GitHub App 的仓库。"}
-        </p>
+        <p className="popover-empty">{query ? t("repoPicker.noMatch") : t("repoPicker.empty")}</p>
       )}
       <ul className="repo-list">
         {/* 不使用仓库（#191）：沙箱里不克隆，Agent 在空的工作目录里工作 */}
@@ -386,7 +402,7 @@ function RepoPicker({
               onClick={() => onPick(undefined)}
             >
               <BoxIcon />
-              <span className="repo-name">不使用仓库</span>
+              <span className="repo-name">{t("newSession.noRepo")}</span>
             </button>
           </li>
         )}
@@ -400,8 +416,8 @@ function RepoPicker({
               <GitHubMark size={14} />
               <span className="repo-name">{repo.fullName}</span>
               <span className="badges">
-                {repo.private && <span className="badge">私有</span>}
-                {!repo.canPush && <span className="badge warn">只读</span>}
+                {repo.private && <span className="badge">{t("repo.private")}</span>}
+                {!repo.canPush && <span className="badge warn">{t("repo.readOnly")}</span>}
               </span>
             </button>
           </li>
@@ -412,7 +428,7 @@ function RepoPicker({
           <GitHubMark size={12} /> {status.login}
         </span>
         <a href={status.installUrl} target="_blank" rel="noreferrer">
-          管理仓库权限
+          {t("repoPicker.manage")}
         </a>
       </div>
     </section>

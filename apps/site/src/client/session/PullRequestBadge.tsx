@@ -1,12 +1,13 @@
 import type { PullRequestRef, PullRequestState } from "@seekcloud/protocol";
 import type { ReactNode } from "react";
 import { ClosedPullRequestIcon, MergedIcon, PullRequestIcon } from "../Icons";
+import { type PlainKey, t } from "../i18n";
 
-const labels: Record<PullRequestState, string> = {
-  open: "打开",
-  draft: "草稿",
-  merged: "已合并",
-  closed: "已关闭",
+const labels: Record<PullRequestState, PlainKey> = {
+  open: "pr.open",
+  draft: "pr.draft",
+  merged: "pr.merged",
+  closed: "pr.closed",
 };
 
 const icons: Record<PullRequestState, (size: number) => ReactNode> = {
@@ -16,7 +17,8 @@ const icons: Record<PullRequestState, (size: number) => ReactNode> = {
   closed: (size) => <ClosedPullRequestIcon size={size} />,
 };
 
-export const pullRequestText = (pr: PullRequestRef) => `PR #${pr.number} · ${labels[pr.state]}`;
+export const pullRequestText = (pr: PullRequestRef) =>
+  t("pr.text", { number: pr.number, state: t(labels[pr.state]) });
 
 /**
  * 会话分支上 PR 的状态图标：

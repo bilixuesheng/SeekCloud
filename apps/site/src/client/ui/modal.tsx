@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { CloseIcon } from "../Icons";
+import { useT } from "../i18n";
 import { usePresence } from "../Motion";
 
 /** 开着的弹窗，后开的在后面：弹窗里还能再开弹窗（编辑一个模型），Esc 只关最上面那个。 */
@@ -28,6 +29,7 @@ export function Modal({
   /** 标题下面的一行小字。 */
   subtitle?: string;
 }) {
+  const t = useT();
   const { mounted, closing } = usePresence(shown, 220);
   const card = useRef<HTMLDivElement>(null);
   const restoreFocus = useRef<HTMLElement | null>(null);
@@ -85,7 +87,12 @@ export function Modal({
             <h2>{title}</h2>
             {subtitle && <span className="modal-subtitle">{subtitle}</span>}
           </span>
-          <button type="button" className="toast-close" aria-label="关闭" onClick={onClose}>
+          <button
+            type="button"
+            className="toast-close"
+            aria-label={t("common.close")}
+            onClick={onClose}
+          >
             <CloseIcon size={16} />
           </button>
         </div>

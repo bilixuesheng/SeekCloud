@@ -1,6 +1,7 @@
 import type { SessionState } from "@seekcloud/protocol";
 import { useState } from "react";
 import { MoreIcon, WarningIcon } from "../Icons";
+import { useT } from "../i18n";
 import { listTime } from "../i18n/format";
 import { navigate } from "../router";
 import { PullRequestBadge } from "./PullRequestBadge";
@@ -16,6 +17,7 @@ const PULSE_MS = 1300;
  * 按页面打开以来的时间算好起点，不管哪一行什么时候出现。"等你输入"做了再加。
  */
 export function StatusMark({ state, unread = false }: { state: SessionState; unread?: boolean }) {
+  const t = useT();
   const label = statusText(state);
   const [delay] = useState(() => -(performance.now() % PULSE_MS));
   switch (statusMark(state, unread)) {
@@ -38,10 +40,22 @@ export function StatusMark({ state, unread = false }: { state: SessionState; unr
     case "awaiting":
       // 一个强调色的圆圈里一个点：和"有新内容"的实心蓝点分得开
       return (
-        <span className="session-awaiting" role="img" aria-label="等你输入" title="等你输入" />
+        <span
+          className="session-awaiting"
+          role="img"
+          aria-label={t("status.awaitingInput")}
+          title={t("status.awaitingInput")}
+        />
       );
     case "unread":
-      return <span className="session-unread" role="img" aria-label="有新内容" title="有新内容" />;
+      return (
+        <span
+          className="session-unread"
+          role="img"
+          aria-label={t("status.unread")}
+          title={t("status.unread")}
+        />
+      );
     default:
       return null;
   }
@@ -79,11 +93,12 @@ export function SessionList({
   const [menuFor, setMenuFor] = useState<string>();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuSession = sessions.find((s) => s.shortId === menuFor);
-  if (!loaded) return <p className="session-list-empty">正在加载…</p>;
+  const t = useT();
+  if (!loaded) return <p className="session-list-empty">{t("common.loading")}</p>;
   if (sessions.length === 0) {
     return (
       <p className="session-list-empty">
-        {searching ? "未找到匹配的会话。" : "暂无会话，输入任务即可开始。"}
+        {searching ? t("sessionList.noMatch") : t("sessionList.empty")}
       </p>
     );
   }
@@ -131,7 +146,7 @@ export function SessionList({
               <button
                 type="button"
                 className="session-item-more"
-                aria-label={`会话菜单：${session.title}`}
+                aria-label={t("sessionList.options", { title: session.title })}
                 aria-haspopup="dialog"
                 onClick={() => {
                   setMenuFor(session.shortId);

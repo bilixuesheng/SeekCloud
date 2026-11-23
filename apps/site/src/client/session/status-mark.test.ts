@@ -1,5 +1,6 @@
 import type { SessionState } from "@seekcloud/protocol";
 import { describe, expect, it } from "vitest";
+import { resetForTests } from "../i18n";
 import { statusMark, statusText, statusWithDetail } from "./types";
 
 describe("侧栏的状态标记和状态文字（#139）", () => {
@@ -35,5 +36,19 @@ describe("侧栏的状态标记和状态文字（#139）", () => {
     expect(statusText(s("running", "preparing_sandbox"))).toBe("正在准备沙箱");
     expect(statusWithDetail(s("dormant", "awaiting_input"))).toBe("休眠 · 等你输入");
     expect(statusWithDetail(s("waiting"))).toBe("等待回复");
+  });
+
+  it("英文", () => {
+    resetForTests("en");
+    try {
+      expect(statusText(s("waiting", "awaiting_input"))).toBe("Awaiting input");
+      expect(statusText(s("queued"))).toBe("Queued");
+      expect(statusWithDetail(s("dormant", "awaiting_input"))).toBe("Dormant · Awaiting input");
+      expect(statusWithDetail(s("running", "preparing_sandbox"))).toBe(
+        "Running · Preparing sandbox",
+      );
+    } finally {
+      resetForTests("zh-CN");
+    }
   });
 });

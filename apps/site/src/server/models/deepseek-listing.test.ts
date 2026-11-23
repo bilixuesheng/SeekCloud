@@ -33,7 +33,6 @@ describe("DeepSeek 发布的模型列表（照 dsh 的规则读）", () => {
       maxTokens: 64_000,
       input: ["text"],
       efforts: ["off", "low", "high", "max"],
-      description: DEEPSEEK_MODELS[0]?.description,
     });
   });
 

@@ -2084,6 +2084,8 @@ input:not([type="range"]):focus {
   font-weight: 600;
   letter-spacing: 0.02em;
   text-align: center;
+  /* 放不下一行时两行差不多长，不留一个词单独一行（英文的问候语在 320 宽的手机上会折行） */
+  text-wrap: balance;
 }
 
 .new-session-composer {
@@ -5341,7 +5343,7 @@ button.changes-path:hover {
   gap: 10px;
   width: 100%;
   min-height: 44px;
-  padding: 0 14px;
+  padding: 6px 14px;
   border: 0;
   background: transparent;
   color: var(--fg-2);
@@ -5356,12 +5358,16 @@ button.changes-path:hover {
   background: var(--hover);
 }
 
+/* 窄屏上放不下时折成两行（英文长），再长才省略 */
 .awaiting-hint-text {
   flex: 1;
   min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .awaiting-hint-text strong {

@@ -78,6 +78,7 @@ export interface SlotEntry {
 }
 
 const warn = (message: string) => {
+  // 不是界面文案：给下游的开发者看的提示
   if (import.meta.env?.DEV) console.warn(`SeekCloud 注册表：${message}`);
 };
 
@@ -90,6 +91,7 @@ export class Registry {
   page(entry: PageEntry): this {
     const clash = this.#pages.findIndex((p) => p.id === entry.id || p.path === entry.path);
     if (clash >= 0) {
+      // 不是界面文案：给下游的开发者看的提示
       warn(`页面 ${entry.id}（${entry.path}）盖掉了先登记的 ${this.#pages[clash]?.id}`);
       this.#pages.splice(clash, 1);
     }
@@ -101,6 +103,7 @@ export class Registry {
   settings(entry: SettingsSectionEntry): this {
     const clash = this.#sections.findIndex((s) => s.id === entry.id);
     if (clash >= 0) {
+      // 不是界面文案：给下游的开发者看的提示
       warn(`设置分类 ${entry.id} 盖掉了先登记的`);
       this.#sections.splice(clash, 1);
     }
@@ -112,6 +115,7 @@ export class Registry {
   slot(name: SlotName, entry: SlotEntry): this {
     const list = (this.#slots.get(name) ?? []).filter((s) => {
       if (s.id !== entry.id) return true;
+      // 不是界面文案：给下游的开发者看的提示
       warn(`插槽 ${name} 里的 ${entry.id} 盖掉了先登记的`);
       return false;
     });

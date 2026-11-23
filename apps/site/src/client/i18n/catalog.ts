@@ -27,3 +27,8 @@ type Names<S extends string> = S extends `${string}{${infer Name}}${infer Rest}`
 
 /** 调用时要传的插值：中文目录里写着的那些，{brand} 自动填。 */
 export type Params<K extends MessageKey> = Exclude<Names<(typeof zh)[K]>, "brand">;
+
+/** 不用传插值的键：按状态、结果挑一条文案的表里用（Record<…, PlainKey>），取的时候直接 t(key)。 */
+export type PlainKey = {
+  [K in MessageKey]: [Params<K>] extends [never] ? K : never;
+}[MessageKey];

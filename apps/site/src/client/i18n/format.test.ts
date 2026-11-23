@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { fullTime, listTime, relativeTime, shortDateTime } from "./format";
+import { fullTime, listTime, relativeTime, shortDateTime, waitedTime } from "./format";
 import { resetForTests } from "./index";
 
 // 都用本地时间构造，测试不受时区影响。
@@ -46,6 +46,12 @@ describe("消息下面的时间（中文）", () => {
     expect(listTime("2026-11-10T09:00:00Z", t0)).toBe("3 小时前");
     expect(listTime("2026-11-08T12:00:00Z", t0)).toBe("2 天前");
     expect(listTime("2026-10-20T12:00:00Z", t0)).toBe("10/20");
+    // 首页"有会话在等你输入"的列表：等了多久
+    expect(waitedTime("2026-11-10T11:59:40Z", t0)).toBe("刚刚");
+    expect(waitedTime("2026-11-10T11:55:00Z", t0)).toBe("等了 5 分钟");
+    expect(waitedTime("2026-11-10T09:00:00Z", t0)).toBe("等了 3 小时");
+    expect(waitedTime("2026-11-08T12:00:00Z", t0)).toBe("等了 2 天");
+    expect(waitedTime("2026-10-20T12:00:00Z", t0)).toBe("10/20");
   });
 });
 
@@ -63,5 +69,9 @@ describe("英文", () => {
     const t0 = Date.parse("2026-11-10T12:00:00Z");
     expect(listTime("2026-11-10T11:00:00Z", t0)).toBe("1 hour ago");
     expect(listTime("2026-11-08T12:00:00Z", t0)).toBe("2 days ago");
+    expect(waitedTime("2026-11-10T11:59:00Z", t0)).toBe("Waiting for 1 minute");
+    expect(waitedTime("2026-11-10T09:00:00Z", t0)).toBe("Waiting for 3 hours");
+    expect(waitedTime("2026-11-09T12:00:00Z", t0)).toBe("Waiting for 1 day");
+    expect(waitedTime("2026-10-20T12:00:00Z", t0)).toBe("Oct 20");
   });
 });

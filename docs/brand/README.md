@@ -55,7 +55,7 @@
 - **单复数**：数量会变的写成 `{ one, other }`（"1 minute ago""5 minutes ago"），不写"minute(s)"。
 - **数字和单位**按英文习惯（"8 characters""128K tokens"），标点用半角，省略号用"…"（一个字符，和中文一样）。
 - **品牌名**：英文界面用 SeekCloud，中文界面用"云上求索"（2026-11-18 定的）；文案里用 `{brand}`，不写死。
-- **固定的说法**：回复下方的提示写"DeepSeek is AI and can make mistakes."；Agent 工作时的状态写"Seeking…"（照中文原文译的，规格 #134）。
+- **固定的说法**：回复下方的提示写"DeepSeek is AI and can make mistakes."；Agent 工作时的状态写"Seeking…"（照中文原文译的，规格 #134）。默认环境写"Default"（照 Claude Code 的叫法，中文是"默认环境"）。
 - **问候语**另写一套，不直译中文的；可以有文采，不能俏皮。
 - **术语对照**：`GLOSSARY.md` 里每个术语后面括号里的英文就是界面上用的英文（Session、Turn、Sandbox、Environment、Provider、Usage……），不另起名字；界面上首字母不大写（"Start a session"），专有名词除外。
 
