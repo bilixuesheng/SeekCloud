@@ -7,7 +7,7 @@ import {
 } from "@simplewebauthn/browser";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { type ApiError, api } from "../api";
-import { t } from "../i18n";
+import { t, useT } from "../i18n";
 import { errorText } from "../i18n/errors";
 import { shortDateTime } from "../i18n/format";
 import { Modal } from "../ui/modal";
@@ -64,6 +64,7 @@ type Step = { kind: "idle" } | { kind: "add" } | { kind: "delete"; passkey: Pass
 
 /** 设置"账户"里的通行密钥。身份来源没有这个接口（下游换掉了）时整节不显示。 */
 export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
+  useT();
   const [list, setList] = useState<PasskeyList | null>();
   const [step, setStep] = useState<Step>({ kind: "idle" });
   const [name, setName] = useState("");
@@ -82,7 +83,7 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
 
   const go = (next: Step, notice?: string) => {
     setStep(next);
-    setName(next.kind === "add" ? "通行密钥" : "");
+    setName(next.kind === "add" ? t("passkey.defaultName") : "");
     setPassword("");
     setCode("");
     if (notice) toast(notice);
@@ -100,10 +101,10 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
         );
         const credential = await startRegistration({ optionsJSON });
         await api("/api/auth/passkeys/register", { name, credential });
-        go({ kind: "idle" }, "通行密钥已添加。");
+        go({ kind: "idle" }, t("passkey.added"));
       } else if (step.kind === "delete") {
         await api(`/api/auth/passkeys/${step.passkey.id}`, reauth, "DELETE");
-        go({ kind: "idle" }, "通行密钥已删除。");
+        go({ kind: "idle" }, t("passkey.deleted"));
       }
       await load();
     } catch (e) {
@@ -120,28 +121,29 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
 
   if (!list) return null;
   const unavailable = !list.available
-    ? "通行密钥需要通过 HTTPS 访问主站（或在本机用 localhost 打开），并将环境变量 PUBLIC_URL 设为主站对外的地址。"
+    ? t("passkey.needsHttps")
     : !supported
-      ? "当前浏览器不支持通行密钥。"
+      ? t("passkey.unsupported")
       : undefined;
 
   return (
     <section className="settings-section">
-      <h2>通行密钥</h2>
-      <p className="settings-hint">
-        使用设备的指纹、面容或锁屏密码登录，无需输入密码和验证码。通行密钥与主站的地址绑定，地址变更后需重新添加。
-      </p>
+      <h2>{t("passkey.title")}</h2>
+      <p className="settings-hint">{t("passkey.hint")}</p>
       <div className="settings-card">
         {list.passkeys.map((p) => (
           <div key={p.id} className="settings-row">
             <span className="settings-row-text">
               <span className="settings-row-name">{p.name}</span>
               <span className={`settings-row-sub${p.usable ? "" : " warn"}`}>
-                {p.usable
-                  ? `添加于 ${shortDateTime(new Date(p.createdAt))}${
-                      p.lastUsedAt ? ` · 最后使用于 ${shortDateTime(new Date(p.lastUsedAt))}` : ""
-                    }`
-                  : "主站地址已变更，此通行密钥无法使用"}
+                {!p.usable
+                  ? t("passkey.unusable")
+                  : p.lastUsedAt
+                    ? t("passkey.addedUsed", {
+                        added: shortDateTime(new Date(p.createdAt)),
+                        used: shortDateTime(new Date(p.lastUsedAt)),
+                      })
+                    : t("passkey.addedAt", { time: shortDateTime(new Date(p.createdAt)) })}
               </span>
             </span>
             <button
@@ -149,31 +151,31 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
               className="pill-button"
               onClick={() => go({ kind: "delete", passkey: p })}
             >
-              删除
+              {t("common.delete")}
             </button>
           </div>
         ))}
-        {list.passkeys.length === 0 && <p className="settings-row-sub">尚未添加通行密钥。</p>}
+        {list.passkeys.length === 0 && <p className="settings-row-sub">{t("passkey.none")}</p>}
         {!unavailable && (
           <button
             type="button"
             className="pill-button settings-card-action"
             onClick={() => go({ kind: "add" })}
           >
-            添加通行密钥
+            {t("passkey.add")}
           </button>
         )}
         {unavailable && <p className="settings-hint">{unavailable}</p>}
 
         <Modal
           open={step.kind !== "idle"}
-          title={view.kind === "delete" ? "删除通行密钥" : "添加通行密钥"}
+          title={view.kind === "delete" ? t("passkey.delete") : t("passkey.add")}
           onClose={() => go({ kind: "idle" })}
         >
           <form className="settings-form" onSubmit={submit}>
             {view.kind === "add" ? (
               <label className="field">
-                <span>名称</span>
+                <span>{t("passkey.name")}</span>
                 <input
                   type="text"
                   maxLength={50}
@@ -184,8 +186,7 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
               </label>
             ) : (
               <p className="settings-hint">
-                删除“{view.kind === "delete" ? view.passkey.name : ""}
-                ”后，将无法再用它登录。设备上保存的通行密钥需要在设备上另行删除。
+                {t("passkey.deleteHint", { name: view.kind === "delete" ? view.passkey.name : "" })}
               </p>
             )}
             <input
@@ -197,7 +198,7 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
               readOnly
             />
             <label className="field">
-              <span>当前密码</span>
+              <span>{t("password.current")}</span>
               <input
                 type="password"
                 autoComplete="current-password"
@@ -206,17 +207,23 @@ export function PasskeySection({ twoFactor }: { twoFactor: boolean }) {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </label>
-            {twoFactor && <CodeField value={code} onChange={setCode} label="验证码或恢复码" />}
+            {twoFactor && (
+              <CodeField value={code} onChange={setCode} label={t("twoFactor.codeOrRecovery")} />
+            )}
             <div className="settings-form-actions">
               <button type="button" className="secondary" onClick={() => go({ kind: "idle" })}>
-                取消
+                {t("common.cancel")}
               </button>
               <button
                 type="submit"
                 className={view.kind === "delete" ? "primary danger" : "primary"}
                 disabled={busy}
               >
-                {busy ? "请稍候…" : view.kind === "add" ? "继续" : "删除"}
+                {busy
+                  ? t("common.pleaseWait")
+                  : view.kind === "add"
+                    ? t("common.continue")
+                    : t("common.delete")}
               </button>
             </div>
           </form>

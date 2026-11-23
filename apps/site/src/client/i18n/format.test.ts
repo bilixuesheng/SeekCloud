@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { fullTime, listTime, relativeTime, shortDateTime, waitedTime } from "./format";
+import {
+  fullTime,
+  listTime,
+  minutesParts,
+  relativeTime,
+  shortDateTime,
+  waitedTime,
+} from "./format";
 import { resetForTests } from "./index";
 
 // 都用本地时间构造，测试不受时区影响。
@@ -73,5 +80,13 @@ describe("英文", () => {
     expect(waitedTime("2026-11-10T09:00:00Z", t0)).toBe("Waiting for 3 hours");
     expect(waitedTime("2026-11-09T12:00:00Z", t0)).toBe("Waiting for 1 day");
     expect(waitedTime("2026-10-20T12:00:00Z", t0)).toBe("Oct 20");
+  });
+
+  it("时长拆成数字和单位，单位分单复数（设置里的分段选择）", () => {
+    resetForTests("en");
+    expect(minutesParts(1)).toEqual({ value: "1", unit: "minute" });
+    expect(minutesParts(30)).toEqual({ value: "30", unit: "minutes" });
+    resetForTests("zh-CN");
+    expect(minutesParts(10)).toEqual({ value: "10", unit: "分钟" });
   });
 });

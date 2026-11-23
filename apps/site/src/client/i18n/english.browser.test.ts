@@ -215,5 +215,38 @@ describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
       await pause();
       expect(await han()).toBe("");
     });
+
+    it("设置：通用、会话、GitHub、账户、数据每一类都是英文", async () => {
+      for (const section of ["general", "sessions", "github", "account", "data"]) {
+        await page.goto(`${preview.url}/settings/${section}`);
+        await page.locator(".settings-content").waitFor();
+        await page.waitForTimeout(600);
+        expect(await han(), section).toBe("");
+      }
+      // 账户里的弹窗：修改密码、退出所有设备的确认
+      await page.goto(`${preview.url}/settings/account`);
+      await page.locator(".settings-content").waitFor();
+      await page.waitForTimeout(600);
+      await page.getByRole("button", { name: "Change", exact: true }).last().click();
+      await pause();
+      expect(await page.locator(".modal-title").last().textContent()).toContain(
+        "Change admin password",
+      );
+      expect(await han()).toBe("");
+      await page.keyboard.press("Escape");
+      await pause();
+      await page.getByRole("button", { name: "Sign out everywhere" }).click();
+      await pause();
+      expect(await han()).toBe("");
+      await page.keyboard.press("Escape");
+      await pause();
+    });
+
+    it("开源声明页：只有附加条款规定的署名是中文原文，后面附英文说明", async () => {
+      await page.goto(`${preview.url}/licenses`);
+      await page.locator(".legal-body").waitFor();
+      expect(await han()).toBe("基于");
+      expect(await page.locator(".legal-body").textContent()).toContain("(Based on SeekCloud)");
+    });
   },
 );

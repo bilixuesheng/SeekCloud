@@ -118,5 +118,30 @@ export function joinNames(names: string[]): string {
   return locale === "zh-CN" ? names.join("、") : englishList(locale).format(names);
 }
 
+/**
+ * 几分钟拆成数字和单位（分段选择里数字在上、单位在下）：单位的说法和单复数按语言，用 Intl 的单位格式
+ * （英文 minute、minutes；中文"分钟"）。
+ */
+export function minutesParts(minutes: number): { value: string; unit: string } {
+  const parts = new Intl.NumberFormat(currentLocale(), {
+    style: "unit",
+    unit: "minute",
+    unitDisplay: "long",
+  }).formatToParts(minutes);
+  const value = parts
+    .filter(
+      (p) =>
+        p.type === "integer" || p.type === "group" || p.type === "decimal" || p.type === "fraction",
+    )
+    .map((p) => p.value)
+    .join("");
+  const unit = parts
+    .filter((p) => p.type === "unit")
+    .map((p) => p.value)
+    .join("")
+    .trim();
+  return { value, unit };
+}
+
 /** 数字：千分位按语言（131,072）。 */
 export const formatNumber = (n: number): string => n.toLocaleString(currentLocale());

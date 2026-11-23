@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { pageTitle, t, useT } from "../i18n";
+import { pageTitle, t, tRich, useT } from "../i18n";
 import { Brand } from "../Logo";
 import { navigate } from "../router";
 import { LICENSE_NAMES, LICENSE_URLS, MIT_TEXT, OPEN_SOURCE } from "./licenses";
@@ -61,7 +61,7 @@ export function LegalPage({ doc }: { doc: LegalDoc }) {
         <h1>{legalTitle(doc)}</h1>
         <Licenses />
       </main>
-      <footer className="legal-foot">SeekCloud · 非 DeepSeek 官方产品</footer>
+      <footer className="legal-foot">{t("legal.footer")}</footer>
     </div>
   );
 }
@@ -69,34 +69,47 @@ export function LegalPage({ doc }: { doc: LegalDoc }) {
 const SOURCE_URL = "https://github.com/bilixuesheng/SeekCloud";
 
 /**
+ * 附加条款规定的署名原文（NOTICE）：两种界面语言下都照原文显示，不翻译；英文界面在后面另附一句说明
+ * （legal.attributionMeaning）。
+ */
+// 不是界面文案：附加条款规定的署名原文，不进文案目录
+const ATTRIBUTION = "基于 SeekCloud";
+
+/**
  * 开头是 SeekCloud 自己的声明：
  * - "基于 SeekCloud"这句署名是 NOTICE 里的附加条款（AGPL-3.0 第 7 条 (b) 项）要求保留的，改过的版本也不能删；
  * - 仓库地址同时是 AGPL-3.0 第 13 条要求的源代码获取方式。
  */
 export function Licenses() {
+  const t = useT();
+  const meaning = t("legal.attributionMeaning");
   return (
     <div className="markdown">
       <p>
-        基于 SeekCloud（
-        <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
-          {SOURCE_URL}
-        </a>
-        ）
+        <span lang="zh-CN">
+          {ATTRIBUTION}（
+          <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
+            {SOURCE_URL}
+          </a>
+          ）
+        </span>
+        {meaning && ` ${meaning}`}
       </p>
       <p>Copyright (C) 2026 XUESHENG</p>
       <p>
-        SeekCloud 依据{" "}
-        <a
-          href="https://www.gnu.org/licenses/agpl-3.0.html"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          GNU Affero 通用公共许可证第 3 版
-        </a>
-        （AGPL-3.0）授权，不提供任何担保。你可以依据该许可证的条款再分发和修改
-        SeekCloud，源代码可从上述地址获取。
+        {tRich("legal.license", {
+          link: (
+            <a
+              href="https://www.gnu.org/licenses/agpl-3.0.html"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {t("legal.agpl")}
+            </a>
+          ),
+        })}
       </p>
-      <p>SeekCloud 使用了以下开源软件，谨向各项目的作者致谢。</p>
+      <p>{t("legal.thanks")}</p>
       <ul className="license-list">
         {OPEN_SOURCE.map((item) => (
           <li key={item.name} className="license-item">
@@ -113,13 +126,13 @@ export function Licenses() {
                 {LICENSE_NAMES[item.license]}
               </a>
             </div>
-            <div className="license-meta">{item.usage}</div>
+            <div className="license-meta">{t(item.usage)}</div>
             <div className="license-meta">{item.copyright}</div>
           </li>
         ))}
       </ul>
       <h2>MIT License</h2>
-      <p>以上标注 MIT License 的软件均依据下列条款授权，版权声明见各条目。</p>
+      <p>{t("legal.mitNote")}</p>
       <pre className="license-text">{MIT_TEXT}</pre>
     </div>
   );

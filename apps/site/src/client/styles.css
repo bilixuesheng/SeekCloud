@@ -3794,6 +3794,20 @@ details > summary::-webkit-details-marker {
   cursor: default;
 }
 
+/* 数字在上、单位在下的分段（时长）：英文的单位长，横着放不下 */
+.segment-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 0;
+  line-height: 1.15;
+}
+
+.segment-unit {
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .settings-group-hint {
   margin: -2px 2px 0;
   font-size: 13px;

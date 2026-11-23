@@ -21,7 +21,7 @@ describe("登录设备的名字（浏览器 · 系统）", () => {
     ],
     [
       "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.50",
-      "微信 · iPhone",
+      "WeChat · iPhone",
     ],
     ["Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0", "Firefox · Linux"],
     ["curl/8.5.0", null],
