@@ -1,6 +1,8 @@
 import type { FileChange, SessionEvent, SessionEventBody } from "@seekcloud/protocol";
 import { describe, expect, it } from "vitest";
-import { buildTimeline, summarizeTools, toolSummary } from "./timeline";
+import { resetForTests } from "../i18n";
+import { errorText } from "./errors";
+import { buildTimeline, summarizeTools, toolActive, toolLabel, toolSummary } from "./timeline";
 
 const events = (...bodies: SessionEventBody[]): SessionEvent[] =>
   bodies.map((body, i) => ({ seq: i + 1, at: "2026-10-31T00:00:00Z", turn: 1, ...body }));
@@ -282,4 +284,63 @@ describe("会话事件整理成界面内容", () => {
       ]);
     });
   });
+});
+
+describe("英文（#136）：工具调用的摘要是通顺的整句，提示和报错也是英文", () => {
+  const call = (name: string, key: number) => ({ key, name, input: {} });
+  const english = (fn: () => void) => {
+    resetForTests("en");
+    try {
+      fn();
+    } finally {
+      resetForTests("zh-CN");
+    }
+  };
+
+  it("摘要按整句模板分单复数，用 and 连起来，句首大写", () =>
+    english(() => {
+      expect(summarizeTools([call("Read", 1), call("Read", 2)])).toBe("Read 2 files");
+      expect(summarizeTools([call("Read", 1), call("Bash", 2)])).toBe(
+        "Read 1 file and ran 1 command",
+      );
+      expect(
+        summarizeTools([call("Edit", 1), call("Bash", 2), call("Grep", 3), call("mcp__x", 4)]),
+      ).toBe("Edited 1 file, ran 1 command, searched once, and used 1 other tool");
+      expect(summarizeTools([call("Grep", 1), call("Glob", 2)])).toBe("Searched 2 times");
+    }));
+
+  it("中文还是逗号连起来", () => {
+    expect(summarizeTools([call("Edit", 1), call("Bash", 2), call("mcp__x", 3)])).toBe(
+      "修改了 1 个文件，运行了 1 条命令，使用了 1 个其他工具",
+    );
+  });
+
+  it("正在做的说法换成进行时，不是在名字前面拼一个词", () =>
+    english(() => {
+      expect(toolLabel("Bash")).toBe("Run");
+      expect(toolActive("Bash")).toBe("Running");
+      expect(toolActive("Read")).toBe("Reading");
+      expect(toolActive("mcp__x")).toBe("Using mcp__x");
+      expect(toolLabel("mcp__x")).toBe("mcp__x");
+    }));
+
+  it("回合失败、推送放弃、报错带状态码和参考号", () =>
+    english(() => {
+      const timeline = buildTimeline(
+        events(
+          {
+            type: "turn.ended",
+            reason: "failed",
+            error: { code: "model_rate_limited", status: 429, ref: "ab12" },
+          },
+          { type: "push.gave_up", repos: ["octo/app", "octo/api"] },
+        ),
+      );
+      const notices = timeline.items.flatMap((i) => (i.kind === "notice" ? [i.text] : []));
+      expect(notices[0]).toBe(
+        "Turn failed: The model service is busy. Try again later (429 · Reference ab12)",
+      );
+      expect(notices[1]).toContain("(octo/app and octo/api)");
+      expect(errorText({ code: "internal" })).toBe("Internal service error");
+    }));
 });

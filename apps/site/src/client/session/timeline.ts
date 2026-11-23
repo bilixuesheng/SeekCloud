@@ -7,6 +7,8 @@ import {
   type ThinkingEffort,
   type TodoItem,
 } from "@seekcloud/protocol";
+import { type PlainKey, t } from "../i18n";
+import { joinClauses, joinNames } from "../i18n/format";
 import { errorText } from "./errors";
 
 export interface ToolCall {
@@ -71,12 +73,24 @@ export interface Timeline {
   plan?: { items: TodoItem[]; stale: boolean };
 }
 
-const endNotices = {
-  stopped: { tone: "info", text: "回合已停止" },
-  failed: { tone: "error", text: "回合失败" },
-} as const;
+/** 回合停止、失败时的提示；有报错时接在后面。 */
+function endNotice(reason: "stopped" | "failed", error: string | undefined) {
+  if (reason === "stopped") {
+    return {
+      tone: "info" as const,
+      text: error ? t("chat.turnStoppedWith", { error }) : t("chat.turnStopped"),
+    };
+  }
+  return {
+    tone: "error" as const,
+    text: error ? t("chat.turnFailedWith", { error }) : t("chat.turnFailed"),
+  };
+}
 
-/** 把会话事件整理成界面上的一条条内容。 */
+/**
+ * 把会话事件整理成界面上的一条条内容。提示的文字按当前的界面语言写：换了语言要重新整理一遍
+ * （SessionPage 的 useMemo 带上了语言）。
+ */
 export function buildTimeline(events: SessionEvent[]): Timeline {
   const items: TimelineItem[] = [];
   const calls = new Map<string, ToolCall>();
@@ -103,7 +117,7 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
             kind: "notice",
             key: event.seq,
             tone: "info",
-            text: "推送会话分支失败，SeekCloud 已把错误交给 Agent 处理",
+            text: t("chat.pushFollowUp"),
           });
           break;
         }
@@ -153,7 +167,10 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
         else items.push({ kind: "tools", key: event.seq, calls: [call] });
         running.set(
           event.callId,
-          `${toolLabel(event.name)} ${firstLine(toolSummary(event.input)) ?? ""}`.trim(),
+          t("tool.activity", {
+            label: toolLabel(event.name),
+            detail: firstLine(toolSummary(event.input)) ?? "",
+          }).trim(),
         );
         break;
       }
@@ -183,7 +200,10 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
           kind: "notice",
           key: event.seq,
           tone: "error",
-          text: `推送失败，已自动跟进 ${MAX_PUSH_FOLLOW_UPS} 次仍未推送（${event.repos.join("、")}）。请查看原因后再发消息。`,
+          text: t("chat.pushGaveUp", {
+            count: MAX_PUSH_FOLLOW_UPS,
+            repos: joinNames(event.repos),
+          }),
         });
         break;
       case "model.changed":
@@ -205,9 +225,8 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
         running = new Map();
         plan = undefined;
         if (event.reason !== "completed") {
-          const notice = endNotices[event.reason];
-          const text = event.error ? `${notice.text}：${errorText(event.error)}` : notice.text;
-          items.push({ kind: "notice", key: event.seq, tone: notice.tone, text });
+          const notice = endNotice(event.reason, event.error && errorText(event.error));
+          items.push({ kind: "notice", key: event.seq, ...notice });
         }
         break;
       }
@@ -215,7 +234,9 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
         if (event.status !== state?.status) since = event.at;
         state = { status: event.status, detail: event.detail };
         if (event.status === "failed") {
-          const text = event.error ? `会话失败：${errorText(event.error)}` : "会话失败";
+          const text = event.error
+            ? t("chat.sessionFailedWith", { error: errorText(event.error) })
+            : t("chat.sessionFailed");
           items.push({ kind: "notice", key: event.seq, tone: "error", text });
         }
         break;
@@ -245,33 +266,47 @@ function firstLine(text: string): string | undefined {
     .find((l) => l.length > 0);
 }
 
-const toolLabels: Record<string, string> = {
-  Read: "读取",
-  Write: "写入",
-  Edit: "编辑",
-  MultiEdit: "编辑",
-  Bash: "运行",
-  Grep: "搜索",
-  Glob: "查找文件",
-  LS: "列出目录",
-  WebFetch: "抓取网页",
-  WebSearch: "搜索网页",
-  TodoWrite: "更新待办",
-  Task: "DeepSeek 子任务",
+/** 认得的工具：名字（"读取"）和正在做时的说法（"正在读取"，英文要换成进行时，不能拼）。 */
+const TOOLS: Record<string, { label: PlainKey; active: PlainKey }> = {
+  Read: { label: "tool.read", active: "tool.readActive" },
+  Write: { label: "tool.write", active: "tool.writeActive" },
+  Edit: { label: "tool.edit", active: "tool.editActive" },
+  MultiEdit: { label: "tool.edit", active: "tool.editActive" },
+  Bash: { label: "tool.bash", active: "tool.bashActive" },
+  Grep: { label: "tool.grep", active: "tool.grepActive" },
+  Glob: { label: "tool.glob", active: "tool.globActive" },
+  LS: { label: "tool.ls", active: "tool.lsActive" },
+  WebFetch: { label: "tool.webFetch", active: "tool.webFetchActive" },
+  WebSearch: { label: "tool.webSearch", active: "tool.webSearchActive" },
+  TodoWrite: { label: "tool.todo", active: "tool.todoActive" },
+  Task: { label: "tool.task", active: "tool.taskActive" },
 };
 
-export const toolLabel = (name: string) => toolLabels[name] ?? name;
+/** 工具的名字（"读取"）；不认得的工具写它自己的名字。 */
+export const toolLabel = (name: string): string => {
+  const tool = TOOLS[name];
+  return tool ? t(tool.label) : name;
+};
 
-// 一组工具调用的摘要怎么说：按工具归类计数。
-const kinds: Array<{ tools: string[]; say: (n: number) => string }> = [
-  { tools: ["Read"], say: (n) => `读取了 ${n} 个文件` },
-  { tools: ["Edit", "MultiEdit", "Write"], say: (n) => `修改了 ${n} 个文件` },
-  { tools: ["Bash"], say: (n) => `运行了 ${n} 条命令` },
-  { tools: ["Grep", "Glob", "LS", "WebSearch"], say: (n) => `搜索了 ${n} 次` },
-  { tools: ["WebFetch"], say: (n) => `抓取了 ${n} 个网页` },
+/** 工具正在做时的说法（"正在读取"、"Reading"）。 */
+export const toolActive = (name: string): string => {
+  const tool = TOOLS[name];
+  return tool ? t(tool.active) : t("tool.otherActive", { name });
+};
+
+// 一组工具调用的摘要怎么说：按工具归类计数，每一类是一个整句模板（英文分单复数）。
+const kinds: Array<{ tools: string[]; say: (count: number) => string }> = [
+  { tools: ["Read"], say: (count) => t("tools.read", { count }) },
+  { tools: ["Edit", "MultiEdit", "Write"], say: (count) => t("tools.edit", { count }) },
+  { tools: ["Bash"], say: (count) => t("tools.bash", { count }) },
+  {
+    tools: ["Grep", "Glob", "LS", "WebSearch"],
+    say: (count) => t("tools.search", { count }),
+  },
+  { tools: ["WebFetch"], say: (count) => t("tools.fetch", { count }) },
 ];
 
-/** "运行了 2 条命令，改了 1 个文件"。 */
+/** "运行了 2 条命令，修改了 1 个文件"；英文 "Ran 2 commands and edited 1 file"。 */
 export function summarizeTools(calls: ToolCall[]): string {
   const parts: string[] = [];
   let other = 0;
@@ -284,8 +319,8 @@ export function summarizeTools(calls: ToolCall[]): string {
   for (const [index, n] of [...counts].sort((a, b) => a[0] - b[0])) {
     parts.push((kinds[index] as (typeof kinds)[number]).say(n));
   }
-  if (other > 0) parts.push(`使用了 ${other} 个其他工具`);
-  return parts.join("，");
+  if (other > 0) parts.push(t("tools.other", { count: other }));
+  return joinClauses(parts);
 }
 
 /** 工具调用的一句话摘要：文件路径、命令、搜索词之类。 */

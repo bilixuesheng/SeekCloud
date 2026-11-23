@@ -2298,6 +2298,11 @@ input:not([type="range"]):focus {
   color: var(--muted);
 }
 
+/* 英文的标签长（Environment、Repository）：标签那一列放宽，值还是对齐的 */
+.session-info-label:lang(en) {
+  width: 6.2em;
+}
+
 .session-info-value {
   min-width: 0;
   display: inline-flex;
@@ -2616,8 +2621,10 @@ details > summary::-webkit-details-marker {
   animation: spin 0.9s linear infinite;
 }
 
+/* 摘要放不下时折行（英文长），最窄缩到最长的一个词；正在跑时后面的命令收成省略号 */
 .tool-group-text {
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: min-content;
   color: var(--fg-2);
 }
 
@@ -5172,6 +5179,11 @@ button.changes-path:hover {
   flex: 1;
   gap: 8px;
   color: var(--muted);
+}
+
+/* 关闭按钮靠右：没有改动、不显示合计时也一样 */
+.changes-panel-head .icon-button {
+  margin-left: auto;
 }
 
 .changes-panel-body {

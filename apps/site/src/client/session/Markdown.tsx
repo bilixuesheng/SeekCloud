@@ -4,6 +4,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CopyButton, useCopy } from "../copy";
 import { IssueIcon, PullRequestIcon } from "../Icons";
+import { useT } from "../i18n";
 import { type LiveChunk, rehypeLiveChunks, useLiveChunks } from "./live-text";
 import { PullRequestBadge } from "./PullRequestBadge";
 
@@ -81,6 +82,7 @@ export function trustedImageHost(src: string): boolean {
  * 加载失败时显示成链接，让管理员知道这里本来有张图、从哪来。
  */
 function AgentImage({ src, alt }: { src?: unknown; alt?: string }) {
+  const t = useT();
   const [failed, setFailed] = useState(false);
   const [allowed, setAllowed] = useState(false);
   if (typeof src !== "string" || !isWebUrl(src)) return <span>{alt}</span>;
@@ -93,14 +95,15 @@ function AgentImage({ src, alt }: { src?: unknown; alt?: string }) {
     }
     return (
       <button type="button" className="image-blocked" onClick={() => setAllowed(true)}>
-        <span aria-hidden="true">🖼</span> {alt || "图片"}（来自 {host}，点击加载）
+        <span aria-hidden="true">🖼</span>{" "}
+        {t("chat.imageBlocked", { alt: alt || t("chat.image"), host })}
       </button>
     );
   }
   if (failed) {
     return (
       <a className="image-failed" href={src} target="_blank" rel="noopener noreferrer nofollow">
-        <span aria-hidden="true">🖼</span> {alt || "图片"}（加载失败，点击查看）
+        <span aria-hidden="true">🖼</span> {t("chat.imageFailed", { alt: alt || t("chat.image") })}
       </a>
     );
   }

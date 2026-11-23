@@ -24,7 +24,7 @@ describe("改动面板的 diff", () => {
       { kind: "add", text: "const y = 3;", new: 11 },
       { kind: "add", text: "const z = 4;", new: 12 },
       { kind: "ctx", text: "return x;", old: 12, new: 13 },
-      { kind: "note", text: "文件末尾没有换行" },
+      { kind: "note", text: "文件末尾无换行" },
     ]);
   });
 

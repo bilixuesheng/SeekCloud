@@ -134,13 +134,17 @@ describe("改语言、登录后和主站对一下", () => {
 });
 
 describe("两份目录", () => {
-  it("键完全一样；带插值的英文也有同样的插值", () => {
+  it("键完全一样；带插值的英文也有同样的插值（单数那一种可以不写 {count}，比如 once）", () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort());
     for (const [key, text] of Object.entries(zh)) {
       const names = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
       const message = en[key as keyof typeof en];
-      const forms = typeof message === "string" ? [message] : Object.values(message);
-      for (const form of forms) expect(names(form as string), key).toEqual(names(text));
+      const forms = typeof message === "string" ? { other: message } : message;
+      for (const [form, value] of Object.entries(forms)) {
+        const expected = names(text).filter((n) => form !== "one" || n !== "count");
+        const actual = names(value as string).filter((n) => form !== "one" || n !== "count");
+        expect(actual, `${key}.${form}`).toEqual(expected);
+      }
     }
   });
 

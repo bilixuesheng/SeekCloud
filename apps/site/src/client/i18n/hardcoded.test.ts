@@ -13,12 +13,6 @@ import { describe, expect, it } from "vitest";
 const PENDING = new Set([
   "legal/LegalPage.tsx",
   "legal/licenses.ts",
-  "session/ChangesCard.tsx",
-  "session/ChangesPanel.tsx",
-  "session/Markdown.tsx",
-  "session/SessionPage.tsx",
-  "session/errors.ts",
-  "session/timeline.ts",
   "settings/DataSettings.tsx",
   "settings/ModelSettings.tsx",
   "settings/PasskeySettings.tsx",
