@@ -3,6 +3,7 @@ import {
   type ModelProgress,
   modelRef,
   parseModelRef,
+  type SessionStatus,
   type ThinkingEffort,
   type TodoItem,
 } from "@seekcloud/protocol";
@@ -33,7 +34,8 @@ import {
   RetryIcon,
   UndoIcon,
 } from "../Icons";
-import { pageTitle } from "../i18n";
+import { type PlainKey, pageTitle, useLocale, useT } from "../i18n";
+import { errorText } from "../i18n/errors";
 import { fullTime, relativeTime } from "../i18n/format";
 import { BlurText, Collapse, usePresence } from "../Motion";
 import { Slot } from "../registry";
@@ -53,6 +55,7 @@ import {
   summarizeTools,
   type TimelineItem,
   type ToolCall,
+  toolActive,
   toolLabel,
   toolSummary,
 } from "./timeline";
@@ -62,14 +65,14 @@ import { usePins } from "./usePins";
 import { useSessionEvents } from "./useSessionEvents";
 
 // 空闲时提示可以用命令；Agent 在工作时照样能发，发出去先排队。
-const placeholders = {
-  queued: "输入 / 使用命令",
-  running: "输入 / 使用命令",
-  waiting: "输入 / 使用命令",
-  dormant: "输入 / 使用命令",
-  archived: "会话已归档",
-  failed: "会话出错，发送消息即可重试",
-} as const;
+const placeholders: Record<SessionStatus, PlainKey> = {
+  queued: "chat.placeholder",
+  running: "chat.placeholder",
+  waiting: "chat.placeholder",
+  dormant: "chat.placeholder",
+  archived: "chat.placeholderArchived",
+  failed: "chat.placeholderFailed",
+};
 
 /** 会话页：消息、思考、工具调用、待办清单，底下是输入框。 */
 export function SessionPage({
@@ -86,7 +89,10 @@ export function SessionPage({
   const [missing, setMissing] = useState(false);
   const session = listed ?? fetched;
   const { events, broken, liveAfter, progress, draft, adopted } = useSessionEvents(id);
-  const timeline = useMemo(() => buildTimeline(events), [events]);
+  const t = useT();
+  const locale = useLocale();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 提示的文字按界面语言写，换了语言要重新整理
+  const timeline = useMemo(() => buildTimeline(events), [events, locale]);
   const state = timeline.state ?? session;
   const status = state?.status;
   // 没发出去的字记在浏览器里，换个会话再回来、刷新页面都还在。
@@ -163,7 +169,7 @@ export function SessionPage({
       // 没发出去：气泡收回，字还给输入框。
       setPending(undefined);
       if (fromComposer) setReply(text);
-      setError((e as ApiError).message);
+      setError(errorText(e as ApiError));
     } finally {
       setBusy(false);
     }
@@ -180,7 +186,7 @@ export function SessionPage({
     try {
       await api(`/api/sessions/${id}/stop`, {});
     } catch (e) {
-      setError((e as ApiError).message);
+      setError(errorText(e as ApiError));
     } finally {
       setStopping(false);
     }
@@ -190,8 +196,8 @@ export function SessionPage({
     return (
       <div className="session-page">
         <div className="session-missing">
-          <h1>未找到该会话</h1>
-          <p>该会话可能已被删除，或链接有误。</p>
+          <h1>{t("chat.notFound")}</h1>
+          <p>{t("chat.notFoundHint")}</p>
         </div>
       </div>
     );
@@ -293,13 +299,13 @@ export function SessionPage({
               {/* 对话最后一行：鲸鱼（照 Claude 的星形标志）。Agent 在工作时它游动、旁边写在做什么；
                 停下来以后不动，最后一条回复下面提示一句 */}
               {status === "queued" ? (
-                <Working text="排队中，等待空闲资源" since={timeline.since} />
+                <Working text={t("chat.queuedWaiting")} since={timeline.since} />
               ) : status === "running" ? (
                 <Working
                   text={
                     state?.detail === "preparing_sandbox"
-                      ? "正在准备沙箱"
-                      : (timeline.activity ?? "深度求索中")
+                      ? t("status.preparingSandbox")
+                      : (timeline.activity ?? t("chat.seeking"))
                   }
                   since={timeline.since}
                   // 有工具在跑时写它在做什么（不加省略号），不显示 token 数（timeline.ts 的 activity）
@@ -312,7 +318,7 @@ export function SessionPage({
                 <p className="timeline-tail">
                   <Whale size={WHALE_SIZE} transitionName="seekcloud-whale" />
                   {timeline.items.some((item) => item.kind === "assistant") && (
-                    <span className="ai-notice">DeepSeek 是 AI 并且可能会犯错。</span>
+                    <span className="ai-notice">{t("chat.aiNotice")}</span>
                   )}
                 </p>
               )}
@@ -327,7 +333,7 @@ export function SessionPage({
           {status === "archived" && <ArchivedNote id={id} onError={setError} />}
           {broken && (
             <p className="alert" role="alert">
-              与服务器的连接已断开，请刷新页面。
+              {t("chat.disconnected")}
             </p>
           )}
           {error && (
@@ -339,10 +345,10 @@ export function SessionPage({
             value={reply}
             onChange={setReply}
             onSubmit={() => void send(reply, true)}
-            placeholder={placeholders[status ?? "queued"]}
+            placeholder={t(placeholders[status ?? "queued"])}
             disabled={closed}
             busy={busy}
-            submitLabel="发送"
+            submitLabel={t("chat.send")}
             attach={{
               vision: models?.models.find((m) => m.id === picked?.model)?.vision ?? false,
             }}
@@ -377,27 +383,28 @@ export function SessionPage({
 
 /** 已归档的会话：输入框上面一行说明，可以直接取消归档（之后发消息就唤醒）。 */
 function ArchivedNote({ id, onError }: { id: string; onError: (message: string) => void }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const unarchive = async () => {
     setBusy(true);
     try {
       await api(`/api/sessions/${id}/unarchive`, {});
     } catch (e) {
-      onError((e as ApiError).message);
+      onError(errorText(e as ApiError));
     } finally {
       setBusy(false);
     }
   };
   return (
     <p className="archived-note">
-      会话已归档，无法发送消息。
+      {t("chat.archivedNote")}
       <button
         type="button"
         className="pill-button"
         disabled={busy}
         onClick={() => void unarchive()}
       >
-        取消归档
+        {t("session.unarchive")}
       </button>
     </p>
   );
@@ -425,6 +432,7 @@ function QueuedMessage({
   onRestore: (text: string) => void;
   onError: (message: string) => void;
 }) {
+  const t = useT();
   // 正在提交的操作：网络慢、还没回来时，点的那个按钮换成转圈（照 Claude）
   const [doing, setDoing] = useState<"restore" | "delete" | "send-now">();
   const busy = doing !== undefined;
@@ -440,7 +448,7 @@ function QueuedMessage({
       );
       if (restore && result.text) onRestore(result.text);
     } catch (e) {
-      onError((e as ApiError).message);
+      onError(errorText(e as ApiError));
       setDoing(undefined);
     }
   };
@@ -453,13 +461,13 @@ function QueuedMessage({
     >
       <div className="user-message">{text}</div>
       <div className="queued-actions">
-        {!first && <span className="queued-label">排队中</span>}
+        {!first && <span className="queued-label">{t("status.queued")}</span>}
         <CopyButton copied={copied} onCopy={copy} />
         <button
           type="button"
           className="icon-button small"
-          aria-label="撤回并编辑"
-          data-tip="撤回并编辑"
+          aria-label={t("chat.withdraw")}
+          data-tip={t("chat.withdraw")}
           disabled={busy}
           onClick={() => void act("withdraw", true)}
         >
@@ -468,8 +476,8 @@ function QueuedMessage({
         <button
           type="button"
           className="icon-button small"
-          aria-label="删除"
-          data-tip="删除"
+          aria-label={t("common.delete")}
+          data-tip={t("common.delete")}
           disabled={busy}
           onClick={() => void act("withdraw")}
         >
@@ -483,7 +491,7 @@ function QueuedMessage({
             disabled={busy}
             onClick={() => void act("send-now")}
           >
-            {doing === "send-now" ? spinner : "立即发送"}
+            {doing === "send-now" ? spinner : t("chat.sendNow")}
           </button>
         )}
       </div>
@@ -576,13 +584,14 @@ function ToBottom({
   working: boolean;
   onClick: () => void;
 }) {
+  const t = useT();
   const { mounted, closing } = usePresence(away, 180);
   if (!mounted) return null;
   return (
     <button
       type="button"
       className={`to-bottom${closing ? " closing" : ""}`}
-      aria-label="回到底部"
+      aria-label={t("chat.toBottom")}
       onClick={onClick}
     >
       {working ? (
@@ -637,6 +646,7 @@ function SentMessage({
   delivered?: boolean;
   onRetry?: (text: string) => void;
 }) {
+  const t = useT();
   const [copied, copy] = useCopy(text);
   const catchUp = useCatchUp(pendingAt);
   const time = new Date(at);
@@ -649,10 +659,14 @@ function SentMessage({
       <div className="message-meta">
         {/* 还没发到服务器（网络慢）时转圈；很快就到的话不出现（.sending-spinner 晚一点才显示） */}
         {sending && (
-          <span className="spinner small sending-spinner" role="status" aria-label="正在发送" />
+          <span
+            className="spinner small sending-spinner"
+            role="status"
+            aria-label={t("chat.sending")}
+          />
         )}
         {!sending && delivered && (
-          <MetaInfo className="message-delivered" tip="DeepSeek 已读取">
+          <MetaInfo className="message-delivered" tip={t("chat.delivered")}>
             <DoubleCheckIcon />
           </MetaInfo>
         )}
@@ -666,8 +680,10 @@ function SentMessage({
         <button
           type="button"
           className="icon-button small"
-          aria-label="重试"
-          data-tip={onRetry ? "重新发送此消息" : sending ? "正在发送" : "DeepSeek 运行期间无法重试"}
+          aria-label={t("chat.retry")}
+          data-tip={
+            onRetry ? t("chat.resend") : sending ? t("chat.sending") : t("chat.cannotRetry")
+          }
           disabled={!onRetry}
           onClick={() => onRetry?.(text)}
         >
@@ -692,6 +708,7 @@ function ReplyMeta({
   pinned: boolean;
   onPin?: (pinned: boolean) => void;
 }) {
+  const t = useT();
   const [copied, copy] = useCopy(reply);
   const time = new Date(at);
   return (
@@ -701,9 +718,9 @@ function ReplyMeta({
         <button
           type="button"
           className={`icon-button small pin-button${pinned ? " pinned" : ""}`}
-          aria-label={pinned ? "取消置顶" : "置顶"}
+          aria-label={pinned ? t("session.unpin") : t("session.pin")}
           aria-pressed={pinned}
-          data-tip={pinned ? "取消置顶" : "置顶"}
+          data-tip={pinned ? t("session.unpin") : t("session.pin")}
           onClick={() => onPin(!pinned)}
         >
           <PinIcon filled={pinned} size={14} />
@@ -756,6 +773,7 @@ function MetaInfo({
 
 /** 每秒刷新一次的"已经过了多久"。 */
 function useElapsed(since: string | undefined): string | undefined {
+  const t = useT();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!since) return;
@@ -764,10 +782,10 @@ function useElapsed(since: string | undefined): string | undefined {
   }, [since]);
   if (!since) return undefined;
   const seconds = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000));
-  if (seconds < 60) return `${seconds} 秒`;
+  if (seconds < 60) return t("time.elapsedSeconds", { s: seconds });
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} 分 ${seconds % 60} 秒`;
-  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
+  if (minutes < 60) return t("time.elapsedMinutes", { m: minutes, s: seconds % 60 });
+  return t("time.elapsedHours", { h: Math.floor(minutes / 60), m: minutes % 60 });
 }
 
 /** Agent 在干活时的提示：跳动的四个点、一行流光文字和已经过了多久。 */
@@ -881,6 +899,7 @@ function TimelineEntry({
   /** 打开改动面板（改动卡片上的"查看全部"、点文件）。 */
   onOpenChanges?: (path?: string) => void;
 }) {
+  const t = useT();
   const motion = " fresh";
   switch (item.kind) {
     case "user":
@@ -903,7 +922,7 @@ function TimelineEntry({
             <details className="thinking">
               <summary>
                 <ChevronRightIcon />
-                思考过程
+                {t("chat.thinking")}
               </summary>
               <div className="thinking-body">{item.thinking}</div>
             </details>
@@ -935,7 +954,10 @@ function TimelineEntry({
     case "model":
       return (
         <p className={`timeline-notice${motion}`}>
-          已切换到 {nameOf(item.model)} · 思考{effortLabels[item.effort]}
+          {t("chat.switchedModel", {
+            model: nameOf(item.model),
+            effort: effortLabels[item.effort],
+          })}
         </p>
       );
     case "notice":
@@ -948,6 +970,7 @@ function TimelineEntry({
  * （Claude 这时会闪一下上一条回复的内容，是它的毛病，不照搬）。取消置顶时留着原来的字，收起来再拿掉。
  */
 function PinTitle({ pin }: { pin?: MessagePin }) {
+  const t = useT();
   const last = useRef<string | null>(null);
   if (pin) last.current = pin.title;
   const title = pin ? pin.title : last.current;
@@ -955,10 +978,14 @@ function PinTitle({ pin }: { pin?: MessagePin }) {
     <Collapse open={pin !== undefined}>
       <p className="pin-title">
         <PinIcon filled size={13} />
-        {title ? (
-          <BlurText text={title} />
+        {title !== null ? (
+          <BlurText text={title || t("chat.pinFallback")} />
         ) : (
-          <span className="pin-title-loading" role="status" aria-label="正在生成标题" />
+          <span
+            className="pin-title-loading"
+            role="status"
+            aria-label={t("chat.generatingTitle")}
+          />
         )}
       </p>
     </Collapse>
@@ -975,6 +1002,7 @@ function PinNav({
   pins: MessagePin[];
   scroller: RefObject<HTMLDivElement | null>;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const { mounted, closing } = usePresence(open, 180);
   const root = useRef<HTMLDivElement>(null);
@@ -1009,7 +1037,7 @@ function PinNav({
         <button
           type="button"
           className={`pin-nav-button${open ? " active" : ""}`}
-          aria-label={`置顶的消息（${pins.length} 条）`}
+          aria-label={t("chat.pinnedMessages", { count: pins.length })}
           aria-haspopup="menu"
           aria-expanded={open}
           onClick={() => setOpen(!open)}
@@ -1027,7 +1055,7 @@ function PinNav({
               onClick={() => go()}
             >
               <span className="pin-nav-dash" />
-              <BlurText text="会话开头" />
+              <BlurText text={t("chat.sessionStart")} />
             </button>
             {pins.map((p) => (
               <button
@@ -1038,7 +1066,11 @@ function PinNav({
                 onClick={() => go(p.seq)}
               >
                 <span className="pin-nav-dash" />
-                {p.title ? <BlurText text={p.title} /> : <span className="pin-title-loading" />}
+                {p.title !== null ? (
+                  <BlurText text={p.title || t("chat.pinFallback")} />
+                ) : (
+                  <span className="pin-title-loading" />
+                )}
               </button>
             ))}
           </div>
@@ -1078,6 +1110,7 @@ const callState = (call: ToolCall) =>
  * 两种样子用同一个 details 元素：第二次调用来的时候原地更新，不会整行重新出现、闪一下。
  */
 function Tools({ calls, motion }: { calls: ToolCall[]; motion: string }) {
+  useLocale();
   const only = calls.length === 1 ? (calls[0] as ToolCall) : undefined;
   const running = calls.find((c) => !c.result);
   // 中途出过错、后来又成功了，算成功；点开能看到出错的那一次。
@@ -1092,7 +1125,7 @@ function Tools({ calls, motion }: { calls: ToolCall[]; motion: string }) {
         ) : (
           <>
             <span className="tool-group-text">
-              {running ? `正在${toolLabel(running.name)}` : summarizeTools(calls)}
+              {running ? toolActive(running.name) : summarizeTools(calls)}
             </span>
             {running && <span className="tool-summary">{toolSummary(running.input)}</span>}
           </>
@@ -1141,14 +1174,17 @@ function ToolRow({ call }: { call: ToolCall }) {
 }
 
 function ToolBody({ call }: { call: ToolCall }) {
+  const t = useT();
   return (
     <div className="tool-body">
-      <div className="tool-section">输入</div>
+      <div className="tool-section">{t("chat.toolInput")}</div>
       <pre>{typeof call.input === "string" ? call.input : JSON.stringify(call.input, null, 2)}</pre>
       {call.result && (
         <>
-          <div className="tool-section">{call.result.isError ? "错误" : "结果"}</div>
-          <pre>{call.result.output || "（无输出）"}</pre>
+          <div className="tool-section">
+            {call.result.isError ? t("chat.toolError") : t("chat.toolResult")}
+          </div>
+          <pre>{call.result.output || t("chat.noOutput")}</pre>
         </>
       )}
     </div>
@@ -1157,11 +1193,12 @@ function ToolBody({ call }: { call: ToolCall }) {
 
 /** 待办清单：只显示最新的一份，放在它最后一次更新的位置。 */
 function TodoCard({ items, stale }: { items: TodoItem[]; stale: boolean }) {
+  const t = useT();
   const done = items.filter((i) => i.status === "completed").length;
   return (
-    <section className="todo-card fresh" aria-label="计划">
+    <section className="todo-card fresh" aria-label={t("chat.plan")}>
       <div className="todo-head">
-        <span>{stale ? "你上一条消息之前的计划" : "计划"}</span>
+        <span>{stale ? t("chat.planStale") : t("chat.plan")}</span>
         <span className="todo-progress">
           {done}/{items.length}
         </span>

@@ -447,7 +447,10 @@ export interface SessionGroup {
 /** 分组名最长这么多字。 */
 export const MAX_GROUP_NAME = 40;
 
-/** 置顶的一条消息：seq 是那条 Agent 回复的事件序号；title 是短标题，为 null 表示还在生成。 */
+/**
+ * 置顶的一条消息：seq 是那条 Agent 回复的事件序号；title 是短标题，为 null 表示还在生成，
+ * 空字符串表示取不出标题（界面按语言写"置顶的消息"）。
+ */
 export interface MessagePin {
   seq: number;
   title: string | null;

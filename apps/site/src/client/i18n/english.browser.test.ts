@@ -7,7 +7,8 @@ import { createTestApp, type TestApp } from "../../testing/test-app";
 /**
  * 英文界面的冒烟测试（#136）：浏览器语言是英文时，已经迁进文案目录的页面上看得到的文字和读屏文字里没有汉字。
  * 每迁完一批页面就在这里加上那几页。现在有：首页（问候语、等你输入的提示、输入框、"+"、环境、仓库、模型弹层）、
- * 侧栏（置顶、分组、最近、已归档）、账户菜单、会话菜单、分组菜单。
+ * 侧栏（置顶、分组、最近、已归档）、账户菜单、会话菜单、分组菜单；会话页（假宿主机回放一个带工具调用和改动的回合：
+ * 工具调用的摘要、展开的输入和结果、改动卡片和面板、会话信息）。
  * 设 SEEKCLOUD_BROWSER_TESTS=1 才跑，要先 pnpm build。
  */
 describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
@@ -18,6 +19,7 @@ describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
     let preview: { url: string; close: () => Promise<void> };
     let browser: Browser;
     let page: Page;
+    let sessionId: string;
 
     beforeAll(async () => {
       t = await createTestApp();
@@ -28,6 +30,28 @@ describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ nickname: "Ada" }),
       });
+      // 第一个会话的回合：一段回复、读一个文件、跑一条命令、改了四个文件（Agent 的回复本身是英文的）
+      t.host.script(
+        { type: "message", text: "I will look at the project first." },
+        { type: "tool.call", callId: "c1", name: "Read", input: { file_path: "src/app.ts" } },
+        { type: "tool.result", callId: "c1", output: "export {}", isError: false },
+        { type: "tool.call", callId: "c2", name: "Bash", input: { command: "pnpm test" } },
+        { type: "tool.result", callId: "c2", output: "", isError: false },
+        { type: "message", text: "The health check endpoint is in place." },
+        {
+          type: "workspace",
+          repos: [
+            {
+              fullName: "octo/app",
+              head: "a".repeat(40),
+              push: "pushed",
+              files: ["src/app.ts", "src/health.ts", "test/health.test.ts", "README.md"].map(
+                (path) => ({ path, additions: 3, deletions: 1 }),
+              ),
+            },
+          ],
+        },
+      );
       const ids: string[] = [];
       for (const text of [
         "Add a health check",
@@ -43,6 +67,7 @@ describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
         ids.push(((await res.json()) as { shortId: string }).shortId);
       }
       await t.host.idle();
+      sessionId = ids[0] as string;
       await admin.post(`/api/sessions/${ids[0]}/pin`, { pinned: true });
       const res = await admin.post("/api/session-groups", { name: "Backend" });
       const { id: groupId } = (await res.json()) as { id: string };
@@ -153,6 +178,41 @@ describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
       await page.getByRole("button", { name: "Group options: Backend" }).click();
       await pause();
       expect(await page.locator("section.sheet").textContent()).toContain("Delete group");
+      expect(await han()).toBe("");
+    });
+
+    it("会话页：工具调用的摘要是英文整句，展开的输入和结果、改动卡片和面板、会话信息都是英文", async () => {
+      await page.goto(`${preview.url}/s/${sessionId}`);
+      await page.locator(".tool-group-text").waitFor();
+      expect(await page.locator(".tool-group-text").textContent()).toBe(
+        "Read 1 file and ran 1 command",
+      );
+      expect(await page.locator(".ai-notice").textContent()).toBe(
+        "DeepSeek is AI and can make mistakes.",
+      );
+      expect(await page.locator(".changes-all").textContent()).toContain("View all 4 files");
+      expect(await han()).toBe("");
+
+      // 展开工具调用：每一次的名字、输入、结果（空的结果写 no output）
+      await page.locator(".tool-group > summary").click();
+      await page.locator(".tool-group-body .tool > summary").last().click();
+      await pause();
+      const body = (await page.locator(".tool-group-body").textContent()) ?? "";
+      for (const text of ["Read", "Run", "Input", "Result", "(no output)"]) {
+        expect(body).toContain(text);
+      }
+      expect(await han()).toBe("");
+
+      await page.getByRole("button", { name: "Session info" }).click();
+      await pause();
+      expect(await page.locator(".session-info").textContent()).toContain("Default");
+      expect(await han()).toBe("");
+      await page.keyboard.press("Escape");
+      await pause();
+
+      await page.locator(".changes-all").click();
+      await page.locator(".changes-panel.shown").waitFor();
+      await pause();
       expect(await han()).toBe("");
     });
   },

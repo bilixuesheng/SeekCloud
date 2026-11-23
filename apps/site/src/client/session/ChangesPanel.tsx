@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { type ApiError, api } from "../api";
 import { ChevronRightIcon, CloseIcon } from "../Icons";
+import { t, useT } from "../i18n";
+import { errorText } from "../i18n/errors";
 import { usePresence } from "../Motion";
 
 const PANEL_MS = 280;
@@ -35,7 +37,7 @@ export function patchLines(patch: string): PatchLine[] {
     else if (raw.startsWith("-")) lines.push({ kind: "del", text: raw.slice(1), old: oldNo++ });
     else if (raw.startsWith(" ")) {
       lines.push({ kind: "ctx", text: raw.slice(1), old: oldNo++, new: newNo++ });
-    } else if (raw.startsWith("\\")) lines.push({ kind: "note", text: "文件末尾没有换行" });
+    } else if (raw.startsWith("\\")) lines.push({ kind: "note", text: t("changes.noNewline") });
   }
   return lines;
 }
@@ -55,6 +57,7 @@ export function ChangesPanel({
   focus?: string;
   onClose: () => void;
 }) {
+  const t = useT();
   const { mounted, shown } = usePresence(open, PANEL_MS);
   const [state, setState] = useState<{ repos?: RepoDiff[]; error?: string }>({});
 
@@ -64,7 +67,7 @@ export function ChangesPanel({
     setState({});
     api<{ repos: RepoDiff[] }>(`/api/sessions/${sessionId}/diff`).then(
       (res) => live && setState({ repos: res.repos }),
-      (error: ApiError) => live && setState({ error: error.message }),
+      (error: ApiError) => live && setState({ error: errorText(error) }),
     );
     return () => {
       live = false;
@@ -94,18 +97,23 @@ export function ChangesPanel({
         className={`changes-panel${visible ? " shown" : ""}`}
         role="dialog"
         aria-modal="true"
-        aria-label="改动"
+        aria-label={t("changes.title")}
       >
         <header className="changes-panel-head">
-          <h2>改动</h2>
+          <h2>{t("changes.title")}</h2>
           {state.repos && files.length > 0 && (
             <span className="changes-counts">
-              <span>{files.length} 个文件</span>
+              <span>{t("changes.fileCount", { count: files.length })}</span>
               <span className="added">+{sum("additions")}</span>
               <span className="deleted">−{sum("deletions")}</span>
             </span>
           )}
-          <button type="button" className="icon-button" aria-label="关闭" onClick={onClose}>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={t("common.close")}
+            onClick={onClose}
+          >
             <CloseIcon />
           </button>
         </header>
@@ -113,18 +121,18 @@ export function ChangesPanel({
           {state.error && <p className="changes-panel-empty error">{state.error}</p>}
           {!state.error && !state.repos && (
             <p className="changes-panel-empty" role="status">
-              正在加载……
+              {t("common.loading")}
             </p>
           )}
           {state.repos && files.length === 0 && (
-            <p className="changes-panel-empty">会话分支和基础分支相比还没有改动。</p>
+            <p className="changes-panel-empty">{t("changes.empty")}</p>
           )}
           {state.repos?.map((repo) =>
             repo.files.length === 0 ? null : (
               <section key={repo.fullName} className="changes-repo-section">
                 <p className="changes-repo-title">
                   {repo.fullName}
-                  <span>对比 {repo.baseBranch}</span>
+                  <span>{t("changes.compareWith", { branch: repo.baseBranch })}</span>
                 </p>
                 {repo.files.map((file) => (
                   <FileDiff
@@ -134,11 +142,7 @@ export function ChangesPanel({
                     scrollTo={file.path === focus}
                   />
                 ))}
-                {repo.truncated && (
-                  <p className="changes-note info">
-                    改动太多，后面的文件没有带上内容，可以在 GitHub 上对比分支查看。
-                  </p>
-                )}
+                {repo.truncated && <p className="changes-note info">{t("changes.truncated")}</p>}
               </section>
             ),
           )}
@@ -158,6 +162,7 @@ function FileDiff({
   initiallyOpen: boolean;
   scrollTo: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(initiallyOpen);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -182,7 +187,7 @@ function FileDiff({
           {file.path}
         </span>
         {file.binary ? (
-          <span className="changes-counts muted">二进制</span>
+          <span className="changes-counts muted">{t("changes.binary")}</span>
         ) : (
           <span className="changes-counts">
             <span className="added">+{file.additions}</span>
@@ -192,15 +197,17 @@ function FileDiff({
       </button>
       {open && (
         <div className="file-diff-body">
-          {file.from && <p className="file-diff-note">改名自 {file.from}</p>}
+          {file.from && (
+            <p className="file-diff-note">{t("changes.renamedFrom", { from: file.from })}</p>
+          )}
           {file.binary ? (
-            <p className="file-diff-note">二进制文件，不显示内容。</p>
+            <p className="file-diff-note">{t("changes.binaryFile")}</p>
           ) : file.tooLarge ? (
-            <p className="file-diff-note">改动太大，不显示内容。</p>
+            <p className="file-diff-note">{t("changes.tooLarge")}</p>
           ) : !file.patch ? (
-            <p className="file-diff-note">没有带上内容。</p>
+            <p className="file-diff-note">{t("changes.noPatch")}</p>
           ) : lines.length === 0 ? (
-            <p className="file-diff-note">只改了文件的权限或名字，内容没变。</p>
+            <p className="file-diff-note">{t("changes.modeOnly")}</p>
           ) : (
             <table className="diff-lines">
               <tbody>

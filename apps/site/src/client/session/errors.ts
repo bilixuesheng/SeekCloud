@@ -1,14 +1,15 @@
 import type { ErrorCode, SafeError } from "@seekcloud/protocol";
+import { type PlainKey, t } from "../i18n";
 
-const messages: Record<ErrorCode, string> = {
-  model_unavailable: "模型服务暂时不可用",
-  model_rate_limited: "模型服务繁忙，请稍后重试",
-  model_rejected: "模型服务拒绝了本次请求",
-  context_too_long: "对话长度超出模型上限",
-  timeout: "模型服务响应超时",
-  sandbox_unavailable: "沙箱暂时无法创建",
-  repo_clone_failed: "克隆仓库失败",
-  internal: "服务内部错误",
+const messages: Record<ErrorCode, PlainKey> = {
+  model_unavailable: "agentError.model_unavailable",
+  model_rate_limited: "agentError.model_rate_limited",
+  model_rejected: "agentError.model_rejected",
+  context_too_long: "agentError.context_too_long",
+  timeout: "agentError.timeout",
+  sandbox_unavailable: "agentError.sandbox_unavailable",
+  repo_clone_failed: "agentError.repo_clone_failed",
+  internal: "agentError.internal",
 };
 
 /**
@@ -18,8 +19,8 @@ const messages: Record<ErrorCode, string> = {
 export function errorText(error: SafeError): string {
   const extra = [
     error.status === undefined ? undefined : String(error.status),
-    error.ref === undefined ? undefined : `参考号 ${error.ref}`,
+    error.ref === undefined ? undefined : t("agentError.ref", { ref: error.ref }),
   ].filter(Boolean);
-  const text = messages[error.code] ?? messages.internal;
-  return extra.length > 0 ? `${text}（${extra.join(" · ")}）` : text;
+  const text = t(messages[error.code] ?? messages.internal);
+  return extra.length > 0 ? t("agentError.withDetail", { text, detail: extra.join(" · ") }) : text;
 }

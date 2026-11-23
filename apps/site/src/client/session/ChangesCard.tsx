@@ -1,6 +1,7 @@
 import type { FileChange } from "@seekcloud/protocol";
 import { useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon, UndoIcon } from "../Icons";
+import { useT } from "../i18n";
 import type { TurnChanges } from "./timeline";
 
 /** 卡片上先列几个文件（照 Claude）。 */
@@ -22,6 +23,7 @@ export function ChangesCard({
   /** 打开改动面板（对比基础分支的 diff），path 是要先展开的文件。不给时"查看全部"在卡片里展开。 */
   onOpen?: (path?: string) => void;
 }) {
+  const t = useT();
   const [all, setAll] = useState(false);
   const several = changes.repos.length > 1;
   const rows = changes.repos.flatMap((repo) =>
@@ -33,14 +35,14 @@ export function ChangesCard({
   const single = total === 1 ? rows[0] : undefined;
   const notes = changes.repos.flatMap((repo) =>
     repo.push === "read_only"
-      ? [{ tone: "info", text: `${repo.fullName} 是只读仓库，改动不会推送` }]
+      ? [{ tone: "info", text: t("changes.readOnly", { repo: repo.fullName }) }]
       : repo.push === "failed"
-        ? [{ tone: "error", text: `${repo.fullName} 推送失败` }]
+        ? [{ tone: "error", text: t("changes.pushFailed", { repo: repo.fullName }) }]
         : [],
   );
 
   return (
-    <section className="changes-card" aria-label="这一回合的改动">
+    <section className="changes-card" aria-label={t("changes.label")}>
       <ul className="changes-files">
         {shown.map(({ repo, file }) => (
           <li key={`${repo}:${file.path}`} className="changes-file">
@@ -69,15 +71,11 @@ export function ChangesCard({
                 type="button"
                 className="changes-undo"
                 disabled={!onUndo}
-                data-tip={onUndo ? "撤销这个文件这一回合的改动" : "DeepSeek 运行期间无法撤销"}
-                onClick={() =>
-                  onUndo?.(
-                    `请撤销 \`${single.file.path}\` 在上一回合的改动，恢复成那一回合开始前的样子。`,
-                  )
-                }
+                data-tip={onUndo ? t("changes.undoHint") : t("changes.cannotUndo")}
+                onClick={() => onUndo?.(t("changes.undoPrompt", { path: single.file.path }))}
               >
                 <UndoIcon />
-                撤销
+                {t("changes.undo")}
               </button>
             )}
           </li>
@@ -90,7 +88,7 @@ export function ChangesCard({
           aria-expanded={onOpen ? undefined : all}
           onClick={() => (onOpen ? onOpen() : setAll((open) => !open))}
         >
-          <span>{all ? "收起" : `查看全部 ${total} 个文件`}</span>
+          <span>{all ? t("changes.collapse") : t("changes.viewAll", { count: total })}</span>
           <span className="changes-counts">
             <span className="added">+{sum("additions")}</span>
             <span className="deleted">−{sum("deletions")}</span>
@@ -102,7 +100,9 @@ export function ChangesCard({
       )}
       {all && changes.repos.some((r) => r.omittedFiles > 0) && (
         <p className="changes-note info">
-          另有 {changes.repos.reduce((n, r) => n + r.omittedFiles, 0)} 个文件没有列出
+          {t("changes.omitted", {
+            count: changes.repos.reduce((n, r) => n + r.omittedFiles, 0),
+          })}
         </p>
       )}
       {notes.map((note) => (
@@ -115,7 +115,8 @@ export function ChangesCard({
 }
 
 function LineCounts({ file }: { file: FileChange }) {
-  if (file.binary) return <span className="changes-counts muted">二进制</span>;
+  const t = useT();
+  if (file.binary) return <span className="changes-counts muted">{t("changes.binary")}</span>;
   return (
     <span className="changes-counts">
       <span className="added">+{file.additions}</span>

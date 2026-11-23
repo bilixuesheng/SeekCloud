@@ -91,5 +91,32 @@ export function waitedTime(iso: string, now = Date.now()): string {
   return listTime(iso, now);
 }
 
+const lists = new Map<Locale, Intl.ListFormat>();
+const englishList = (locale: Locale) => {
+  let f = lists.get(locale);
+  if (!f) {
+    f = new Intl.ListFormat(locale, { style: "long", type: "conjunction" });
+    lists.set(locale, f);
+  }
+  return f;
+};
+
+/**
+ * 几个分句连成一句（"读取了 3 个文件，运行了 2 条命令"）：中文用逗号；英文 "read 3 files, edited 1 file,
+ * and ran 2 commands"，句首大写。每个分句是文案目录里的整句模板，这里只管怎么连。
+ */
+export function joinClauses(clauses: string[]): string {
+  const locale = currentLocale();
+  if (locale === "zh-CN") return clauses.join("，");
+  const text = englishList(locale).format(clauses);
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** 几个名字（仓库名这类）连起来：中文用顿号，英文 "a, b, and c"。 */
+export function joinNames(names: string[]): string {
+  const locale = currentLocale();
+  return locale === "zh-CN" ? names.join("、") : englishList(locale).format(names);
+}
+
 /** 数字：千分位按语言（131,072）。 */
 export const formatNumber = (n: number): string => n.toLocaleString(currentLocale());

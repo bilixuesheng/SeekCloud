@@ -53,7 +53,8 @@ export function pinTitle(texts: string[]): string {
     .map(plain)
     .filter((s) => s && !s.startsWith("|") && !s.startsWith("```"));
   const pick = sentences.find((s) => s.length >= MIN) ?? sentences[0];
-  if (!pick) return "置顶的消息";
+  // 取不出来：存空的，界面按语言写"置顶的消息"（#136：服务端不存现成的中文）
+  if (!pick) return "";
   const clause = pick.split(/[，,：:；;]/)[0]?.trim() ?? "";
   return clip(clause.length >= MIN * 2 ? clause : pick);
 }
