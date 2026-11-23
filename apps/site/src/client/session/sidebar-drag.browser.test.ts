@@ -52,6 +52,8 @@ describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
         hasTouch: true,
         isMobile: true,
         deviceScaleFactor: 1,
+        // 按中文断言（规格 #134：测试固定用中文跑）
+        locale: "zh-CN",
       });
       cdp = await page.context().newCDPSession(page);
       await page.goto(preview.url);

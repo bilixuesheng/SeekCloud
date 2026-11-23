@@ -75,7 +75,7 @@ describe("首次设置管理员密码", () => {
     });
     expect(await (await browser.get("/api/environments")).json()).toEqual({
       environments: [
-        { id: expect.any(String), name: "默认环境", networkAccess: "default", isDefault: true },
+        { id: expect.any(String), name: "", networkAccess: "default", isDefault: true },
       ],
     });
   });

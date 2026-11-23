@@ -35,6 +35,8 @@ describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
         viewport: { width: 390, height: 760 },
         hasTouch: true,
         isMobile: true,
+        // 按中文断言（规格 #134：测试固定用中文跑）
+        locale: "zh-CN",
       });
       await page.goto(preview.url);
       await page.evaluate(async (password) => {

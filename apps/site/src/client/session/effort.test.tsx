@@ -43,7 +43,6 @@ describe("模型和思考强度的按钮", () => {
       provider: "deepseek",
       providerName: "DeepSeek 官方",
       name: "DeepSeek Flash",
-      description: "",
       vision: false,
       efforts: [...deepseek],
     },

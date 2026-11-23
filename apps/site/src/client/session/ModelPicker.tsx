@@ -1,7 +1,7 @@
 import { fitEffort, type ThinkingEffort } from "@seekcloud/protocol";
 import { type CSSProperties, Fragment, type RefObject, useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../Icons";
-import { t } from "../i18n";
+import { type PlainKey, t, useLocale, useT } from "../i18n";
 import { Pages, reducedMotion, usePresence } from "../Motion";
 import { useClaimTouch } from "../touch";
 
@@ -11,7 +11,6 @@ export interface ModelInfo {
   provider: string;
   providerName: string;
   name: string;
-  description: string;
   /** 能不能识图：不能时输入框"+"里的"图片"不可用。 */
   vision: boolean;
   efforts: ThinkingEffort[];
@@ -25,8 +24,13 @@ export const effortLabels = new Proxy({} as Record<ThinkingEffort, string>, {
   get: (_, level) => t(`effort.${String(level) as ThinkingEffort}`),
 });
 
-/** 拉到"最高"时，档位名的位置换成这句话，过一会儿再换回来。 */
-export const MAX_HINT = "思考时间更长，用量更多。";
+/** DeepSeek 内置的两个模型的一句话说明（模型选择器里写在名字下面）。 */
+const MODEL_DESCRIPTIONS: Partial<Record<string, PlainKey>> = {
+  "deepseek/deepseek-flash": "model.descFlash",
+  "deepseek/deepseek-v4-pro": "model.descPro",
+};
+
+/** 拉到"最高"时，档位名的位置换成"思考时间更长，用量更多。"（model.maxHint），过一会儿再换回来。 */
 const MAX_HINT_MS = 1400;
 
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
@@ -50,6 +54,8 @@ export function ModelPicker({
   defaultEffort: ThinkingEffort;
   onChange: (model: string, effort: ThinkingEffort) => void;
 }) {
+  // 按钮上的档位名（effortLabels）换了界面语言跟着换
+  useLocale();
   const [open, setOpen] = useState(false);
   // 收起时也有动画，和弹出一样快（styles.css 的 .popover.closing）。
   const { mounted, closing } = usePresence(open, 180);
@@ -114,6 +120,7 @@ function ModelEffortMenu({
   onChange: (model: string, effort: ThinkingEffort) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [page, setPage] = useState(0);
   // 拖动中的档位：松手之前档位名就跟着变，松手才真正选上
   const [dragging, setDragging] = useState<ThinkingEffort | null>(null);
@@ -148,7 +155,7 @@ function ModelEffortMenu({
     <div
       className={`popover model-popover${closing ? " closing" : ""}`}
       role="dialog"
-      aria-label="模型和思考强度"
+      aria-label={t("model.dialog")}
     >
       <Pages active={page}>
         <div className="effort-page">
@@ -157,7 +164,7 @@ function ModelEffortMenu({
             <button
               type="button"
               className="effort-title"
-              aria-label={`选择模型，当前为 ${current.name}`}
+              aria-label={t("model.choose", { name: current.name })}
               onClick={() => setPage(1)}
             >
               <span className={`effort-title-main${hint ? " out" : ""}`}>
@@ -168,14 +175,14 @@ function ModelEffortMenu({
                 </span>
               </span>
               <span className={`effort-hint-max${hint ? " in" : ""}`} aria-hidden="true">
-                {MAX_HINT}
+                {t("model.maxHint")}
               </span>
             </button>
             <button
               type="button"
               className="icon-button small"
-              aria-label="恢复默认"
-              title="恢复默认"
+              aria-label={t("model.resetEffort")}
+              title={t("model.resetEffort")}
               disabled={effort === defaultEffort}
               onClick={() => onChange(current.id, defaultEffort)}
             >
@@ -191,11 +198,11 @@ function ModelEffortMenu({
               onDrag={setDragging}
             />
           ) : (
-            <p className="effort-note">{current.name} 未声明推理等级，由接口自行决定是否思考。</p>
+            <p className="effort-note">{t("model.noEfforts", { name: current.name })}</p>
           )}
           {/* 读屏软件：到"最高"时读出提示 */}
           <span className="visually-hidden" aria-live="polite">
-            {hint ? MAX_HINT : ""}
+            {hint ? t("model.maxHint") : ""}
           </span>
         </div>
         <div className="model-page">
@@ -203,14 +210,14 @@ function ModelEffortMenu({
             <button
               type="button"
               className="icon-button small"
-              aria-label="返回"
+              aria-label={t("common.back")}
               onClick={() => setPage(0)}
             >
               <span className="flip">
                 <ChevronRightIcon />
               </span>
             </button>
-            <span>模型</span>
+            <span>{t("model.list")}</span>
           </div>
           {models.map((m, i) => {
             const selected = m.id === current.id;
@@ -227,7 +234,9 @@ function ModelEffortMenu({
                 >
                   <span className="model-option-text">
                     <span className="model-name">{m.name}</span>
-                    {m.description && <span className="model-desc">{m.description}</span>}
+                    {MODEL_DESCRIPTIONS[m.id] && (
+                      <span className="model-desc">{t(MODEL_DESCRIPTIONS[m.id] as PlainKey)}</span>
+                    )}
                   </span>
                   {selected && <CheckIcon />}
                 </button>
@@ -288,6 +297,7 @@ function EffortSlider({
   onChange: (effort: ThinkingEffort) => void;
   onDrag: (effort: ThinkingEffort | null) => void;
 }) {
+  const t = useT();
   const last = Math.max(1, efforts.length - 1);
   const index = Math.max(0, efforts.indexOf(value));
   const [drag, setDrag] = useState<number | null>(null);
@@ -364,7 +374,7 @@ function EffortSlider({
         className="effort-thumb"
         role="slider"
         tabIndex={0}
-        aria-label="思考强度"
+        aria-label={t("model.effort")}
         aria-valuemin={0}
         aria-valuemax={efforts.length - 1}
         aria-valuenow={index}

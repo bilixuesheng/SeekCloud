@@ -79,5 +79,17 @@ export function listTime(iso: string, now = Date.now()): string {
   );
 }
 
+/** 等了多久（首页"有会话在等你输入"的列表）："刚刚""等了 5 分钟""等了 2 小时"……一周以前的写日期。 */
+export function waitedTime(iso: string, now = Date.now()): string {
+  const minutes = Math.floor((now - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return t("time.justNow");
+  if (minutes < 60) return t("time.waitedMinutes", { count: minutes });
+  if (minutes < 24 * 60) return t("time.waitedHours", { count: Math.floor(minutes / 60) });
+  if (minutes < 7 * 24 * 60) {
+    return t("time.waitedDays", { count: Math.floor(minutes / (24 * 60)) });
+  }
+  return listTime(iso, now);
+}
+
 /** 数字：千分位按语言（131,072）。 */
 export const formatNumber = (n: number): string => n.toLocaleString(currentLocale());

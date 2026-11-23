@@ -1,36 +1,44 @@
-import type { SessionState, SessionStatus } from "@seekcloud/protocol";
+import type { SessionState, SessionStatus, SessionStatusDetail } from "@seekcloud/protocol";
+import { type PlainKey, t } from "../i18n";
 
 export type { Session } from "@seekcloud/protocol";
 
-export const statusLabels: Record<SessionStatus, string> = {
-  queued: "排队中",
-  running: "运行中",
-  waiting: "等待回复",
-  dormant: "休眠",
-  archived: "已归档",
-  failed: "失败",
+const STATUS: Record<SessionStatus, PlainKey> = {
+  queued: "status.queued",
+  running: "status.running",
+  waiting: "status.waiting",
+  dormant: "status.dormant",
+  archived: "status.archived",
+  failed: "status.failed",
 };
 
+const DETAIL: Record<NonNullable<SessionStatusDetail>, PlainKey> = {
+  preparing_sandbox: "status.preparingSandbox",
+  awaiting_input: "status.awaitingInput",
+  done: "status.done",
+};
+
+/** 环境的名字：默认环境存的是空名字，按界面语言显示"默认环境"。 */
+export const environmentLabel = (name: string): string => name || t("environment.default");
+
+/** 会话状态的名字（排队中、运行中……）。 */
+export const statusLabel = (status: SessionStatus): string => t(STATUS[status]);
+
 export function statusText(state: SessionState): string {
-  if (state.detail === "preparing_sandbox") return "正在准备沙箱";
-  if (state.status === "archived" || state.status === "failed") return statusLabels[state.status];
+  if (state.detail === "preparing_sandbox") return t(DETAIL.preparing_sandbox);
+  if (state.status === "archived" || state.status === "failed") return statusLabel(state.status);
   // 等你输入、已完成：等待回复的附加说明，休眠以后保留（#139）
-  if (state.detail === "awaiting_input") return "等你输入";
-  if (state.detail === "done" && state.status === "waiting") return "已完成";
-  return statusLabels[state.status];
+  if (state.detail === "awaiting_input") return t(DETAIL.awaiting_input);
+  if (state.detail === "done" && state.status === "waiting") return t(DETAIL.done);
+  return statusLabel(state.status);
 }
 
 /** 会话信息里的状态：状态加上附加说明，比如"休眠 · 等你输入"。 */
 export function statusWithDetail(state: SessionState): string {
-  const detail =
-    state.detail === "preparing_sandbox"
-      ? "正在准备沙箱"
-      : state.detail === "awaiting_input"
-        ? "等你输入"
-        : state.detail === "done"
-          ? "已完成"
-          : undefined;
-  return detail ? `${statusLabels[state.status]} · ${detail}` : statusLabels[state.status];
+  const status = statusLabel(state.status);
+  return state.detail
+    ? t("status.withDetail", { status, detail: t(DETAIL[state.detail]) })
+    : status;
 }
 
 /**

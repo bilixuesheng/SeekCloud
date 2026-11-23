@@ -2,25 +2,17 @@ import { MAX_GROUP_NAME, type SessionGroup } from "@seekcloud/protocol";
 import { useState } from "react";
 import { type ApiError, api } from "../api";
 import { PencilIcon, TrashIcon } from "../Icons";
+import { useT } from "../i18n";
+import { errorText } from "../i18n/errors";
 import { Pages, Sheet } from "../Motion";
 import { MenuItem, RenameForm, SheetBack } from "./SessionHeader";
 
 type GroupPage = "menu" | "rename" | "delete";
 const GROUP_PAGES: GroupPage[] = ["menu", "rename", "delete"];
 
-const jsonInit = (method: string, body: unknown): RequestInit => ({
-  method,
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify(body),
-});
-
-/** 改分组名、删除分组。接口没有 PATCH 的封装（client/api.ts 只有 POST、PUT、DELETE），这里自己发。 */
+/** 改分组名。 */
 export async function renameGroup(id: string, name: string): Promise<void> {
-  const res = await fetch(`/api/session-groups/${id}`, jsonInit("PATCH", { name }));
-  if (!res.ok) {
-    const body = (await res.json().catch(() => undefined)) as { error?: ApiError } | undefined;
-    throw body?.error ?? { code: "network", message: "网络异常，请稍后重试" };
-  }
+  await api(`/api/session-groups/${id}`, { name }, "PATCH");
 }
 
 /**
@@ -36,6 +28,7 @@ export function GroupMenu({
   open: boolean;
   onClose: () => void;
 }) {
+  const t = useT();
   const [page, setPage] = useState<GroupPage>("menu");
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -47,7 +40,7 @@ export function GroupMenu({
       await action();
       onClose();
     } catch (e) {
-      setError((e as ApiError).message);
+      setError(errorText(e as ApiError));
     } finally {
       setBusy(false);
     }
@@ -56,7 +49,7 @@ export function GroupMenu({
   return (
     <Sheet
       open={open}
-      label="分组菜单"
+      label={t("group.menu")}
       onClose={onClose}
       onClosed={() => {
         setPage("menu");
@@ -67,11 +60,11 @@ export function GroupMenu({
         <div className="sheet-menu" role="menu">
           <p className="sheet-menu-title">{group.name}</p>
           <MenuItem icon={<PencilIcon />} onClick={() => setPage("rename")}>
-            重命名
+            {t("common.rename")}
           </MenuItem>
           <div className="popover-divider" />
           <MenuItem icon={<TrashIcon />} danger onClick={() => setPage("delete")}>
-            删除分组
+            {t("group.delete")}
           </MenuItem>
           {error && page === "menu" && (
             <p className="alert sheet-alert" role="alert">
@@ -83,7 +76,7 @@ export function GroupMenu({
         <RenameForm
           key={open ? "open" : "closed"}
           title={group.name}
-          label="分组名"
+          label={t("group.name")}
           maxLength={MAX_GROUP_NAME}
           busy={busy}
           error={page === "rename" ? error : undefined}
@@ -95,8 +88,8 @@ export function GroupMenu({
         />
 
         <div className="sheet-menu">
-          <SheetBack onClick={() => setPage("menu")}>删除分组</SheetBack>
-          <p className="sheet-menu-text">分组中的会话将回到“最近”，会话本身不受影响。</p>
+          <SheetBack onClick={() => setPage("menu")}>{t("group.delete")}</SheetBack>
+          <p className="sheet-menu-text">{t("group.deleteHint")}</p>
           {error && page === "delete" && (
             <p className="alert sheet-alert" role="alert">
               {error}
@@ -104,7 +97,7 @@ export function GroupMenu({
           )}
           <div className="sheet-actions">
             <button type="button" className="pill-button" onClick={() => setPage("menu")}>
-              取消
+              {t("common.cancel")}
             </button>
             <button
               type="button"
@@ -112,7 +105,7 @@ export function GroupMenu({
               disabled={busy}
               onClick={() => void run(() => api(`/api/session-groups/${group.id}`, {}, "DELETE"))}
             >
-              删除
+              {t("common.delete")}
             </button>
           </div>
         </div>

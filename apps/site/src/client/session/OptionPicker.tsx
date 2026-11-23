@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon } from "../Icons";
+import { useT } from "../i18n";
 import { usePresence } from "../Motion";
 
 export interface Option {
@@ -23,7 +24,8 @@ export function OptionPicker({
   onChange,
   onOpen,
   searchable: alwaysSearchable = false,
-  emptyText = "未找到匹配的选项。",
+  emptyText,
+  searchLabel,
 }: {
   icon: ReactNode;
   /** 弹层的标题，也是读屏软件读的名字。 */
@@ -35,8 +37,12 @@ export function OptionPicker({
   onOpen?: () => void;
   /** 选项不多时也有搜索框（分支）。 */
   searchable?: boolean;
+  /** 搜索不到时的话，默认"未找到匹配的选项。"。 */
   emptyText?: string;
+  /** 搜索框给读屏软件读的名字（"搜索分支"），默认"搜索"。 */
+  searchLabel?: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const { mounted, closing } = usePresence(open, 180);
   const [query, setQuery] = useState("");
@@ -100,14 +106,14 @@ export function OptionPicker({
               ref={search}
               className="popover-search"
               type="search"
-              placeholder="搜索"
-              aria-label={`搜索${label}`}
+              placeholder={t("common.search")}
+              aria-label={searchLabel ?? t("common.search")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           )}
           {shown.length === 0 ? (
-            <p className="popover-empty">{emptyText}</p>
+            <p className="popover-empty">{emptyText ?? t("common.noMatch")}</p>
           ) : (
             <ul className="option-list">
               {shown.map((o) => {

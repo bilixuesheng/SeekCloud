@@ -16,6 +16,7 @@ import {
   ReturnIcon,
   StopIcon,
 } from "../Icons";
+import { useT } from "../i18n";
 import { keyboardOpen } from "../keyboard";
 import { Sheet, usePresence } from "../Motion";
 import { MenuItem } from "./SessionHeader";
@@ -71,6 +72,7 @@ export function Composer({
    */
   attach?: { vision: boolean };
 }) {
+  const t = useT();
   const textarea = useRef<HTMLTextAreaElement>(null);
   // 按下发送按钮时输入法开着没有（输入框有焦点、可见区域被顶矮了）：开着的发完不关，关着的发完不弹出来。
   const keepKeyboard = useRef(false);
@@ -113,7 +115,7 @@ export function Composer({
     >
       {attach && (
         <PopMenu
-          label="添加附件"
+          label={t("composer.attach")}
           className="composer-attach"
           menuClassName="attach-menu"
           trigger={<PlusIcon size={18} />}
@@ -121,14 +123,14 @@ export function Composer({
           {() => (
             <>
               <MenuItem icon={<ImageIcon />} disabled onClick={() => undefined}>
-                图片
+                {t("composer.image")}
                 <span className="sheet-item-hint">
-                  {attach.vision ? "暂未开放" : "当前模型无法识别图片，请换用支持识图的模型"}
+                  {attach.vision ? t("composer.imageSoon") : t("composer.imageUnsupported")}
                 </span>
               </MenuItem>
               <MenuItem icon={<PaperclipIcon />} disabled onClick={() => undefined}>
-                文件
-                <span className="sheet-item-hint">接入沙箱后可用</span>
+                {t("composer.file")}
+                <span className="sheet-item-hint">{t("composer.fileSoon")}</span>
               </MenuItem>
             </>
           )}
@@ -153,8 +155,8 @@ export function Composer({
         <button
           type="button"
           className="send stop"
-          aria-label="停止"
-          title="停止"
+          aria-label={t("composer.stop")}
+          title={t("composer.stop")}
           disabled={working.stopping}
           onClick={working.onStop}
         >
@@ -165,8 +167,8 @@ export function Composer({
           type="submit"
           className="send"
           disabled={!ready}
-          aria-label={working ? "发送（Agent 下一步读到）" : submitLabel}
-          title={working ? "发送（Agent 下一步读到）" : submitLabel}
+          aria-label={working ? t("composer.sendNow") : submitLabel}
+          title={working ? t("composer.sendNow") : submitLabel}
           // 输入法开着时点发送，不让按钮抢走焦点：输入法不收起，发完可以接着打字。
           // 输入法关着时让按钮拿走焦点，输入框失焦，发完以后输入法也不会弹出来。
           onPointerDown={() => {
@@ -205,9 +207,10 @@ function SendMenu({
   onLater: () => void;
   onStop: () => void;
 }) {
+  const t = useT();
   return (
     <PopMenu
-      label="更多发送方式"
+      label={t("composer.moreSend")}
       className="send-more"
       menuClassName="send-menu"
       disabled={disabled}
@@ -216,10 +219,10 @@ function SendMenu({
       {(pick) => (
         <>
           <MenuItem icon={<QueueIcon />} onClick={() => pick(onLater)}>
-            稍后排队
+            {t("composer.later")}
           </MenuItem>
           <MenuItem icon={<StopIcon />} onClick={() => pick(onStop)}>
-            停止
+            {t("composer.stop")}
           </MenuItem>
         </>
       )}

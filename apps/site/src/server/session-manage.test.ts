@@ -155,7 +155,8 @@ describe("会话的改名、归档、取消归档、删除", () => {
 
   it("会话带着它用的环境的名字（会话信息卡片显示）", async () => {
     const session = await start();
-    expect((await get(session.shortId)).environmentName).toBe("默认环境");
+    // 默认环境的名字是空的，界面按语言显示
+    expect((await get(session.shortId)).environmentName).toBe("");
   });
 
   it("置顶：记下置顶的时间，重复置顶不变；不动列表里的顺序；归档时自动取消，已归档的不能置顶", async () => {

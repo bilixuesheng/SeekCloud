@@ -1,7 +1,8 @@
 import { countryOfTimeZone } from "./time-zones";
 
 /**
- * 按浏览器的使用习惯猜管理员是哪里人，首页的问候语用（"你是中国人吗，某某"）。
+ * 按浏览器的使用习惯猜管理员是哪里人，首页的问候语用（"你是中国人吗，某某"，只有中文界面有；地区的中文名在
+ * i18n/greetings-zh.ts）。
  * 按优先级取第一个说得出地区的信号（2026-11-14、11-15 用户定的）：
  * 1. 浏览器的语言列表（整个列表，不只是显示语言）：按顺序第一个说得出地区的；英文是通用语言，列表里有别的语言就不看英文，
  *    只有英文时时区优先（不少中国开发者把 en-US 放在第一位）；
@@ -35,10 +36,7 @@ const ONE_PLACE_LANGUAGES: Record<string, string> = {
 };
 
 /** 这几个地区不说这句（2026-11-14 用户定的：台湾不出现）。 */
-const SKIP = new Set(["TW", "XK", "EH"]);
-
-/** 说成"中国"的地区：大陆、香港、澳门都是中国（2026-11-14 用户定的）。 */
-const CHINA = new Set(["CN", "HK", "MO"]);
+export const SKIPPED_REGIONS: ReadonlySet<string> = new Set(["TW", "XK", "EH"]);
 
 const locales = (languages: readonly string[]) =>
   languages.flatMap((tag) => {
@@ -64,7 +62,7 @@ export function guessRegion(
     native.length > 0
       ? (fromLanguages(native, zone) ?? zone)
       : (zone ?? fromLanguages(english, zone));
-  return found && !SKIP.has(found) ? found : undefined;
+  return found && !SKIPPED_REGIONS.has(found) ? found : undefined;
 }
 
 /**
@@ -87,26 +85,13 @@ function fromLanguages(list: Intl.Locale[], zone: string | undefined): string | 
   return undefined;
 }
 
-/** 地区的中文名（中国、美国……）；浏览器给不出名字时返回 undefined。 */
-export function regionName(code: string): string | undefined {
-  if (CHINA.has(code)) return "中国";
-  if (SKIP.has(code)) return undefined;
+/** 这台浏览器的地区码，问候语用。 */
+export function localRegion(): string | undefined {
   try {
-    const name = new Intl.DisplayNames(["zh-CN"], { type: "region", style: "short" }).of(code);
-    return name && name !== code ? name : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/** 这台浏览器的地区名，问候语用。 */
-export function localRegionName(): string | undefined {
-  try {
-    const code = guessRegion(
+    return guessRegion(
       navigator.languages ?? [navigator.language],
       Intl.DateTimeFormat().resolvedOptions().timeZone,
     );
-    return code ? regionName(code) : undefined;
   } catch {
     return undefined;
   }

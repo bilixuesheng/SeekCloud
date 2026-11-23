@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { regionName } from "../i18n/greetings-zh";
 import { pickGreeting } from "./greetings";
-import { guessRegion, regionName } from "./region";
+import { guessRegion } from "./region";
 
 describe("按浏览器的使用习惯猜地区", () => {
   it("语言列表优先：按顺序第一个说得出地区的为准，时区不看", () => {
@@ -51,8 +52,10 @@ describe("按浏览器的使用习惯猜地区", () => {
     const now = new Date(2026, 10, 2, 15, 0);
     const pick = (name: string | null, region?: string) =>
       pickGreeting({ name, now, random: () => 0.3, region });
-    expect(pick("雪生", "中国")).toBe("你是中国人吗，雪生");
+    expect(pick("雪生", "CN")).toBe("你是中国人吗，雪生");
+    expect(pick("雪生", "HK")).toBe("你是中国人吗，雪生");
+    expect(pick("雪生", "JP")).toBe("你是日本人吗，雪生");
     expect(pick("雪生").startsWith("你是")).toBe(false);
-    expect(pick(null, "中国").startsWith("你是")).toBe(false);
+    expect(pick(null, "CN").startsWith("你是")).toBe(false);
   });
 });

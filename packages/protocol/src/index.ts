@@ -420,7 +420,7 @@ export interface Session extends SessionState {
   /** "提供方/模型"（parseModelRef）。 */
   model: string;
   effort: ThinkingEffort;
-  /** 会话用的环境的名字；环境被删掉了时为 null。 */
+  /** 会话用的环境的名字；环境被删掉了时为 null；默认环境是空字符串（界面按语言显示名字）。 */
   environmentName: string | null;
   /** 置顶的时间，没置顶时为 null。归档时自动取消置顶。置顶的不在分组里。 */
   pinnedAt: string | null;

@@ -1,5 +1,7 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { type ApiError, api } from "../api";
+import { t } from "../i18n";
+import { errorText } from "../i18n/errors";
 import {
   autoScrollSpeed,
   classifyGesture,
@@ -173,7 +175,9 @@ export function useSidebarDrag(options: {
         let groupId: string | undefined;
         let section: string;
         if (zone === "new-group") {
-          const group = await api<{ id: string }>("/api/session-groups", { name: "新分组" });
+          const group = await api<{ id: string }>("/api/session-groups", {
+            name: t("sidebar.newGroup"),
+          });
           groupId = group.id;
           section = "group";
           onGroupCreated(group.id);
@@ -191,7 +195,7 @@ export function useSidebarDrag(options: {
         upsert(session);
       } catch (e) {
         if (original) upsert(original);
-        onError((e as ApiError).message);
+        onError(errorText(e as ApiError));
       }
     },
     [sidebarStyle, zones],

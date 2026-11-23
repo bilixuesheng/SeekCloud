@@ -58,7 +58,7 @@ export const DEEPSEEK_MAX_TOKENS = 256_000;
 
 /**
  * DeepSeek 内置的两个模型（和 dsh 0.2.2 的内置目录一样）：设置卡片上显示它们；发布的列表取不到时也用它们。
- * 价钱是 pi-ai 目录里的，平台调用选"自动"时挑最省的。
+ * 价钱是 pi-ai 目录里的，平台调用选"自动"时挑最省的。一句话说明是界面文案，在浏览器的文案目录里（#136）。
  */
 export const DEEPSEEK_MODELS: ModelEntry[] = [
   {
@@ -66,7 +66,6 @@ export const DEEPSEEK_MODELS: ModelEntry[] = [
     provider: DEEPSEEK_PROVIDER,
     id: "deepseek-flash",
     name: "DeepSeek-V4.1-Flash",
-    description: "速度快、用量省，适合日常改动",
     api: "anthropic-messages",
     contextWindow: DEEPSEEK_CONTEXT,
     maxTokens: DEEPSEEK_MAX_TOKENS,
@@ -79,7 +78,6 @@ export const DEEPSEEK_MODELS: ModelEntry[] = [
     provider: DEEPSEEK_PROVIDER,
     id: "deepseek-v4-pro",
     name: "DeepSeek-V4-Pro",
-    description: "更强，适合复杂的任务",
     api: "anthropic-messages",
     contextWindow: DEEPSEEK_CONTEXT,
     maxTokens: DEEPSEEK_MAX_TOKENS,

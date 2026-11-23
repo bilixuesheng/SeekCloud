@@ -20,11 +20,13 @@ import {
   PlusIcon,
   TrashIcon,
 } from "../Icons";
+import { useT } from "../i18n";
+import { errorText } from "../i18n/errors";
 import { Pages, Sheet, usePresence } from "../Motion";
 import { navigate } from "../router";
 import { useShell } from "../shell";
 import { PullRequestBadge, pullRequestText } from "./PullRequestBadge";
-import { type Session, statusWithDetail } from "./types";
+import { environmentLabel, type Session, statusWithDetail } from "./types";
 
 /** 标题菜单里的几页：菜单本身、打开方式、重命名、确认删除、移到分组、新分组。 */
 type MenuPage = "menu" | "open" | "rename" | "delete" | "group" | "new-group";
@@ -45,6 +47,7 @@ export function SessionHeader({
   /** 手机上打开侧栏。 */
   onMenu: () => void;
 }) {
+  const t = useT();
   const [menuOpen, setMenuOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
 
@@ -53,7 +56,7 @@ export function SessionHeader({
       <button
         type="button"
         className="icon-button session-header-menu"
-        aria-label="会话列表"
+        aria-label={t("sidebar.label")}
         onClick={onMenu}
       >
         <MenuIcon />
@@ -75,9 +78,9 @@ export function SessionHeader({
         <button
           type="button"
           className={`icon-button${infoOpen ? " active" : ""}`}
-          aria-label="会话信息"
+          aria-label={t("session.info")}
           aria-expanded={infoOpen}
-          data-tip="会话信息"
+          data-tip={t("session.info")}
           disabled={!session}
           onClick={() => setInfoOpen((v) => !v)}
         >
@@ -104,6 +107,7 @@ function SessionInfo({
   open: boolean;
   onClose: () => void;
 }) {
+  const t = useT();
   const { mounted, shown } = usePresence(open, 200);
   const card = useRef<HTMLDivElement>(null);
 
@@ -130,22 +134,24 @@ function SessionInfo({
       ref={card}
       className={`popover session-info${shown && open ? " shown" : ""}`}
       role="dialog"
-      aria-label="会话信息"
+      aria-label={t("session.info")}
     >
-      <InfoRow icon={<DotIcon />} label="状态">
+      <InfoRow icon={<DotIcon />} label={t("session.status")}>
         {statusWithDetail(session)}
       </InfoRow>
-      <InfoRow icon={<BoxIcon />} label="环境">
-        {session.environmentName ?? "已删除"}
+      <InfoRow icon={<BoxIcon />} label={t("environment.label")}>
+        {session.environmentName === null
+          ? t("environment.deleted")
+          : environmentLabel(session.environmentName)}
       </InfoRow>
       {session.repos.length === 0 && (
-        <InfoRow icon={<GitHubMark size={14} />} label="仓库">
-          无仓库
+        <InfoRow icon={<GitHubMark size={14} />} label={t("session.repo")}>
+          {t("repo.noRepo")}
         </InfoRow>
       )}
       {session.repos.map((repo) => (
         <div key={repo.fullName} className="session-info-repo">
-          <InfoRow icon={<GitHubMark size={14} />} label="仓库">
+          <InfoRow icon={<GitHubMark size={14} />} label={t("session.repo")}>
             <a
               href={`https://github.com/${repo.fullName}`}
               target="_blank"
@@ -153,15 +159,18 @@ function SessionInfo({
             >
               {repo.fullName}
             </a>
-            {repo.access === "read" && <span className="chip-badge">只读</span>}
+            {repo.access === "read" && <span className="chip-badge">{t("repo.readOnly")}</span>}
           </InfoRow>
-          <InfoRow icon={<BranchIcon />} label="分支">
+          <InfoRow icon={<BranchIcon />} label={t("session.branch")}>
             <span className="mono">
               {repo.baseBranch} → {repo.branch}
             </span>
           </InfoRow>
           {repo.pullRequest && (
-            <InfoRow icon={<PullRequestBadge pr={repo.pullRequest} size={14} />} label="改动">
+            <InfoRow
+              icon={<PullRequestBadge pr={repo.pullRequest} size={14} />}
+              label={t("session.changes")}
+            >
               <a
                 href={`https://github.com/${repo.fullName}/pull/${repo.pullRequest.number}`}
                 target="_blank"
@@ -218,6 +227,7 @@ export function SessionMenu({
   open: boolean;
   onClose: () => void;
 }) {
+  const t = useT();
   const [page, setPage] = useState<MenuPage>("menu");
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -242,7 +252,7 @@ export function SessionMenu({
       await action();
       return true;
     } catch (e) {
-      setError((e as ApiError).message);
+      setError(errorText(e as ApiError));
       return false;
     } finally {
       setBusy(false);
@@ -302,7 +312,7 @@ export function SessionMenu({
   };
 
   return (
-    <Sheet open={open} label="会话菜单" onClose={close} onClosed={reset}>
+    <Sheet open={open} label={t("session.menu")} onClose={close} onClosed={reset}>
       <Pages active={MENU_PAGES.indexOf(page)}>
         <div className="sheet-menu" role="menu">
           <p className="sheet-menu-title">{session.title}</p>
@@ -311,7 +321,7 @@ export function SessionMenu({
               href={`https://github.com/${repo.fullName}/pull/${pr.number}`}
               icon={<PullRequestBadge pr={pr} size={14} />}
             >
-              打开 PR
+              {t("session.openPr")}
             </MenuLink>
           )}
           {!archived && (
@@ -320,35 +330,35 @@ export function SessionMenu({
               disabled={busy}
               onClick={() => void togglePin()}
             >
-              {pinned ? "取消置顶" : "置顶"}
+              {pinned ? t("session.unpin") : t("session.pin")}
             </MenuItem>
           )}
           {!archived && (
             <MenuItem icon={<ListIcon />} onClick={() => setPage("group")} more>
-              移到分组
+              {t("session.moveToGroup")}
             </MenuItem>
           )}
           <MenuItem icon={<DotIcon />} disabled={busy} onClick={() => void toggleUnread()}>
-            {session.unread ? "标为已读" : "标为未读"}
+            {session.unread ? t("session.markRead") : t("session.markUnread")}
           </MenuItem>
           {/* 不使用仓库的会话（#191）没有会话分支和 PR，没有可打开的 */}
           {session.repos.length > 0 && (
             <MenuItem icon={<ExternalIcon />} onClick={() => setPage("open")} more>
-              打开方式
+              {t("session.openOn")}
             </MenuItem>
           )}
           <MenuItem icon={<PencilIcon />} onClick={() => setPage("rename")}>
-            重命名
+            {t("common.rename")}
           </MenuItem>
           <MenuItem icon={<LinkIcon />} onClick={() => void copyLink()}>
-            {copied ? "已复制链接" : "复制链接"}
+            {copied ? t("session.linkCopied") : t("session.copyLink")}
           </MenuItem>
           <MenuItem icon={<ArchiveIcon />} disabled={busy} onClick={() => void toggleArchive()}>
-            {archived ? "取消归档" : "归档"}
+            {archived ? t("session.unarchive") : t("session.archive")}
           </MenuItem>
           <div className="popover-divider" />
           <MenuItem icon={<TrashIcon />} danger onClick={() => setPage("delete")}>
-            删除
+            {t("common.delete")}
           </MenuItem>
           {error && page === "menu" && (
             <p className="alert sheet-alert" role="alert">
@@ -358,7 +368,7 @@ export function SessionMenu({
         </div>
 
         <div className="sheet-menu" role="menu">
-          <SheetBack onClick={() => setPage("menu")}>打开方式</SheetBack>
+          <SheetBack onClick={() => setPage("menu")}>{t("session.openOn")}</SheetBack>
           {session.repos.map((repo) => (
             <div key={repo.fullName}>
               {session.repos.length > 1 && <p className="sheet-menu-group">{repo.fullName}</p>}
@@ -366,7 +376,7 @@ export function SessionMenu({
               <MenuLink
                 href={`https://github.com/${repo.fullName}/tree/${repo.branch}`}
                 icon={<BranchIcon />}
-                sub={repo.access === "read" ? "只读仓库，改动不会推送" : undefined}
+                sub={repo.access === "read" ? t("session.readOnlyRepo") : undefined}
               >
                 <span className="mono">{repo.branch}</span>
               </MenuLink>
@@ -398,10 +408,8 @@ export function SessionMenu({
         />
 
         <div className="sheet-menu">
-          <SheetBack onClick={() => setPage("menu")}>删除会话</SheetBack>
-          <p className="sheet-menu-text">
-            对话记录将被永久删除，无法恢复。GitHub 上的分支和 PR 不受影响。
-          </p>
+          <SheetBack onClick={() => setPage("menu")}>{t("session.delete")}</SheetBack>
+          <p className="sheet-menu-text">{t("session.deleteHint")}</p>
           {error && page === "delete" && (
             <p className="alert sheet-alert" role="alert">
               {error}
@@ -409,7 +417,7 @@ export function SessionMenu({
           )}
           <div className="sheet-actions">
             <button type="button" className="pill-button" onClick={() => setPage("menu")}>
-              取消
+              {t("common.cancel")}
             </button>
             <button
               type="button"
@@ -417,13 +425,13 @@ export function SessionMenu({
               disabled={busy}
               onClick={() => void remove()}
             >
-              永久删除
+              {t("session.deleteForever")}
             </button>
           </div>
         </div>
 
         <div className="sheet-menu" role="menu">
-          <SheetBack onClick={() => setPage("menu")}>移到分组</SheetBack>
+          <SheetBack onClick={() => setPage("menu")}>{t("session.moveToGroup")}</SheetBack>
           {groups.map((g) => (
             <MenuItem
               key={g.id}
@@ -435,13 +443,13 @@ export function SessionMenu({
             </MenuItem>
           ))}
           <MenuItem icon={<PlusIcon size={14} />} onClick={() => setPage("new-group")} more>
-            新分组
+            {t("sidebar.newGroup")}
           </MenuItem>
           {session.groupId && (
             <>
               <div className="popover-divider" />
               <MenuItem icon={<DotIcon />} disabled={busy} onClick={() => void moveTo(null)}>
-                移出分组
+                {t("session.removeFromGroup")}
               </MenuItem>
             </>
           )}
@@ -479,7 +487,8 @@ function NewGroupForm({
   onBack: () => void;
   onSubmit: (name: string) => Promise<void>;
 }) {
-  const [value, setValue] = useState("新分组");
+  const t = useT();
+  const [value, setValue] = useState(() => t("sidebar.newGroup"));
   const trimmed = value.trim();
   return (
     <form
@@ -489,9 +498,9 @@ function NewGroupForm({
         if (trimmed) void onSubmit(trimmed);
       }}
     >
-      <SheetBack onClick={onBack}>新分组</SheetBack>
+      <SheetBack onClick={onBack}>{t("sidebar.newGroup")}</SheetBack>
       <label className="field sheet-field">
-        <span className="visually-hidden">分组名</span>
+        <span className="visually-hidden">{t("group.name")}</span>
         <input
           value={value}
           maxLength={MAX_GROUP_NAME}
@@ -506,10 +515,10 @@ function NewGroupForm({
       )}
       <div className="sheet-actions">
         <button type="button" className="pill-button" onClick={onBack}>
-          取消
+          {t("common.cancel")}
         </button>
         <button type="submit" className="pill-button accent" disabled={busy || !trimmed}>
-          创建并移入
+          {t("session.createAndMove")}
         </button>
       </div>
     </form>
@@ -577,9 +586,15 @@ function MenuLink({
 }
 
 export function SheetBack({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  const t = useT();
   return (
     <div className="sheet-back">
-      <button type="button" className="icon-button small" aria-label="返回" onClick={onClick}>
+      <button
+        type="button"
+        className="icon-button small"
+        aria-label={t("common.back")}
+        onClick={onClick}
+      >
         <span className="flip">
           <ChevronRightIcon />
         </span>
@@ -595,7 +610,7 @@ export function RenameForm({
   error,
   onBack,
   onSubmit,
-  label = "会话标题",
+  label,
   maxLength = 100,
 }: {
   title: string;
@@ -603,10 +618,11 @@ export function RenameForm({
   error?: string;
   onBack: () => void;
   onSubmit: (title: string) => Promise<void>;
-  /** 读屏念的输入框名字。 */
+  /** 读屏念的输入框名字，默认"会话标题"。 */
   label?: string;
   maxLength?: number;
 }) {
+  const t = useT();
   const [value, setValue] = useState(title);
   const trimmed = value.trim();
   const submit = (e: FormEvent) => {
@@ -615,9 +631,9 @@ export function RenameForm({
   };
   return (
     <form className="sheet-menu" onSubmit={submit}>
-      <SheetBack onClick={onBack}>重命名</SheetBack>
+      <SheetBack onClick={onBack}>{t("common.rename")}</SheetBack>
       <label className="field sheet-field">
-        <span className="visually-hidden">{label}</span>
+        <span className="visually-hidden">{label ?? t("session.titleLabel")}</span>
         <input value={value} maxLength={maxLength} onChange={(e) => setValue(e.target.value)} />
       </label>
       {error && (
@@ -627,14 +643,14 @@ export function RenameForm({
       )}
       <div className="sheet-actions">
         <button type="button" className="pill-button" onClick={onBack}>
-          取消
+          {t("common.cancel")}
         </button>
         <button
           type="submit"
           className="pill-button accent"
           disabled={busy || !trimmed || trimmed === title}
         >
-          保存
+          {t("common.save")}
         </button>
       </div>
     </form>

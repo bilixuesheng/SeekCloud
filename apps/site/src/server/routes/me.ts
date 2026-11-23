@@ -69,7 +69,9 @@ const environmentsRoute = createRoute({
             environments: z.array(
               z.object({
                 id: z.string(),
-                name: z.string(),
+                name: z
+                  .string()
+                  .openapi({ description: "环境名；默认环境是空的，界面按语言显示名字" }),
                 networkAccess: z.enum(networkAccess.enumValues),
                 isDefault: z.boolean(),
               }),

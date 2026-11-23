@@ -25,8 +25,6 @@ export interface ModelEntry {
   /** 发给接口的模型 ID。 */
   id: string;
   name: string;
-  /** 一句话说明（DeepSeek 内置的两个有）。 */
-  description?: string;
   /** 这个模型用哪种协议。 */
   api: ModelProtocol;
   contextWindow: number;

@@ -1,5 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
-import { greetingPool, pickGreeting, prepareGreeting, takeGreeting } from "./greetings";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { resetForTests } from "../i18n";
+import { enGreetings } from "../i18n/greetings-en";
+import { zhGreetings } from "../i18n/greetings-zh";
+import {
+  type GreetingSet,
+  greetingPool,
+  pickGreeting,
+  prepareGreeting,
+  takeGreeting,
+} from "./greetings";
 
 // 2026-11-02 是周一，11-07 是周六
 const at = (day: number, hour: number) => new Date(2026, 10, day, hour, 0);
@@ -58,15 +67,15 @@ describe("新会话页的问候语", () => {
       pickGreeting({ name: "雪生", now, random: () => r, region });
     expect(pick(0)).toBe("吾将上下而求索");
     expect(pick(0.19)).toBe("吾将上下而求索");
-    expect(pick(0.2, "日本")).toBe("你是日本人吗，雪生");
-    expect(pick(0.39, "日本")).toBe("你是日本人吗，雪生");
-    expect(pick(0.4, "日本")).toBe(pool[0]);
-    expect(pick(0.999, "日本")).toBe(pool.at(-1));
+    expect(pick(0.2, "JP")).toBe("你是日本人吗，雪生");
+    expect(pick(0.39, "JP")).toBe("你是日本人吗，雪生");
+    expect(pick(0.4, "JP")).toBe(pool[0]);
+    expect(pick(0.999, "JP")).toBe(pool.at(-1));
     // 猜不出地区时，那 20% 分给其余的句子
     expect(pick(0.2)).toBe(pool[0]);
     expect(pick(0.999)).toBe(pool.at(-1));
     // 没设昵称时也没有"你是某地人吗"
-    expect(pickGreeting({ now, random: () => 0.3, region: "日本" })).not.toContain("人吗");
+    expect(pickGreeting({ now, random: () => 0.3, region: "JP" })).not.toContain("人吗");
     expect(pool).not.toContain("吾将上下而求索");
   });
 
@@ -92,5 +101,61 @@ describe("新会话页的问候语", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe("英文另写一套（#136）", () => {
+    afterEach(() => resetForTests("zh-CN"));
+
+    /** 所有时段、星期几下可能出现的不带昵称的句子。 */
+    const everyPlain = (set: GreetingSet) =>
+      [0, 2, 5, 9, 12, 15, 18, 20, 23].flatMap((hour) =>
+        [1, 2, 3, 4, 5, 6, 7].flatMap((day) => greetingPool(null, at(day, hour), set)),
+      );
+
+    it("每种语言：不带昵称的句子不超过一行放得下的长度，带昵称的都有 {name}，没有重复的", () => {
+      for (const set of [zhGreetings, enGreetings]) {
+        for (const g of [set.seek, ...everyPlain(set)]) {
+          expect([...g].length, g).toBeLessThanOrEqual(set.maxLength);
+        }
+        const named = [
+          ...set.alwaysNamed,
+          ...set.byHour.flatMap(([, , , n]) => n),
+          ...set.byDay.flatMap(([, n]) => n),
+        ];
+        for (const g of named) expect(g, g).toContain("{name}");
+        expect(new Set(set.always).size).toBe(set.always.length);
+      }
+    });
+
+    it('英文界面挑英文的；没有汉字，标点是半角；没有"你是某地人吗"', () => {
+      resetForTests("en");
+      const now = at(2, 9);
+      const pool = greetingPool("Xuesheng", now);
+      expect(pool).toContain("Welcome back, Xuesheng");
+      for (const g of [...pool, enGreetings.seek]) {
+        expect(g).not.toMatch(/\p{Script=Han}|[，。？！、]/u);
+      }
+      expect(pickGreeting({ name: "Xuesheng", now, random: () => 0 })).toBe(
+        "To strive, to seek, to find",
+      );
+      // 猜得出地区也不说：那 20% 分给其余的句子
+      expect(pickGreeting({ name: "Xuesheng", now, random: () => 0.2, region: "CN" })).toBe(
+        pool[0],
+      );
+    });
+
+    it("先挑好的那句是中文的，换成英文以后作废、现挑一句英文的", () => {
+      vi.useFakeTimers();
+      try {
+        prepareGreeting("雪生", () => undefined);
+        resetForTests("en");
+        const text = takeGreeting("雪生");
+        expect([...greetingPool("雪生", new Date(), enGreetings), enGreetings.seek]).toContain(
+          text,
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

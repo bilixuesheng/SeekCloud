@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CheckIcon, CopyIcon } from "./Icons";
+import { useT } from "./i18n";
 
 /**
  * 复制到剪贴板，返回有没有复制成功。
@@ -58,12 +59,14 @@ export function CopyButton({
   onCopy: () => void;
   className?: string;
 }) {
+  const t = useT();
+  const label = copied ? t("common.copied") : t("common.copy");
   return (
     <button
       type="button"
       className={className}
-      aria-label={copied ? "已复制" : "复制"}
-      data-tip={copied ? "已复制" : "复制"}
+      aria-label={label}
+      data-tip={label}
       onClick={onCopy}
     >
       {copied ? <CheckIcon size={13} /> : <CopyIcon />}
