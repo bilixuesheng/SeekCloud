@@ -19,7 +19,7 @@ import { type WebSocket, WebSocketServer } from "ws";
 import { networkOf } from "../access-log";
 import type { AppDeps } from "../app";
 import { hosts, sessions } from "../db/schema";
-import { HOUR, RateLimiter } from "../rate-limit";
+import { clientAddress, HOUR, RateLimiter } from "../rate-limit";
 import type { HostLink } from "../sessions/host";
 import { readSetting } from "../settings";
 import { parseFrame, parseHello } from "./frames";
@@ -260,12 +260,8 @@ export class HostHub implements HostLink {
 
   #accept(socket: WebSocket, req: IncomingMessage): void {
     socket.on("error", () => undefined);
-    const forwarded = req.headers["x-forwarded-for"];
-    // 和接口的频率限制一样只认最后一个值（只有一层反向代理，它把客户端地址追加在末尾）。
-    const ip =
-      (Array.isArray(forwarded) ? forwarded.at(-1) : forwarded)?.split(",").at(-1)?.trim() ||
-      req.socket.remoteAddress ||
-      "unknown";
+    // 和接口的频率限制一样，按设置里"主站前面有几层反向代理"取来源地址（握手时再读设置）
+    const from = { forwardedFor: req.headers["x-forwarded-for"], remote: req.socket.remoteAddress };
     const timeout = setTimeout(
       () => socket.close(LINK_CLOSE.BAD_FRAME, "hello expected"),
       HELLO_TIMEOUT_MS,
@@ -277,7 +273,7 @@ export class HostHub implements HostLink {
         socket.close(LINK_CLOSE.BAD_FRAME, "hello expected");
         return;
       }
-      this.#handshake(socket, ip, hello).catch((error) => {
+      this.#handshake(socket, from, hello).catch((error) => {
         console.error("宿主机握手失败", error);
         socket.close(1011, "internal error");
       });
@@ -285,7 +281,13 @@ export class HostHub implements HostLink {
     socket.once("close", () => clearTimeout(timeout));
   }
 
-  async #handshake(socket: WebSocket, ip: string, { hello }: HostHello): Promise<void> {
+  async #handshake(
+    socket: WebSocket,
+    from: { forwardedFor: string | string[] | undefined; remote: string | undefined },
+    { hello }: HostHello,
+  ): Promise<void> {
+    const hops = await readSetting(this.#deps, "proxy_hops", { userId: null });
+    const ip = clientAddress(from.forwardedFor, from.remote, hops);
     // 只数失败的：认证通过就退回这一次。不区分"没有这台宿主机"和"密钥错误"。
     const rules = [{ key: `host-auth:${networkOf(ip)}`, ...AUTH_FAILURES }];
     if (this.#limiter.take(rules) > 0) {

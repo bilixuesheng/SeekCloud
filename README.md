@@ -95,8 +95,8 @@ pnpm dev
 | `PORT` | 监听端口，默认 3000 |
 | `SEEKCLOUD_DATA_DIR` | 数据目录，存放导出的压缩包，默认 `./data` |
 | `SEEKCLOUD_VERSION` | 版本号，由健康检查接口 `/api/health` 返回，默认 `dev` |
-| `NODE_ENV` | 设为 `production` 时，登录 Cookie 只通过 HTTPS 发送 |
-| `PUBLIC_URL` | 主站对外的地址，GitHub 回调使用 |
+| `PUBLIC_URL` | 主站对外的地址，GitHub 回调、通行密钥使用。以 `https://` 开头时，登录 Cookie 只通过 HTTPS 发送；未配置时，按每个请求是否经 HTTPS 到达决定 |
+| `SEEKCLOUD_PROXY_HOPS` | 主站前面有几层反向代理（0 到 5），默认 1。0 表示主站直接对外，按连接的来源地址识别客户端；N 表示取 `X-Forwarded-For` 的倒数第 N 个。只是初始值，之后可以在设置里修改。填错会让按来源的频率限制失效或误伤所有人 |
 | `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_APP_SLUG`、`GITHUB_WEBHOOK_SECRET` | GitHub App 的配置。未配置时，GitHub 相关功能不可用 |
 
 忘记管理员密码时，在 `apps/site` 中运行 `DATABASE_URL=... pnpm admin:reset-password`。它会打印一个随机的新密码，并让所有设备退出登录。

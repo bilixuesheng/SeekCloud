@@ -1,6 +1,9 @@
+import type { IncomingMessage } from "node:http";
 import type { Context } from "hono";
+import type { AppDeps } from "./app";
 import { apiError } from "./errors";
 import type { Clock } from "./ports";
+import { readSetting } from "./settings";
 
 export const MINUTE = 60_000;
 export const HOUR = 60 * MINUTE;
@@ -76,11 +79,46 @@ function storageKey(rule: Rule): string {
 }
 
 /**
- * 部署时只有一层反向代理，它把看到的客户端地址追加到 X-Forwarded-For 的最后。
- * 前面的值客户端自己可以随便填，所以只认最后一个。直接访问时没有这个头。
+ * 客户端的地址（#94）。主站前面有 hops 层反向代理时，每一层把它看到的来源地址追加到 X-Forwarded-For 的最后：
+ * 倒数第 hops 个是最外层的代理看到的客户端，再往前的是客户端自己可以随便填的。
+ * - 0 层（主站直接对外）：不看这个头，用连接的来源地址；
+ * - 头里的地址不到 hops 个：请求没经过全部的代理（比如绕过代理直连），这时头里的值都不可信，也用连接的来源地址。
+ * IPv4 映射的 IPv6 地址（::ffff:1.2.3.4）写成 IPv4。
  */
-export function clientIp(c: Context): string {
-  return c.req.header("x-forwarded-for")?.split(",").at(-1)?.trim() || "unknown";
+export function clientAddress(
+  forwardedFor: string | readonly string[] | undefined,
+  remote: string | undefined,
+  hops: number,
+): string {
+  if (hops > 0) {
+    const chain = [forwardedFor ?? []]
+      .flat()
+      .flatMap((value) => value.split(","))
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const ip = chain.length >= hops ? chain.at(-hops) : undefined;
+    if (ip) return plainAddress(ip);
+  }
+  return remote ? plainAddress(remote) : "unknown";
+}
+
+function plainAddress(ip: string): string {
+  return /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip)?.[1] ?? ip;
+}
+
+/** 这个请求的客户端地址：按设置里"主站前面有几层反向代理"取（clientAddress）。 */
+export async function clientIp(
+  c: Context,
+  deps: Pick<AppDeps, "db" | "settingsPolicy">,
+): Promise<string> {
+  const hops = await readSetting(deps, "proxy_hops", { userId: null });
+  return clientAddress(c.req.header("x-forwarded-for"), remoteAddress(c), hops);
+}
+
+/** 连接的来源地址。@hono/node-server 把 Node 的请求放在 c.env.incoming；进程内调用（测试）时没有。 */
+function remoteAddress(c: Context): string | undefined {
+  const env = c.env as { incoming?: IncomingMessage } | undefined;
+  return env?.incoming?.socket?.remoteAddress;
 }
 
 /** 超过频率限制时的响应：429，带 Retry-After。 */

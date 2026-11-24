@@ -12,14 +12,13 @@ export const ACCESS_LOG_RETENTION_MS = 180 * 24 * 60 * 60_000;
 
 /** 记一条访问记录：登录、发起会话、发消息时调用。 */
 export async function recordAccess(
-  deps: Pick<AppDeps, "db" | "clock">,
+  deps: Pick<AppDeps, "db" | "clock" | "settingsPolicy">,
   c: Context,
   userId: string,
   event: AccessEvent,
 ): Promise<void> {
-  await deps.db
-    .insert(accessLogs)
-    .values({ userId, event, network: networkOf(clientIp(c)), at: deps.clock.now() });
+  const network = networkOf(await clientIp(c, deps));
+  await deps.db.insert(accessLogs).values({ userId, event, network, at: deps.clock.now() });
 }
 
 /** IPv4 原样；IPv6 归到它的 /64（IPv4 映射的地址按 IPv4 算）；认不出的原样留着。 */

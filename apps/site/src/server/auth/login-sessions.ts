@@ -5,6 +5,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { recordAccess } from "../access-log";
 import type { AppDeps } from "../app";
 import { loginSessions, users } from "../db/schema";
+import { secureCookie } from "../https";
 import { clientIp } from "../rate-limit";
 import { describeUserAgent } from "./user-agent";
 
@@ -16,7 +17,10 @@ const TOUCH_EVERY_MS = 60_000;
 export const MAX_DEVICE_NAME = 100;
 
 /** 管理员登录用到的几样依赖。 */
-export type LoginDeps = Pick<AppDeps, "db" | "clock" | "secureCookies" | "secrets" | "publicUrl">;
+export type LoginDeps = Pick<
+  AppDeps,
+  "db" | "clock" | "secureCookies" | "secrets" | "publicUrl" | "settingsPolicy"
+>;
 
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
@@ -45,7 +49,7 @@ export async function startLoginSession(
         ? client.deviceName.slice(0, MAX_DEVICE_NAME)
         : describeUserAgent(c.req.header("user-agent")),
     lastUsedAt: now,
-    lastIp: clientIp(c),
+    lastIp: await clientIp(c, deps),
     expiresAt: new Date(now.getTime() + LOGIN_TTL_MS),
     createdAt: now,
   });
@@ -54,7 +58,7 @@ export async function startLoginSession(
     setCookie(c, COOKIE, token, {
       httpOnly: true,
       sameSite: "Lax",
-      secure: deps.secureCookies,
+      secure: secureCookie(c, deps),
       path: "/",
       maxAge: LOGIN_TTL_MS / 1000,
     });
@@ -101,7 +105,7 @@ export async function currentUser(deps: LoginDeps, c: Context) {
       .update(loginSessions)
       .set({
         lastUsedAt: now,
-        lastIp: clientIp(c),
+        lastIp: await clientIp(c, deps),
         // App 一直在用就一直登录着；30 天没用过才失效
         ...(row.client === "app" ? { expiresAt: new Date(now.getTime() + LOGIN_TTL_MS) } : {}),
       })

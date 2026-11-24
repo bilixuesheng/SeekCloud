@@ -95,8 +95,8 @@ Main site environment variables:
 | `PORT` | Port to listen on. Defaults to 3000 |
 | `SEEKCLOUD_DATA_DIR` | Data directory for exported archives. Defaults to `./data` |
 | `SEEKCLOUD_VERSION` | Version string returned by the health check endpoint `/api/health`. Defaults to `dev` |
-| `NODE_ENV` | When set to `production`, the login cookie is sent over HTTPS only |
-| `PUBLIC_URL` | Public address of the main site, used for the GitHub callback |
+| `PUBLIC_URL` | Public address of the main site, used for the GitHub callback and passkeys. When it starts with `https://`, the login cookie is sent over HTTPS only; when it is not set, this depends on whether each request arrived over HTTPS |
+| `SEEKCLOUD_PROXY_HOPS` | Number of reverse proxies in front of the main site (0 to 5). Defaults to 1. 0 means the main site is exposed directly and clients are identified by the connection's source address; N means the Nth-from-last entry of `X-Forwarded-For` is used. This is only the initial value and can be changed later in settings. A wrong value either lets clients bypass per-source rate limits or makes them apply to everyone at once |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_APP_SLUG`, `GITHUB_WEBHOOK_SECRET` | GitHub App settings. Without them, GitHub features are unavailable |
 
 If you forget the admin password, run `DATABASE_URL=... pnpm admin:reset-password` in `apps/site`. It prints a new random password and signs out all devices.

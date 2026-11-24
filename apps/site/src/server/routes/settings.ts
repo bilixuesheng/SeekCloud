@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { AppDeps } from "../app";
 import { apiError, errorResponse, notLoggedIn } from "../errors";
 import { canSkipThinking, platformCallCost } from "../models/providers";
+import { clientIp } from "../rate-limit";
 import { normalizeModelRef, type Sessions } from "../sessions/sessions";
 import {
   AiLabelsValue,
@@ -9,6 +10,7 @@ import {
   HOST_OFFLINE_GRACE_CHOICES,
   HostOfflineGraceValue,
   LanguageValue,
+  ProxyHopsValue,
   readSetting,
   writeSetting,
 } from "../settings";
@@ -94,6 +96,44 @@ const putHostOfflineGraceRoute = createRoute({
   responses: {
     200: { description: "改好以后的值", ...json(HostOfflineGrace) },
     400: errorResponse("不支持这个时长"),
+    401: errorResponse("没有登录"),
+    403: errorResponse("这项设置不能修改（主干里不会出现）"),
+  },
+});
+
+const ProxyHops = z.object({ hops: ProxyHopsValue }).openapi("ProxyHops", {
+  description:
+    "主站前面有几层反向代理（0 到 5）。0：主站直接对外，按连接的来源地址认客户端，不看 X-Forwarded-For；N：取 X-Forwarded-For 的倒数第 N 个。",
+});
+
+const ProxyHopsView = ProxyHops.extend({
+  yourAddress: z.string().openapi({
+    description: "按现在的层数，主站认出来的发这个请求的人的地址，给管理员核对层数对不对",
+  }),
+}).openapi("ProxyHopsView");
+
+const getProxyHopsRoute = createRoute({
+  method: "get",
+  path: "/proxy-hops",
+  summary: "主站前面有几层反向代理",
+  description:
+    "按来源限速、登录设备和访问记录里的地址都按它取。没改过时是安装时写的值（环境变量 SEEKCLOUD_PROXY_HOPS），没写过是 1。",
+  responses: {
+    200: { description: "层数和按它认出来的你的地址", ...json(ProxyHopsView) },
+    401: errorResponse("没有登录"),
+  },
+});
+
+const putProxyHopsRoute = createRoute({
+  method: "put",
+  path: "/proxy-hops",
+  summary: "修改主站前面有几层反向代理",
+  description:
+    "填多了，客户端能自己填 X-Forwarded-For 冒充别的地址、绕过按来源的限速；填少了，所有人都算成代理的地址，一个人输错密码就会让所有人一起被暂停。",
+  request: { body: { ...json(ProxyHops), required: true } },
+  responses: {
+    200: { description: "改好以后的层数和按它认出来的你的地址", ...json(ProxyHopsView) },
+    400: errorResponse("层数要是 0 到 5 的整数"),
     401: errorResponse("没有登录"),
     403: errorResponse("这项设置不能修改（主干里不会出现）"),
   },
@@ -260,6 +300,21 @@ export function settingsRoutes(deps: AppDeps, sessions: Sessions) {
         return c.json(locked, 403);
       }
       return c.json({ seconds }, 200);
+    })
+    .openapi(getProxyHopsRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      const hops = await readSetting(deps, "proxy_hops", { userId: me.id });
+      return c.json({ hops, yourAddress: await clientIp(c, deps) }, 200);
+    })
+    .openapi(putProxyHopsRoute, async (c) => {
+      const me = await deps.identity.currentUser(c);
+      if (!me) return c.json(notLoggedIn, 401);
+      const { hops } = c.req.valid("json");
+      if (!(await writeSetting(deps, "proxy_hops", { userId: me.id }, hops))) {
+        return c.json(locked, 403);
+      }
+      return c.json({ hops, yourAddress: await clientIp(c, deps) }, 200);
     })
     .openapi(getLanguageRoute, async (c) => {
       const me = await deps.identity.currentUser(c);
