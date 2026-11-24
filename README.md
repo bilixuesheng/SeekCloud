@@ -120,7 +120,7 @@ docker compose -f <数据目录>/compose.yml exec site node dist/server/host.js 
 | `apps/site` | 主站：Hono 接口和 React PWA |
 | `apps/host` | 沙箱宿主机的守护进程：Git 代理、提交签名、GitHub 工具服务 |
 | `apps/host/sandbox` | 沙箱中安装的 git 配置、钩子和签名助手 |
-| `apps/android` | 安卓 App（Kotlin、Jetpack Compose），独立的 Gradle 工程，不属于 pnpm 工作区。在其中运行 `./gradlew testDebugUnitTest lintDebug assembleDebug`，需要 JDK 17 以上和安卓 SDK |
+| `apps/android` | 安卓 App（Kotlin、Jetpack Compose），独立的 Gradle 工程，不属于 pnpm 工作区。在其中运行 `./gradlew testDebugUnitTest lintDebug assembleDebug`，需要 JDK 17 以上和安卓 SDK。接口代码在构建时从 `apps/android/api/openapi.json` 生成；主站的接口变了，在仓库根目录运行 `pnpm --filter @seekcloud/site openapi:export` 重新导出 |
 | `packages/protocol` | 主站和沙箱宿主机共用的协议定义 |
 | `docs/adr` | 架构决定记录 |
 | `docs/brand` | 标志、配色和界面文案规范 |

@@ -4,8 +4,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class UserAgentTest {
+    /** 带上 App 的标记、版本和系统版本。 */
     @Test
-    fun 带上_App_的标记_版本和系统版本() {
+    fun includesAppMarkerVersionAndSystemVersion() {
         assertEquals("SeekCloudAndroid/0.1.0 (Android API 37)", userAgent("0.1.0", 37))
     }
 }
