@@ -18,6 +18,10 @@ class MemoryStore : KeyValueStore {
     override fun put(key: String, value: String) {
         values[key] = value
     }
+
+    override fun remove(key: String) {
+        values.remove(key)
+    }
 }
 
 /**
@@ -25,7 +29,8 @@ class MemoryStore : KeyValueStore {
  * 连上了才记下来；证书换了重新问，确认后记下新的那张。
  */
 class ConnectorTest {
-    private val store = ServerStore(MemoryStore())
+    private var next = 0
+    private val store = ServerStore(MemoryStore()) { "s${++next}" }
     private val calls = mutableListOf<Pair<ServerAddress, ServerTrust>>()
     private var answers = ArrayDeque<ProbeResult>()
     private val connector = Connector(store) { address, trust ->
@@ -52,9 +57,9 @@ class ConnectorTest {
     fun connectedServerIsSavedAsCurrent() = runBlocking {
         answer(ProbeResult.Connected(null))
         val state = connector.connect(" seekcloud.example.com/s/abc ")
-        assertEquals(ConnectState.Connected(https, SavedServer("https://seekcloud.example.com")), state)
+        assertEquals(ConnectState.Connected(https, SavedServer("s1", "https://seekcloud.example.com")), state)
         assertEquals(https to ServerTrust(), calls.single())
-        assertEquals(SavedServer("https://seekcloud.example.com"), store.current())
+        assertEquals(SavedServer("s1", "https://seekcloud.example.com"), store.current())
     }
 
     @Test
@@ -64,7 +69,7 @@ class ConnectorTest {
         assertNull(store.current())
         val state = connector.allowCleartext(ask)
         assertEquals(ServerTrust(allowCleartext = true), calls.last().second)
-        assertEquals(SavedServer("http://192.168.1.5:8080", allowCleartext = true), (state as ConnectState.Connected).server)
+        assertEquals(SavedServer("s1", "http://192.168.1.5:8080", allowCleartext = true), (state as ConnectState.Connected).server)
 
         // 再连同一个地址不再问；换个端口是另一个地址，要重新问
         answer(ProbeResult.Connected(null), ProbeResult.NeedsCleartextConsent)
@@ -93,7 +98,7 @@ class ConnectorTest {
 
     @Test
     fun changedCertificateAsksAgainAndReplacesThePin() = runBlocking {
-        store.save(SavedServer("https://seekcloud.example.com", pinnedCertificate = "AA:BB"))
+        store.save(https, ServerTrust(pinnedCertificate = "AA:BB"))
         answer(ProbeResult.UntrustedCertificate(cert, "CC:DD", changed = true), ProbeResult.Connected(null))
         val ask = connector.connect("seekcloud.example.com") as ConnectState.AskCertificate
         // 先拿以前钉住的证书去连
@@ -102,7 +107,7 @@ class ConnectorTest {
         assertEquals("CC:DD", ask.fingerprint)
         connector.trustCertificate(ask)
         assertEquals(ServerTrust(pinnedCertificate = "CC:DD"), calls.last().second)
-        assertEquals(listOf(SavedServer("https://seekcloud.example.com", pinnedCertificate = "CC:DD")), store.servers())
+        assertEquals(listOf(SavedServer("s1", "https://seekcloud.example.com", pinnedCertificate = "CC:DD")), store.servers())
     }
 
     @Test
@@ -112,7 +117,7 @@ class ConnectorTest {
         val state = connector.allowCleartext(ask) as ConnectState.Connected
         // 升到 https 以后不带明文的放行
         assertEquals(https to ServerTrust(), calls.last())
-        assertEquals(SavedServer("https://seekcloud.example.com"), state.server)
+        assertEquals(SavedServer("s1", "https://seekcloud.example.com"), state.server)
         assertEquals(listOf(state.server), store.servers())
     }
 
@@ -136,6 +141,30 @@ class ConnectorTest {
     fun unexpectedErrorsAreUnreachableInsteadOfACrash() = runBlocking {
         val failing = Connector(store) { _, _ -> throw IllegalStateException("boom") }
         assertEquals(ConnectState.Failed(Problem.Unreachable), failing.connect("seekcloud.example.com"))
+    }
+
+    @Test
+    fun editingTheAddressKeepsTheServerAndAsksAgainForTheNewAddress() = runBlocking {
+        val old = store.save(http, ServerTrust(allowCleartext = true))
+        // 新地址是另一台主机：以前对旧地址的放行不带过去
+        answer(ProbeResult.UntrustedCertificate(cert, "EE:FF", changed = false), ProbeResult.Connected(null))
+        val ask = connector.connect("seekcloud.example.com", editing = old.id) as ConnectState.AskCertificate
+        assertEquals(ServerTrust(), calls.first().second)
+        val state = connector.trustCertificate(ask) as ConnectState.Connected
+        assertEquals(SavedServer(old.id, "https://seekcloud.example.com", pinnedCertificate = "EE:FF"), state.server)
+        assertNull(state.merged)
+        assertEquals(listOf(state.server), store.servers())
+    }
+
+    @Test
+    fun editingIntoAnAddressSavedAsAnotherServerMergesIt() = runBlocking {
+        val old = store.save(http, ServerTrust(allowCleartext = true))
+        val other = store.save(https, ServerTrust())
+        answer(ProbeResult.Connected(null))
+        val state = connector.connect("seekcloud.example.com", editing = old.id) as ConnectState.Connected
+        assertEquals(old.id, state.server.id)
+        assertEquals(other.id, state.merged)
+        assertEquals(listOf(state.server), store.servers())
     }
 
     @Test

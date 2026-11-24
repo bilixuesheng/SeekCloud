@@ -60,7 +60,7 @@ describe("设备令牌和设备列表", () => {
     expect(fromApp.devices.find((d) => d.current)).toMatchObject({ client: "app" });
   });
 
-  it("设备名太长不收；没给设备名时有个默认的", async () => {
+  it("设备名太长不收；没给设备名时存空的，界面按语言显示", async () => {
     const long = await t.browser().post("/api/auth/login", {
       password: t.adminPassword,
       client: "app",
@@ -72,7 +72,7 @@ describe("设备令牌和设备列表", () => {
       .post("/api/auth/login", { password: t.adminPassword, client: "app" });
     const { token } = (await res.json()) as { token: string };
     const list = (await (await asApp(token, "/api/auth/devices")).json()) as { devices: Device[] };
-    expect(list.devices.find((d) => d.current)?.deviceName).toBe("安卓设备");
+    expect(list.devices.find((d) => d.current)?.deviceName).toBeNull();
   });
 
   it("带令牌、不带 Origin 的表单请求能过；只带 Cookie 的别的网站的表单请求照旧拦下", async () => {

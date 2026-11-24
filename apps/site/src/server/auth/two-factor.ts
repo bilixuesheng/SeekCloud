@@ -50,7 +50,7 @@ export async function twoFactorEnabled(deps: Pick<AppDeps, "db">, userId: string
 
 /** 加密的短时令牌：登录的中间状态（login）和开启时的设置令牌（setup）。用途写在里面，不能混用。 */
 type Pending =
-  | { purpose: "login"; userId: string; client?: "app"; deviceName?: string }
+  | { purpose: "login"; userId: string; client?: "app"; deviceName?: string | null }
   | { purpose: "setup"; userId: string; secret: string };
 
 export function sealPending(deps: TwoFactorDeps, pending: Pending): string {

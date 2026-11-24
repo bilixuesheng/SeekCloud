@@ -1,43 +1,22 @@
 package cn.seekcloud.app.connect
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -46,7 +25,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,22 +33,50 @@ import cn.seekcloud.app.R
 import cn.seekcloud.app.net.SavedServer
 import cn.seekcloud.app.net.ServerAddress
 import cn.seekcloud.app.net.ServerTrust
+import cn.seekcloud.app.ui.ConfirmDialog
+import cn.seekcloud.app.ui.Page
+import cn.seekcloud.app.ui.PageHeader
+import cn.seekcloud.app.ui.PrimaryButton
+import cn.seekcloud.app.ui.SecondaryButton
 import cn.seekcloud.app.ui.SeekCloudTheme
 
-/** "连接服务器"页（#204）：第一次打开、还没有保存的主站时显示。连上以后去登录（#205）。 */
+/**
+ * "连接服务器"页（#204）：第一次打开、添加服务器时显示；[editing] 时是给已经存着的一台改地址（#205）。
+ * 连上以后交给 [onConnected]（去登录页或首页）。[onBack] 为 null 时没有上一页（第一次打开）。
+ */
 @Composable
-fun ConnectRoute(viewModel: ConnectViewModel = viewModel()) {
+fun ConnectRoute(
+    editing: SavedServer?,
+    autoConnect: Boolean,
+    signedIn: Boolean,
+    onConnected: (ConnectState.Connected) -> Unit,
+    onBack: (() -> Unit)?,
+) {
+    val viewModel: ConnectViewModel = viewModel(key = "connect:${editing?.id}")
     val state by viewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(state) {
+        val connected = state as? ConnectState.Connected ?: return@LaunchedEffect
+        viewModel.reset(force = true)
+        onConnected(connected)
+    }
     ConnectScreen(
         state = state,
-        initialAddress = viewModel.savedOrigin.orEmpty(),
-        onConnect = viewModel::connect,
+        initialAddress = editing?.origin.orEmpty(),
+        editingHost = editing?.address?.host?.takeIf { signedIn },
+        editing = editing != null,
+        autoConnect = autoConnect,
+        onConnect = { viewModel.connect(it, editing?.id) },
         onReset = viewModel::reset,
         onAllowCleartext = viewModel::allowCleartext,
         onTrustCertificate = viewModel::trustCertificate,
+        onBack = onBack,
     )
 }
 
+/**
+ * @param editingHost 改地址、而且这台已经登录时，原来的主机名：新地址换了主机就先确认"沿用登录状态"，
+ *   免得令牌被带到填错的地址上。
+ */
 @Composable
 fun ConnectScreen(
     state: ConnectState,
@@ -79,102 +85,92 @@ fun ConnectScreen(
     onReset: () -> Unit,
     onAllowCleartext: () -> Unit,
     onTrustCertificate: () -> Unit,
+    editing: Boolean = false,
+    editingHost: String? = null,
+    autoConnect: Boolean = false,
+    onBack: (() -> Unit)? = null,
 ) {
     var address by rememberSaveable { mutableStateOf(initialAddress) }
+    var autoDone by rememberSaveable { mutableStateOf(false) }
+    var confirmMove by rememberSaveable { mutableStateOf<String?>(null) }
     val connecting = state == ConnectState.Connecting
-    val submit = { if (address.isNotBlank() && !connecting) onConnect(address) }
-    // 连上以后地址框里换成规整后的地址（主站让从 http 升到 https 时也看得出来）
-    LaunchedEffect(state) { if (state is ConnectState.Connected) address = state.server.origin }
+    val submit: () -> Unit = submit@{
+        if (address.isBlank() || connecting) return@submit
+        val host = ServerAddress.parse(address)?.host
+        if (editingHost != null && host != null && host != editingHost) confirmMove = host else onConnect(address)
+    }
+    LaunchedEffect(Unit) {
+        if (autoConnect && !autoDone && address.isNotBlank()) {
+            autoDone = true
+            onConnect(address)
+        }
+    }
+    if (onBack != null) BackHandler(enabled = !connecting, onBack = onBack)
 
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.fillMaxSize().safeDrawingPadding(), contentAlignment = Alignment.Center) {
-            Column(
-                Modifier
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 32.dp)
-                    .widthIn(max = 440.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.whale),
-                    contentDescription = null,
-                    modifier = Modifier.size(96.dp),
-                )
-                Spacer(Modifier.height(20.dp))
-                Text(stringResource(R.string.connect_title), style = MaterialTheme.typography.headlineSmall)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    stringResource(R.string.connect_hint),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(24.dp))
-                val problem = (state as? ConnectState.Failed)?.problem
-                OutlinedTextField(
-                    value = address,
-                    onValueChange = {
-                        address = it
-                        onReset()
-                    },
-                    label = { Text(stringResource(R.string.connect_address)) },
-                    singleLine = true,
-                    enabled = !connecting,
-                    isError = problem != null,
-                    supportingText = problem?.let {
-                        { Text(problemText(it), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.None,
-                        autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.Uri,
-                        imeAction = ImeAction.Go,
-                    ),
-                    keyboardActions = KeyboardActions(onGo = { submit() }),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = submit,
-                    enabled = address.isNotBlank() && !connecting,
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                ) {
-                    if (connecting) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = LocalContentColor.current,
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(stringResource(R.string.connect_connecting))
-                        }
-                    } else {
-                        Text(stringResource(R.string.connect_button))
-                    }
-                }
-                if (state is ConnectState.Connected) {
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        stringResource(R.string.connect_connected, state.address.host),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                    )
-                }
-            }
+    Page {
+        PageHeader(
+            title = stringResource(if (editing) R.string.connect_edit_title else R.string.connect_title),
+            hint = stringResource(if (editing) R.string.connect_edit_hint else R.string.connect_hint),
+        )
+        val problem = (state as? ConnectState.Failed)?.problem
+        OutlinedTextField(
+            value = address,
+            onValueChange = {
+                address = it
+                onReset()
+            },
+            label = { Text(stringResource(R.string.connect_address)) },
+            singleLine = true,
+            enabled = !connecting,
+            isError = problem != null,
+            supportingText = problem?.let {
+                { Text(problemText(it), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+            },
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.None,
+                autoCorrectEnabled = false,
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Go,
+            ),
+            keyboardActions = KeyboardActions(onGo = { submit() }),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+        PrimaryButton(
+            text = stringResource(R.string.connect_button),
+            busyText = stringResource(R.string.connect_connecting),
+            busy = connecting,
+            enabled = address.isNotBlank(),
+            onClick = submit,
+        )
+        if (onBack != null) {
+            Spacer(Modifier.height(8.dp))
+            SecondaryButton(stringResource(R.string.cancel), enabled = !connecting, onClick = onBack)
         }
     }
 
+    confirmMove?.let { host ->
+        ConfirmDialog(
+            title = stringResource(R.string.connect_move_title),
+            body = stringResource(R.string.connect_move_body, host),
+            confirm = stringResource(R.string.connect_move_confirm),
+            onConfirm = {
+                confirmMove = null
+                onConnect(address)
+            },
+            onDismiss = { confirmMove = null },
+        )
+    }
+
     when (state) {
-        is ConnectState.AskCleartext -> RiskDialog(
+        is ConnectState.AskCleartext -> ConfirmDialog(
             title = stringResource(R.string.connect_cleartext_title),
             body = stringResource(R.string.connect_cleartext_body),
             confirm = stringResource(R.string.connect_cleartext_confirm),
             onConfirm = onAllowCleartext,
             onDismiss = onReset,
         )
-        is ConnectState.AskCertificate -> RiskDialog(
+        is ConnectState.AskCertificate -> ConfirmDialog(
             title = stringResource(
                 if (state.changed) R.string.connect_cert_changed_title else R.string.connect_cert_title,
             ),
@@ -204,37 +200,9 @@ fun ConnectScreen(
     }
 }
 
-/** 要管理员接受风险的确认：确认的按钮用醒目的颜色，"取消"在旁边。 */
+/** 连不上的原因怎么说（"连接服务器"页和出错页共用）。 */
 @Composable
-private fun RiskDialog(
-    title: String,
-    body: String,
-    confirm: String,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-    extra: @Composable () -> Unit = {},
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(body)
-                extra()
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onConfirm,
-                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            ) { Text(confirm) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-    )
-}
-
-@Composable
-private fun problemText(problem: Problem): String = when (problem) {
+fun problemText(problem: Problem): String = when (problem) {
     Problem.Invalid -> stringResource(R.string.connect_invalid)
     Problem.Unreachable -> stringResource(R.string.connect_unreachable)
     Problem.NotSeekCloud -> stringResource(R.string.connect_not_seekcloud)
@@ -271,9 +239,8 @@ private fun CertificatePreview() {
 
 @Preview
 @Composable
-private fun ConnectedPreview() {
-    val address = ServerAddress(true, "seekcloud.example.com", null)
+private fun EditPreview() {
     SeekCloudTheme {
-        ConnectScreen(ConnectState.Connected(address, SavedServer(address.origin)), address.origin, {}, {}, {}, {})
+        ConnectScreen(ConnectState.Idle, "https://seekcloud.example.com", {}, {}, {}, {}, editing = true, onBack = {})
     }
 }
