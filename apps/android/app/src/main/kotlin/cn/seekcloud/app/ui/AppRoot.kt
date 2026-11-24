@@ -63,6 +63,7 @@ fun AppRoot(app: AppViewModel = viewModel()) {
             )
             is Screen.Home -> SessionListRoute(
                 server = current.server,
+                nickname = current.nickname,
                 // 每台主站一个，换服务器、改地址以后是新的
                 viewModel = viewModel(key = "sessions:${current.server.id}:${current.server.origin}") {
                     SessionListViewModel(app.client(current.server), onSignedOut = { app.signedOut(current.server) })

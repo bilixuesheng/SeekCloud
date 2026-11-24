@@ -1,6 +1,11 @@
 package cn.seekcloud.app.ui
 
 import android.content.Intent
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import cn.seekcloud.app.sessions.awaitingInput
 import android.os.Build
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -93,6 +98,7 @@ import java.time.Instant
 @Composable
 fun SessionListRoute(
     server: SavedServer,
+    nickname: String?,
     viewModel: SessionListViewModel,
     newSession: @Composable () -> NewSessionViewModel,
     onSwitchServer: () -> Unit,
@@ -114,29 +120,52 @@ fun SessionListRoute(
     val copied = stringResource(R.string.session_link_copied)
     // 会话页（#182）做好以前，先在浏览器里打开网页上的会话页
     val openSession = { s: SessionSummary -> context.startActivity(Intent(Intent.ACTION_VIEW, "${server.origin}/s/${s.shortId}".toUri())) }
-    if (composing) {
+    val waiting = awaitingInput(state.sessions)
+    // 宽屏（平板、大屏手机横过来、折叠屏展开）：左边会话列表，右边新会话页（照网页宽屏的布局）
+    val wide = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } >= 840.dp
+    val newSessionPage = @Composable { onBack: (() -> Unit)? ->
         NewSessionRoute(
             origin = server.origin,
             viewModel = newSession(),
+            nickname = nickname,
+            waiting = waiting,
+            onOpen = openSession,
             // 发起以后回到列表，新会话实时出现在最上面；会话页（#182）做好以后改成直接进会话页
             onCreated = { composing = false },
-            onBack = { composing = false },
+            onBack = onBack,
         )
+    }
+    if (composing && !wide) {
+        newSessionPage { composing = false }
         return
     }
-    SessionListScreen(
-        server = server,
-        state = state,
-        connected = connected,
-        refreshing = refreshing,
-        onRefresh = viewModel::refresh,
-        onOpen = openSession,
-        onNewSession = { composing = true },
-        onMenu = { viewModel.openMenu(it.shortId) },
-        onSwitchServer = onSwitchServer,
-        onSignOut = onSignOut,
-        snackbar = snackbar,
-    )
+    val list = @Composable { modifier: Modifier ->
+        Box(modifier) {
+            SessionListScreen(
+                server = server,
+                state = state,
+                connected = connected,
+                refreshing = refreshing,
+                onRefresh = viewModel::refresh,
+                onOpen = openSession,
+                onNewSession = { composing = true },
+                onMenu = { viewModel.openMenu(it.shortId) },
+                onSwitchServer = onSwitchServer,
+                onSignOut = onSignOut,
+                snackbar = snackbar,
+                showNewSession = !wide,
+            )
+        }
+    }
+    if (wide) {
+        Row(Modifier.fillMaxSize()) {
+            list(Modifier.width(380.dp).fillMaxHeight())
+            VerticalDivider()
+            Box(Modifier.weight(1f).fillMaxHeight()) { newSessionPage(null) }
+        }
+    } else {
+        list(Modifier.fillMaxSize())
+    }
     val open = menu
     val session = open?.let { m -> state.sessions.firstOrNull { it.shortId == m.shortId } }
     if (open != null && session != null) {
@@ -171,6 +200,8 @@ fun SessionListScreen(
     onSwitchServer: () -> Unit,
     onSignOut: () -> Unit,
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    /** 宽屏时新会话页一直在右边，不要右下角的按钮。 */
+    showNewSession: Boolean = true,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
@@ -211,14 +242,16 @@ fun SessionListScreen(
         },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            val label = stringResource(R.string.sidebar_new_session)
-            ExtendedFloatingActionButton(
-                onClick = onNewSession,
-                icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
-                text = { Text(label) },
-                // 扩展的浮动按钮把文字那一块的语义清掉了（Material 3 的做法）：读屏要靠这里的说明
-                modifier = Modifier.semantics { contentDescription = label },
-            )
+            if (showNewSession) {
+                val label = stringResource(R.string.sidebar_new_session)
+                ExtendedFloatingActionButton(
+                    onClick = onNewSession,
+                    icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
+                    text = { Text(label) },
+                    // 扩展的浮动按钮把文字那一块的语义清掉了（Material 3 的做法）：读屏要靠这里的说明
+                    modifier = Modifier.semantics { contentDescription = label },
+                )
+            }
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->

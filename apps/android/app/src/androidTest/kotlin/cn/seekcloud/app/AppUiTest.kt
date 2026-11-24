@@ -1,6 +1,7 @@
 package cn.seekcloud.app
 
 import android.content.Context
+import android.content.pm.ActivityInfo
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -204,9 +205,7 @@ class AppUiTest {
         launch()
         connect(siteA)
         signIn()
-        explain("tap new session") {
-            rule.onNode(hasContentDescription(s(R.string.sidebar_new_session)) and hasClickAction()).performClick()
-        }
+        openNewSession()
         // 假主站没关联 GitHub：有关联的说明，只能不使用仓库
         waitFor(s(R.string.github_connect_title))
         val text = "New from the app ${System.nanoTime()}"
@@ -215,6 +214,60 @@ class AppUiTest {
         // 发起以后回到列表，新会话在列表里
         waitForList()
         waitFor(text)
+    }
+
+    @Test
+    fun statusMarksAndTheAwaitingHint() {
+        launch()
+        connect(siteA)
+        signIn()
+        // 回合结束时 Agent 在问问题：会话"等你输入"
+        nextTurn(siteA, """{"events":[{"type":"message","text":"要我把测试也一起改了吗？"}]}""")
+        val title = "Awaiting ${System.nanoTime()}"
+        startSession(siteA, title)
+        waitForRow(title, s(R.string.status_awaiting_input))
+        // 新会话页的输入框上面提示它在等你输入
+        openNewSession()
+        waitFor(s(R.string.awaiting_one, title))
+    }
+
+    @Test
+    fun failedSessionShowsTheWarningMark() {
+        launch()
+        connect(siteB)
+        signIn()
+        nextTurn(siteB, """{"failSandbox":true}""")
+        val title = "Failing ${System.nanoTime()}"
+        startSession(siteB, title)
+        waitForRow(title, s(R.string.status_failed))
+    }
+
+    @Test
+    fun wideScreenShowsTheListAndTheNewSessionPage() {
+        launch()
+        connect(siteA)
+        signIn()
+        scenario?.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+        // 横过来以后够宽：左边列表，右边新会话页，没有右下角的"新会话"按钮
+        waitFor(s(R.string.new_session_placeholder))
+        waitForList()
+        rule.onNode(hasContentDescription(s(R.string.sidebar_new_session)) and hasClickAction()).assertDoesNotExist()
+        scenario?.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+        waitForList()
+        rule.waitUntil(20_000) {
+            rule.onAllNodes(hasContentDescription(s(R.string.sidebar_new_session)) and hasClickAction()).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    /** 列表里这个会话的那一行带着这个状态标记（行是一个整体，标记的说明并在里面）。 */
+    private fun waitForRow(title: String, mark: String) = explain("row \"$title\" with \"$mark\"") {
+        rule.waitUntil(30_000) {
+            rule.onAllNodes(hasText(title) and hasContentDescription(mark)).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun openNewSession() = explain("tap new session") {
+        rule.onNode(hasContentDescription(s(R.string.sidebar_new_session)) and hasClickAction()).performClick()
     }
 
     @Test
@@ -235,6 +288,14 @@ class AppUiTest {
         type(renamed)
         tapSheet(s(R.string.common_save))
         waitFor(renamed)
+
+        // 回合在没人开着它时结束：有新内容；标为已读以后蓝点消失
+        waitForRow(renamed, s(R.string.status_unread))
+        openMenuOf(renamed)
+        tapSheet(s(R.string.session_mark_read))
+        rule.waitUntil(20_000) {
+            rule.onAllNodes(hasText(renamed) and hasContentDescription(s(R.string.status_unread))).fetchSemanticsNodes().isEmpty()
+        }
 
         // 用"⋯"打开菜单，置顶：出现"已置顶"这一类
         openMenuOf(renamed)
@@ -281,6 +342,12 @@ class AppUiTest {
         return OkHttpClient().newCall(Request.Builder().url("$site/api/auth/login").post(login).build()).execute().use {
             Json.parseToJsonElement(it.body.string()).jsonObject.getValue("token").jsonPrimitive.content
         }
+    }
+
+    /** 假主站的下一个回合怎么回（只有测试用的假主站有这个接口，见 app-test-server.ts）。 */
+    private fun nextTurn(site: String, json: String) {
+        val request = Request.Builder().url("$site/__test/next-turn").post(json.toRequestBody(JSON)).build()
+        OkHttpClient().newCall(request).execute().use { check(it.isSuccessful) { "next turn: HTTP ${it.code}" } }
     }
 
     /** 不使用仓库发起一个会话（#191），标题就是这段话。 */

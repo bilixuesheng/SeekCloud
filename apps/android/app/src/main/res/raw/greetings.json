@@ -1,0 +1,126 @@
+{
+  "seek": "To strive, to seek, to find",
+  "always": [
+    "What are we building today?",
+    "Where shall we begin?",
+    "Describe your task",
+    "Welcome back",
+    "Ready when you are",
+    "What's on your mind?",
+    "Hitch your wagon to a star",
+    "Two roads diverged in a wood",
+    "What's past is prologue",
+    "The readiness is all",
+    "Knowledge is power",
+    "Per aspera ad astra",
+    "Fortune favors the bold",
+    "Onward and upward",
+    "Well begun is half done",
+    "Measure twice, cut once",
+    "Make haste slowly",
+    "Rome was not built in a day",
+    "Brevity is the soul of wit",
+    "One step at a time",
+    "I wandered lonely as a cloud",
+    "Hope springs eternal",
+    "The best is yet to be"
+  ],
+  "alwaysNamed": [
+    "Welcome back, {name}",
+    "Hello, {name}",
+    "Good to see you, {name}",
+    "{name}, what's next?",
+    "Shall we continue, {name}?",
+    "{name}, what's the plan?"
+  ],
+  "byHour": [
+    [
+      5,
+      11,
+      [
+        "A new day begins",
+        "The day is young",
+        "Fresh morning, fresh ideas"
+      ],
+      []
+    ],
+    [
+      18,
+      23,
+      [
+        "Twilight and evening bell",
+        "The evening is yours"
+      ],
+      [
+        "How was your day, {name}?",
+        "An evening session, {name}?"
+      ]
+    ],
+    [
+      23,
+      29,
+      [
+        "Burning the midnight oil",
+        "Still seeking at this hour",
+        "The stars are out",
+        "Rest well when you're done"
+      ],
+      [
+        "Working late, {name}?",
+        "Late night, {name}?"
+      ]
+    ]
+  ],
+  "byDay": [
+    [
+      [
+        "Enjoy your weekend",
+        "A quiet Sunday"
+      ],
+      [
+        "Happy Sunday, {name}",
+        "Enjoy your weekend, {name}"
+      ]
+    ],
+    [
+      [],
+      [
+        "Happy Monday, {name}"
+      ]
+    ],
+    [
+      [],
+      [
+        "Happy Tuesday, {name}"
+      ]
+    ],
+    [
+      [],
+      [
+        "Happy Wednesday, {name}"
+      ]
+    ],
+    [
+      [],
+      [
+        "Happy Thursday, {name}"
+      ]
+    ],
+    [
+      [],
+      [
+        "Happy Friday, {name}"
+      ]
+    ],
+    [
+      [
+        "Enjoy your weekend",
+        "A leisurely Saturday"
+      ],
+      [
+        "Happy Saturday, {name}",
+        "Enjoy your weekend, {name}"
+      ]
+    ]
+  ]
+}

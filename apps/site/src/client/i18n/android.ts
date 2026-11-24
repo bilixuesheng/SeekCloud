@@ -1,7 +1,10 @@
+import type { GreetingSet } from "../session/greetings";
 import { appEn } from "./app-en";
 import { appZh } from "./app-zh";
 import type { Catalog, Locale, Message } from "./catalog";
 import { en } from "./en";
+import { enGreetings } from "./greetings-en";
+import { zhGreetings } from "./greetings-zh";
 import { zh } from "./zh";
 
 /**
@@ -44,6 +47,7 @@ const SHARED = [
   "effort.",
   "models.deepseekName",
   "models.providerName.",
+  "awaiting.",
 ];
 
 const snake = (key: string) =>
@@ -210,4 +214,18 @@ export function androidErrorMessages(): string {
     ")",
     "",
   ].join("\n");
+}
+
+/**
+ * 新会话页的问候语（#124）：两种语言的句子，规则照 session/greetings.ts，App 里按系统语言读
+ * res/raw/greetings.json（英文，默认）和 res/raw-zh/greetings.json。"你是某地人吗"那一句要按浏览器猜地区，App 里不用。
+ */
+export const ANDROID_GREETINGS: { dir: string; set: GreetingSet }[] = [
+  { dir: "raw", set: enGreetings },
+  { dir: "raw-zh", set: zhGreetings },
+];
+
+export function androidGreetings(set: GreetingSet): string {
+  const { seek, always, alwaysNamed, byHour, byDay } = set;
+  return `${JSON.stringify({ seek, always, alwaysNamed, byHour, byDay }, null, 2)}\n`;
 }

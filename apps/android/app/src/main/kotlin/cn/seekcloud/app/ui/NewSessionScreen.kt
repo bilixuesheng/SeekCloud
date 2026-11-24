@@ -1,6 +1,17 @@
 package cn.seekcloud.app.ui
 
 import android.content.Intent
+import android.text.format.DateUtils
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
+import cn.seekcloud.app.sessions.GreetingSet
+import cn.seekcloud.app.sessions.pickGreeting
+import java.time.Instant
+import java.util.Calendar
+import kotlin.random.Random
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -86,8 +97,11 @@ private enum class Picker { None, Environment, Repo, Branch, Model }
 fun NewSessionRoute(
     origin: String,
     viewModel: NewSessionViewModel,
+    nickname: String?,
+    waiting: List<SessionSummary>,
+    onOpen: (SessionSummary) -> Unit,
     onCreated: (SessionSummary) -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val repos by viewModel.repos.collectAsStateWithLifecycle()
@@ -100,6 +114,9 @@ fun NewSessionRoute(
         origin = origin,
         ui = ui,
         repos = repos,
+        nickname = nickname,
+        waiting = waiting,
+        onOpen = onOpen,
         onText = viewModel::setText,
         onEnvironment = viewModel::setEnvironment,
         onRepo = viewModel::pickRepo,
@@ -124,19 +141,26 @@ fun NewSessionScreen(
     onBranch: (String) -> Unit,
     onModel: (String, String) -> Unit,
     onSubmit: () -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
+    nickname: String? = null,
+    waiting: List<SessionSummary> = emptyList(),
+    onOpen: (SessionSummary) -> Unit = {},
 ) {
     var picker by rememberSaveable { mutableStateOf(Picker.None) }
     val context = LocalContext.current
-    BackHandler(enabled = !ui.busy, onBack = onBack)
+    if (onBack != null) BackHandler(enabled = !ui.busy, onBack = onBack)
+    val greeting = rememberGreeting(nickname)
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.sidebar_new_session)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack, enabled = !ui.busy) {
-                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.common_back))
+                    // 宽屏时新会话页一直在右边，没有返回
+                    if (onBack != null) {
+                        IconButton(onClick = onBack, enabled = !ui.busy) {
+                            Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.common_back))
+                        }
                     }
                 },
             )
@@ -153,7 +177,20 @@ fun NewSessionScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Image(painterResource(R.drawable.whale), contentDescription = null, modifier = Modifier.size(64.dp))
+            Spacer(Modifier.height(12.dp))
+            Text(
+                greeting,
+                style = MaterialTheme.typography.headlineSmall,
+                fontFamily = FontFamily.Serif,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.semantics { heading() },
+            )
             Spacer(Modifier.height(16.dp))
+            // 问候语下方：有会话在等你输入时提示一行（照网页的 AwaitingInputHint）
+            if (waiting.isNotEmpty()) {
+                AwaitingHint(waiting, onOpen)
+                Spacer(Modifier.height(12.dp))
+            }
             if (ui.github != null && !ui.connected) {
                 GitHubCard { context.startActivity(Intent(Intent.ACTION_VIEW, "$origin/settings/github".toUri())) }
                 Spacer(Modifier.height(16.dp))
@@ -306,6 +343,102 @@ private fun Chip(icon: Int, text: String, badge: String? = null, description: St
         modifier = if (description != null) Modifier.semantics { contentDescription = description } else Modifier,
     )
 }
+
+/** 打开这一页时挑一句问候语，转屏不换。 */
+@Composable
+private fun rememberGreeting(nickname: String?): String {
+    val resources = LocalResources.current
+    return rememberSaveable(nickname) {
+        val set = runCatching {
+            resources.openRawResource(R.raw.greetings).bufferedReader().use { GreetingSet.parse(it.readText()) }
+        }.getOrNull()
+        if (set == null) {
+            ""
+        } else {
+            val now = Calendar.getInstance()
+            pickGreeting(
+                set,
+                nickname,
+                now.get(Calendar.HOUR_OF_DAY),
+                now.get(Calendar.DAY_OF_WEEK) - 1,
+                Random.nextDouble(),
+            )
+        }
+    }
+}
+
+/** 等你输入的会话：一个时写标题，点了打开它；多个时写"有 N 个会话在等你输入"，点了展开列表。 */
+@Composable
+private fun AwaitingHint(waiting: List<SessionSummary>, onOpen: (SessionSummary) -> Unit) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    val only = waiting.singleOrNull()
+    val primary = MaterialTheme.colorScheme.primary
+    Card(
+        Modifier.fillMaxWidth().widthIn(max = 640.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button) { if (only != null) onOpen(only) else open = !open }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Canvas(Modifier.size(14.dp)) {
+                drawCircle(primary, radius = 6.dp.toPx(), style = Stroke(width = 1.5.dp.toPx()))
+                drawCircle(primary, radius = 2.5.dp.toPx())
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                if (only != null) {
+                    stringResource(R.string.awaiting_one, only.title)
+                } else {
+                    pluralStringResource(R.plurals.awaiting_many, waiting.size, waiting.size)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (only == null) {
+                Icon(
+                    painterResource(if (open) R.drawable.ic_expand_less else R.drawable.ic_expand_more),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+        if (only == null && open) {
+            val now = System.currentTimeMillis()
+            for (session in waiting) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(role = Role.Button) { onOpen(session) }
+                        .padding(start = 40.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        session.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    waitedFor(session.updatedAt, now)?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 等了多久（"3 分钟前"这类，跟着系统语言）。 */
+private fun waitedFor(iso: String, now: Long): String? = runCatching {
+    DateUtils.getRelativeTimeSpanString(Instant.parse(iso).toEpochMilli(), now, DateUtils.MINUTE_IN_MILLIS).toString()
+}.getOrNull()
 
 @Composable
 private fun environmentName(env: Environment): String = env.name.ifBlank { stringResource(R.string.environment_default) }

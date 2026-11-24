@@ -8,7 +8,8 @@
       "!**/dist",
       "!**/src/server/db/migrations/meta",
       "!**/src/server/models/catalog.json",
-      "!apps/android/api/openapi.json"
+      "!apps/android/api/openapi.json",
+      "!apps/android/app/src/main/res/raw*/greetings.json"
     ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
