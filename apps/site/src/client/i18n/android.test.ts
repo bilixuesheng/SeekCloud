@@ -1,9 +1,11 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   ANDROID_ERRORS_FILE,
+  ANDROID_GREETINGS,
   ANDROID_LOCALES,
   androidErrorMessages,
+  androidGreetings,
   androidStrings,
   androidText,
 } from "./android";
@@ -25,6 +27,21 @@ describe("安卓 App 的文案", () => {
       expect(
         readFileSync(file, "utf8") === text,
         `App 的文案改了而 strings.xml 没有重新生成：在仓库根目录运行 ${COMMAND}`,
+      ).toBe(true);
+    });
+  }
+
+  for (const { dir, set } of ANDROID_GREETINGS) {
+    it(`${dir}/greetings.json 是最新的`, () => {
+      const file = new URL(`${dir}/greetings.json`, RES);
+      const text = androidGreetings(set);
+      if (process.env.UPDATE_ANDROID_STRINGS) {
+        mkdirSync(new URL(".", file), { recursive: true });
+        writeFileSync(file, text);
+      }
+      expect(
+        readFileSync(file, "utf8") === text,
+        `问候语改了而 App 的没有重新生成：在仓库根目录运行 ${COMMAND}`,
       ).toBe(true);
     });
   }

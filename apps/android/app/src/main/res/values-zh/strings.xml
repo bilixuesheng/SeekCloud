@@ -166,6 +166,10 @@
     <string name="status_done" tools:ignore="UnusedResources">已完成</string>
     <string name="status_unread" tools:ignore="UnusedResources">有新内容</string>
     <string name="status_with_detail" tools:ignore="UnusedResources">%1$s · %2$s</string>
+    <string name="awaiting_one" tools:ignore="UnusedResources">%1$s 正在等你输入</string>
+    <plurals name="awaiting_many" tools:ignore="UnusedResources">
+        <item quantity="other">有 %1$d 个会话在等你输入</item>
+    </plurals>
     <string name="new_session_placeholder" tools:ignore="UnusedResources">描述任务或提出问题</string>
     <string name="new_session_submit" tools:ignore="UnusedResources">发起会话</string>
     <string name="environment_label" tools:ignore="UnusedResources">环境</string>
