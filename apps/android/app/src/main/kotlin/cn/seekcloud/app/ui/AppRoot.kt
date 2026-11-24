@@ -19,6 +19,7 @@ import cn.seekcloud.app.Screen
 import cn.seekcloud.app.connect.ConnectRoute
 import cn.seekcloud.app.net.PreferencesStore
 import cn.seekcloud.app.net.eventStream
+import cn.seekcloud.app.sessions.HttpImageLoader
 import cn.seekcloud.app.sessions.HttpSessionPageApi
 import cn.seekcloud.app.sessions.NewSessionApi
 import cn.seekcloud.app.sessions.NewSessionViewModel
@@ -94,6 +95,8 @@ fun AppRoot(app: AppViewModel = viewModel()) {
                                 eventStream(client.http, client.address.url("/api/sessions/$shortId/events"), last, onConnected = onConnected)
                             },
                             onSignedOut = { app.signedOut(current.server) },
+                            images = HttpImageLoader(client),
+                            serverHost = client.address.host,
                         )
                     }
                 },

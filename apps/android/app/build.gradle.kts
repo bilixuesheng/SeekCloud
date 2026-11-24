@@ -90,6 +90,11 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.commonmark)
+    implementation(libs.commonmark.tables)
+    implementation(libs.commonmark.strikethrough)
+    implementation(libs.commonmark.tasks)
+    implementation(libs.commonmark.autolink)
 
     debugImplementation(libs.compose.ui.test.manifest)
     androidTestImplementation(platform(libs.compose.bom))

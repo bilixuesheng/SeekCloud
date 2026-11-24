@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -126,23 +127,26 @@ fun SessionRoute(
     val missing by viewModel.missing.collectAsStateWithLifecycle()
     val fetched by viewModel.session.collectAsStateWithLifecycle()
     val session = listed ?: fetched
-    SessionScreen(
-        title = session?.title.orEmpty(),
-        fallbackStatus = session?.status,
-        page = page,
-        composer = composer,
-        connected = connected,
-        missing = missing,
-        onBack = onBack,
-        onText = viewModel::setText,
-        onSend = { mode -> viewModel.send(mode = mode) },
-        onRetry = { viewModel.send(it, fromComposer = false) },
-        onStop = viewModel::stopTurn,
-        onWithdraw = viewModel::withdraw,
-        onSendNow = viewModel::sendNow,
-        onUnarchive = viewModel::unarchive,
-        onDismissFailure = viewModel::dismissFailure,
-    )
+    val markdown = MarkdownEnv(viewModel.images, viewModel.serverHost, session?.repos?.firstOrNull()?.fullName)
+    CompositionLocalProvider(LocalMarkdownEnv provides markdown) {
+        SessionScreen(
+            title = session?.title.orEmpty(),
+            fallbackStatus = session?.status,
+            page = page,
+            composer = composer,
+            connected = connected,
+            missing = missing,
+            onBack = onBack,
+            onText = viewModel::setText,
+            onSend = { mode -> viewModel.send(mode = mode) },
+            onRetry = { viewModel.send(it, fromComposer = false) },
+            onStop = viewModel::stopTurn,
+            onWithdraw = viewModel::withdraw,
+            onSendNow = viewModel::sendNow,
+            onUnarchive = viewModel::unarchive,
+            onDismissFailure = viewModel::dismissFailure,
+        )
+    }
 }
 
 /** 时间线上的一行：key 在整个列表里唯一，换内容时界面上的状态（字显示到哪了、展开没有）跟着它走。 */
@@ -470,7 +474,7 @@ private fun AssistantReply(item: TimelineItem.Assistant, live: Boolean, now: Lon
     Column(Modifier.fillMaxWidth()) {
         item.thinking?.let { Thinking(it) }
         SelectionContainer {
-            Text(shown, style = MaterialTheme.typography.bodyLarge)
+            Markdown(shown)
         }
         val end = item.turnEnd
         if (done && end != null) {

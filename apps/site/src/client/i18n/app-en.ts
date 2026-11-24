@@ -83,4 +83,9 @@ export const appEn: AppCatalog = {
   update_body:
     "{host} requires app version {version} or later. This is version {current}. Download the new version, then connect again.",
   update_download: "Download new version",
+
+  // Session page (#182): links in replies are confirmed before opening in the browser
+  link_open_title: "Open link",
+  link_open_body: "The following address will open in your browser:",
+  link_open_confirm: "Open",
 };

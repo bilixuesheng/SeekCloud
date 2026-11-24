@@ -261,6 +261,37 @@ class AppUiTest {
     }
 
     @Test
+    fun markdownRepliesAreSafe() {
+        launch()
+        connect(siteA)
+        signIn()
+        val reply = listOf(
+            "## Result",
+            "[the docs](https://example.com/docs)",
+            "```ts\\nconst answer = 42\\n```",
+            "<b>raw html</b>",
+            "![chart](https://images.example.net/leak.png?key=secret)",
+        ).joinToString("\\n\\n")
+        nextTurn(siteA, """{"events":[{"type":"message","text":"$reply"}]}""")
+        val title = "Markdown ${System.nanoTime()}"
+        startSession(siteA, title)
+        waitFor(title)
+        tap(title)
+        // 标题、代码块照 Markdown 显示；原始 HTML 当文字
+        waitFor("Result")
+        waitFor("const answer = 42")
+        waitFor("<b>raw html</b>")
+        // 别的来源的图片不自动加载：先是一个"点击加载"的按钮
+        waitFor(s(R.string.chat_image_blocked, "chart", "images.example.net"))
+        // 链接先显示完整的地址确认，取消就不打开
+        rule.onNode(hasText("the docs")).performClick()
+        waitFor(s(R.string.link_open_body))
+        waitFor("https://example.com/docs")
+        tapInDialog(s(R.string.common_cancel))
+        rule.waitUntil(20_000) { rule.onAllNodes(hasText(s(R.string.link_open_body))).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
     fun workingTurnControls() {
         launch()
         connect(siteB)

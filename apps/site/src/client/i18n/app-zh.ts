@@ -90,4 +90,9 @@ export const appZh = {
   update_title: "需要更新 App",
   update_body: "{host} 要求 App 版本不低于 {version}，当前版本为 {current}。请下载新版本后再连接。",
   update_download: "下载新版本",
+
+  // 会话页（#182）：回复里的链接先确认再交给浏览器
+  link_open_title: "打开链接",
+  link_open_body: "将在浏览器中打开以下地址：",
+  link_open_confirm: "打开",
 } as const satisfies Record<string, string>;

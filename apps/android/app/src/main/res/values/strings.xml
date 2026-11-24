@@ -67,6 +67,9 @@
     <string name="update_title">App update required</string>
     <string name="update_body">%1$s requires app version %2$s or later. This is version %3$s. Download the new version, then connect again.</string>
     <string name="update_download">Download new version</string>
+    <string name="link_open_title">Open link</string>
+    <string name="link_open_body">The following address will open in your browser:</string>
+    <string name="link_open_confirm">Open</string>
     <string name="common_cancel" tools:ignore="UnusedResources">Cancel</string>
     <string name="common_close" tools:ignore="UnusedResources">Close</string>
     <string name="common_back" tools:ignore="UnusedResources">Back</string>

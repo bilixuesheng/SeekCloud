@@ -69,6 +69,9 @@ class SessionViewModel(
     /** 调接口用的线程；整理时间线用的线程（测试里换成测试的调度器）。 */
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val work: CoroutineDispatcher = Dispatchers.Default,
+    /** 回复里的图片怎么加载；主站的主机名（主站自己的图片直接显示）。 */
+    val images: ImageLoader? = null,
+    val serverHost: String? = null,
 ) : ViewModel() {
     private val _page = MutableStateFlow(SessionPage())
     val page: StateFlow<SessionPage> = _page.asStateFlow()
