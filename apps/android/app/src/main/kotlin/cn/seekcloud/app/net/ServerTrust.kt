@@ -86,12 +86,14 @@ class ServerClient(val address: ServerAddress, val http: OkHttpClient, val trust
  * 为这台主站建一个 HTTP 客户端：
  * - 地址是 http 而管理员没确认过时，只允许 TLS（OkHttp 会直接拒绝明文的请求）；
  * - 证书先按系统信任的核对，再认管理员钉住的那张；
- * - 每个请求带上 App 的 User-Agent。
+ * - 每个请求带上 App 的 User-Agent；登录以后带上设备令牌（[token] 给出，`Authorization: Bearer`，#177）。
+ *   客户端只连这一台主站、不跟跳转，令牌不会被带到别处。
  */
 fun serverClient(
     address: ServerAddress,
     trust: ServerTrust,
     userAgent: String,
+    token: () -> String? = { null },
     system: X509TrustManager = PinningTrustManager.systemTrustManager(),
 ): ServerClient {
     val trustManager = PinningTrustManager(system, trust.pinnedCertificate)
@@ -111,7 +113,9 @@ fun serverClient(
         .followRedirects(false)
         .followSslRedirects(false)
         .addInterceptor { chain ->
-            chain.proceed(chain.request().newBuilder().header("User-Agent", userAgent).build())
+            val request = chain.request().newBuilder().header("User-Agent", userAgent)
+            token()?.let { request.header("Authorization", "Bearer $it") }
+            chain.proceed(request.build())
         }
         .build()
     return ServerClient(address, http, trustManager)

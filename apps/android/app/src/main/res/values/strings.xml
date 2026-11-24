@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 由 apps/site/src/client/i18n/app-zh.ts、app-en.ts 生成，不要手改；重新生成的命令是 apps/site/package.json 里的 android:strings -->
+<!-- 由 apps/site/src/client/i18n/android.ts 从文案目录生成，不要手改；重新生成的命令是 apps/site/package.json 里的 android:strings -->
 <resources>
     <string name="app_name">SeekCloud</string>
     <string name="cancel">Cancel</string>
@@ -24,4 +24,55 @@
     <string name="connect_cert_changed_body">This server\'s certificate is different from the one you confirmed before. If the server\'s certificate was not replaced, the connection may have been intercepted. Confirm the new certificate\'s fingerprint before you continue.</string>
     <string name="connect_cert_fingerprint">SHA-256 fingerprint</string>
     <string name="connect_cert_trust">Trust this certificate</string>
+    <string name="error_network">Network error. Try again later.</string>
+    <string name="error_wrong_password">Incorrect password.</string>
+    <string name="error_wrong_code">Incorrect code.</string>
+    <string name="error_login_expired">Sign-in timed out. Enter your password again.</string>
+    <plurals name="error_rate_limited">
+        <item quantity="one">Too many attempts. Try again in %1$d second.</item>
+        <item quantity="other">Too many attempts. Try again in %1$d seconds.</item>
+    </plurals>
+    <string name="error_already_set_up">The administrator password is already set. Sign in instead.</string>
+    <string name="error_passkey_invalid">Passkey verification failed. Try again.</string>
+    <string name="error_already_enabled">Two-step verification is already on.</string>
+    <string name="error_body_too_large">The request is too large.</string>
+    <string name="error_code_required">Enter the two-step verification code.</string>
+    <string name="error_device_not_found">The device does not exist.</string>
+    <string name="error_export_not_found">The export does not exist or has expired.</string>
+    <string name="error_forbidden">Requests from other sites are not allowed.</string>
+    <string name="error_github_unavailable">GitHub is unavailable right now. Try again later.</string>
+    <string name="error_internal_error">Server error. Try again later.</string>
+    <string name="error_invalid_request">The request is malformed.</string>
+    <string name="error_model_error_not_found">This reference does not exist or has expired.</string>
+    <string name="error_not_enabled">Two-step verification is not on.</string>
+    <string name="error_not_found">The endpoint does not exist.</string>
+    <string name="error_not_linked">GitHub is not connected.</string>
+    <string name="error_passkey_not_found">The passkey does not exist.</string>
+    <string name="error_request_failed">The request failed.</string>
+    <string name="error_setting_locked">This setting cannot be changed.</string>
+    <string name="error_setup_expired">Setup timed out. Start again.</string>
+    <string name="error_setup_required">Set the admin password first.</string>
+    <string name="error_catalog_not_found">The catalog has no such provider.</string>
+    <string name="error_provider_builtin">The built-in DeepSeek provider cannot be deleted, but it can be disabled.</string>
+    <string name="error_provider_exists">This Provider ID is already in use.</string>
+    <string name="error_provider_not_found">The model provider does not exist.</string>
+    <string name="error_invalid_models">The model list is invalid. Check each model\'s settings.</string>
+    <string name="error_probe_failed">Fetching the model list failed. Check the base URL, protocol and key.</string>
+    <string name="error_unauthorized">Sign in first.</string>
+    <string name="error_github_not_connected">GitHub is not connected, or the authorization has expired. Connect it again.</string>
+    <string name="error_repo_not_found">The repository does not exist, or SeekCloud cannot access it.</string>
+    <string name="error_branch_not_found">The branch does not exist in the repository.</string>
+    <string name="error_environment_not_found">The environment does not exist.</string>
+    <string name="error_model_not_found">The model does not exist or has been retired.</string>
+    <string name="error_model_gone">The model this session uses is no longer available. Choose another model and send again.</string>
+    <string name="error_model_not_configured">No model is available. Enter a DeepSeek API key or add a model provider in Settings → Models.</string>
+    <string name="error_session_not_found">The session does not exist.</string>
+    <string name="error_session_closed">This session is archived. Unarchive it before sending messages.</string>
+    <string name="error_queued_not_found">The message has already been sent or withdrawn.</string>
+    <string name="error_nothing_running">No turn is running.</string>
+    <string name="error_session_archived">Archived sessions cannot be pinned or grouped. Unarchive the session first.</string>
+    <string name="error_message_not_found">The message does not exist, or it is not an Agent reply.</string>
+    <string name="error_group_not_found">The group does not exist.</string>
+    <string name="error_too_many_groups">You have reached the maximum number of groups.</string>
+    <string name="error_invalid_group_name">Enter a group name within the length limit.</string>
 </resources>
