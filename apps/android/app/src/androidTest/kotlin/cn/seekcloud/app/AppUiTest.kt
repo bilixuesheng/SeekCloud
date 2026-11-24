@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -75,9 +76,12 @@ class AppUiTest {
         rule.waitForIdle()
     }
 
-    /** 页面上（不在弹窗里）的按钮。 */
-    private fun tap(text: String) =
-        rule.onNode(hasText(text) and hasClickAction() and !hasAnyAncestor(isDialog())).performClick()
+    /** 页面上（不在弹窗里）的按钮：页面能滚动，先滚到它那里再点。 */
+    private fun tap(text: String) {
+        rule.onNode(hasText(text) and hasClickAction() and !hasAnyAncestor(isDialog()))
+            .performScrollTo()
+            .performClick()
+    }
 
     /** 弹窗里的按钮。 */
     private fun tapInDialog(text: String) =
@@ -135,7 +139,7 @@ class AppUiTest {
         // B 还没登录；换回 A，A 还登录着
         tap(s(R.string.switch_server))
         waitFor(s(R.string.servers_add))
-        rule.onNode(hasText(siteA, substring = true) and hasClickAction()).performClick()
+        rule.onNode(hasText("$siteA · ", substring = true) and hasClickAction()).performScrollTo().performClick()
         waitFor(s(R.string.home_signed_in, HOST))
         tap(s(R.string.switch_server))
         waitFor(s(R.string.servers_add))

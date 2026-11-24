@@ -131,6 +131,8 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
+          # 默认的屏幕只有 320x640，换成常见手机的大小
+          profile: pixel_6
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           working-directory: apps/android
@@ -139,6 +141,21 @@ jobs:
             -Pandroid.testInstrumentationRunnerArguments.siteA="$SITE_A"
             -Pandroid.testInstrumentationRunnerArguments.siteB="$SITE_B"
             -Pandroid.testInstrumentationRunnerArguments.password="$SITE_PASSWORD"
+
+      # 报告要下载才能看：失败的测试和原因直接打在日志里
+      - name: 失败时打印失败的测试
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          for path in glob.glob("apps/android/app/build/outputs/androidTest-results/connected/**/*.xml", recursive=True):
+              for case in ET.parse(path).getroot().iter("testcase"):
+                  for failure in list(case.findall("failure")) + list(case.findall("error")):
+                      print(f"::group::{case.get('classname')}.{case.get('name')}")
+                      print((failure.text or failure.get("message") or "")[:6000])
+                      print("::endgroup::")
+          PY
+          tail -n 50 "$RUNNER_TEMP/sites.log" || true
 
       - name: 失败时上传测试报告和假主站的日志
         if: failure()
