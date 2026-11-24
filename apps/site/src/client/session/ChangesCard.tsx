@@ -1,6 +1,6 @@
 import type { FileChange } from "@seekcloud/protocol";
 import { useState } from "react";
-import { ChevronDownIcon, ChevronRightIcon, UndoIcon } from "../Icons";
+import { ChevronDownIcon, CodeIcon, UndoIcon } from "../Icons";
 import { useT } from "../i18n";
 import type { TurnChanges } from "./timeline";
 
@@ -8,9 +8,19 @@ import type { TurnChanges } from "./timeline";
 const SHOWN = 3;
 
 /**
- * 改动卡片（#27，照 Claude）：只在回合结束时出现在最后，复制和时间那一行上面；这一回合没改文件就没有。
- * 改了几个文件时列出前三个和增删行数，最后一行"查看全部 N 个文件"写合计；只改了一个文件时一行，带"撤销"
- * （撤销这个文件这一回合的改动，作为下一回合的消息交给 Agent 做）。
+ * 卡片上的文件只写文件名（照 Claude），完整的路径在提示里；列出来的几个里有同名的，带上上一级目录。
+ */
+export function shortPath(path: string, others: string[]): string {
+  const parts = path.split("/");
+  const base = parts.at(-1) ?? path;
+  const clash = others.some((other) => other !== path && other.split("/").at(-1) === base);
+  return clash && parts.length > 1 ? parts.slice(-2).join("/") : base;
+}
+
+/**
+ * 改动卡片（#27，照 Claude）：每个回合结束时单独一张，放在这个回合的最后，复制和时间那一行上面；这一回合没改文件就没有。
+ * 改了几个文件时，最上面一行"已更改 N 个文件"，下面列出前三个的文件名和增删行数，最后一行"查看全部"写合计；
+ * 只改了一个文件时只有一行，带"撤销"（撤销这个文件这一回合的改动，作为下一回合的消息交给 Agent 做）。
  */
 export function ChangesCard({
   changes,
@@ -32,6 +42,7 @@ export function ChangesCard({
   const total = rows.length + changes.repos.reduce((n, r) => n + r.omittedFiles, 0);
   const sum = (key: "additions" | "deletions") => rows.reduce((n, r) => n + r.file[key], 0);
   const shown = all ? rows : rows.slice(0, SHOWN);
+  const shownPaths = shown.map((r) => r.file.path);
   const single = total === 1 ? rows[0] : undefined;
   const notes = changes.repos.flatMap((repo) =>
     repo.push === "read_only"
@@ -43,43 +54,52 @@ export function ChangesCard({
 
   return (
     <section className="changes-card" aria-label={t("changes.label")}>
+      {!single && <div className="changes-head">{t("changes.changedFiles", { count: total })}</div>}
       <ul className="changes-files">
-        {shown.map(({ repo, file }) => (
-          <li key={`${repo}:${file.path}`} className="changes-file">
-            {onOpen ? (
-              <button
-                type="button"
-                className="changes-path link"
-                title={file.from ? `${file.from} → ${file.path}` : file.path}
-                onClick={() => onOpen(file.path)}
-              >
-                {several && <span className="changes-repo">{repo.split("/")[1]}/</span>}
-                {file.path}
-              </button>
-            ) : (
-              <span
-                className="changes-path"
-                title={file.from ? `${file.from} → ${file.path}` : file.path}
-              >
-                {several && <span className="changes-repo">{repo.split("/")[1]}/</span>}
-                {file.path}
+        {shown.map(({ repo, file }) => {
+          const full = file.from ? `${file.from} → ${file.path}` : file.path;
+          const name = (
+            <>
+              {several && <span className="changes-repo">{repo.split("/")[1]}/</span>}
+              {shortPath(file.path, shownPaths)}
+            </>
+          );
+          return (
+            <li key={`${repo}:${file.path}`} className="changes-file">
+              <span className="changes-icon">
+                <CodeIcon />
               </span>
-            )}
-            <LineCounts file={file} />
-            {single && (
-              <button
-                type="button"
-                className="changes-undo"
-                disabled={!onUndo}
-                data-tip={onUndo ? t("changes.undoHint") : t("changes.cannotUndo")}
-                onClick={() => onUndo?.(t("changes.undoPrompt", { path: single.file.path }))}
-              >
-                <UndoIcon />
-                {t("changes.undo")}
-              </button>
-            )}
-          </li>
-        ))}
+              {onOpen ? (
+                <button
+                  type="button"
+                  className="changes-path link"
+                  title={full}
+                  aria-label={full}
+                  onClick={() => onOpen(file.path)}
+                >
+                  {name}
+                </button>
+              ) : (
+                <span className="changes-path" title={full}>
+                  {name}
+                </span>
+              )}
+              <LineCounts file={file} />
+              {single && (
+                <button
+                  type="button"
+                  className="changes-undo"
+                  disabled={!onUndo}
+                  data-tip={onUndo ? t("changes.undoHint") : t("changes.cannotUndo")}
+                  onClick={() => onUndo?.(t("changes.undoPrompt", { path: single.file.path }))}
+                >
+                  <UndoIcon />
+                  {t("changes.undo")}
+                </button>
+              )}
+            </li>
+          );
+        })}
       </ul>
       {total > SHOWN && (
         <button
@@ -88,14 +108,13 @@ export function ChangesCard({
           aria-expanded={onOpen ? undefined : all}
           onClick={() => (onOpen ? onOpen() : setAll((open) => !open))}
         >
-          <span>{all ? t("changes.collapse") : t("changes.viewAll", { count: total })}</span>
-          <span className="changes-counts">
-            <span className="added">+{sum("additions")}</span>
-            <span className="deleted">−{sum("deletions")}</span>
-          </span>
-          <span className={`changes-chevron${all ? " open" : ""}`}>
-            {onOpen ? <ChevronRightIcon /> : <ChevronDownIcon />}
-          </span>
+          <span>{all ? t("changes.collapse") : t("changes.viewAll")}</span>
+          <Counts additions={sum("additions")} deletions={sum("deletions")} />
+          {!onOpen && (
+            <span className={`changes-chevron${all ? " open" : ""}`}>
+              <ChevronDownIcon />
+            </span>
+          )}
         </button>
       )}
       {all && changes.repos.some((r) => r.omittedFiles > 0) && (
@@ -114,13 +133,18 @@ export function ChangesCard({
   );
 }
 
+/** 增删的行数：是 0 的那一边不写（照 Claude）。 */
+function Counts({ additions, deletions }: { additions: number; deletions: number }) {
+  return (
+    <span className="changes-counts">
+      {additions > 0 && <span className="added">+{additions}</span>}
+      {deletions > 0 && <span className="deleted">−{deletions}</span>}
+    </span>
+  );
+}
+
 function LineCounts({ file }: { file: FileChange }) {
   const t = useT();
   if (file.binary) return <span className="changes-counts muted">{t("changes.binary")}</span>;
-  return (
-    <span className="changes-counts">
-      <span className="added">+{file.additions}</span>
-      <span className="deleted">−{file.deletions}</span>
-    </span>
-  );
+  return <Counts additions={file.additions} deletions={file.deletions} />;
 }

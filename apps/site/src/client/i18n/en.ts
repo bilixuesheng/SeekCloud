@@ -336,7 +336,8 @@ export const en: Catalog = {
   "changes.undoPrompt":
     "Undo the changes to `{path}` from the previous turn, restoring it to how it was before that turn.",
   "changes.collapse": "Collapse",
-  "changes.viewAll": { one: "View {count} file", other: "View all {count} files" },
+  "changes.viewAll": "See all",
+  "changes.changedFiles": { one: "Changed {count} file", other: "Changed {count} files" },
   "changes.omitted": {
     one: "{count} more file not listed",
     other: "{count} more files not listed",

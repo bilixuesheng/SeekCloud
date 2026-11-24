@@ -4992,9 +4992,17 @@ a.button:active,
   font-size: 13px;
 }
 
+/* 改了几个文件时最上面一行"已更改 N 个文件"，下面一条分隔线（照 Claude） */
+.changes-head {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg);
+  font-size: 14px;
+}
+
 .changes-files {
   margin: 0;
-  padding: 0;
+  padding: 4px 0;
   list-style: none;
 }
 
@@ -5003,25 +5011,25 @@ a.button:active,
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 36px;
-  padding: 0 12px;
+  min-height: 34px;
+  padding: 0 14px;
 }
 
-.changes-file + .changes-file,
-.changes-all {
-  border-top: 1px solid var(--border);
+.changes-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--faint);
 }
 
+/* 只写文件名，完整的路径在提示里 */
 .changes-path {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font-family: var(--mono);
-  font-size: 12.5px;
-  color: var(--fg-2);
+  font-size: 13.5px;
+  color: var(--fg);
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl;
   text-align: left;
 }
 
@@ -5033,8 +5041,7 @@ a.button:active,
   display: inline-flex;
   gap: 6px;
   flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -5080,13 +5087,12 @@ a.button:active,
 
 .changes-all {
   width: 100%;
-  border-left: 0;
-  border-right: 0;
-  border-bottom: 0;
-  background: var(--surface-2);
-  color: var(--fg-2);
+  margin-bottom: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
   font: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
   text-align: left;
   cursor: pointer;
   transition: background 160ms ease;
@@ -5129,9 +5135,8 @@ button.changes-path {
   border: 0;
   background: none;
   font: inherit;
-  font-family: var(--mono);
-  font-size: 12.5px;
-  color: var(--fg-2);
+  font-size: 13.5px;
+  color: var(--fg);
   cursor: pointer;
 }
 
