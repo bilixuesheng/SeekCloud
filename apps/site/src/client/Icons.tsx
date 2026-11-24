@@ -53,6 +53,13 @@ export const ChevronRightIcon = () => (
   </svg>
 );
 
+/** 改动卡片里文件前面的"<>"（照 Claude）。 */
+export const CodeIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5" {...line} />
+  </svg>
+);
+
 export const LogoutIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
     <path d="M6 2.5H3.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1H6M10.5 11l3-3-3-3M13.5 8H6" {...line} />

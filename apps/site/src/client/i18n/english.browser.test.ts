@@ -191,7 +191,8 @@ describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
       expect(await page.locator(".ai-notice").textContent()).toBe(
         "DeepSeek is AI and can make mistakes.",
       );
-      expect(await page.locator(".changes-all").textContent()).toContain("View all 4 files");
+      expect(await page.locator(".changes-head").textContent()).toBe("Changed 4 files");
+      expect(await page.locator(".changes-all").textContent()).toContain("See all");
       expect(await han()).toBe("");
 
       // 展开工具调用：每一次的名字、输入、结果（空的结果写 no output）
