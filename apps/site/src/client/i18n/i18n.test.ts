@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Catalog } from "./catalog";
 import { en } from "./en";
+import { errorText } from "./errors";
 import {
   addMessages,
   currentLocale,
@@ -159,5 +160,21 @@ describe("两份目录", () => {
     };
     expect(lacking).toBeDefined();
     expect(extra).toBeDefined();
+  });
+});
+
+describe("接口报错（errorText）", () => {
+  afterEach(() => resetForTests("zh-CN"));
+
+  it("认得的 code 按界面语言写；中文目录里空着的用主站给的具体说明，英文用概括的一句", () => {
+    const invalid = { code: "invalid_request", message: "环境变量名只能包含字母、数字和下划线" };
+    expect(errorText(invalid)).toBe("环境变量名只能包含字母、数字和下划线");
+    expect(errorText({ code: "session_not_found", message: "会话不存在" })).toBe("会话不存在。");
+    expect(errorText({ code: "something_new", message: "主站的说明" })).toBe("主站的说明");
+    resetForTests("en");
+    expect(errorText(invalid)).toBe("The request is malformed.");
+    expect(errorText({ code: "session_not_found", message: "会话不存在" })).toBe(
+      "The session does not exist.",
+    );
   });
 });

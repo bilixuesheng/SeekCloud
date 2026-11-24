@@ -76,7 +76,8 @@ export const zh = {
   "error.forbidden": "拒绝来自其他站点的请求。",
   "error.github_unavailable": "GitHub 暂时无法访问，请稍后重试。",
   "error.internal_error": "服务器错误，请稍后重试。",
-  "error.invalid_request": "请求格式错误。",
+  // 空的：中文直接用主站给的具体说明（哪一项填得不对，i18n/errors.ts）
+  "error.invalid_request": "",
   "error.model_error_not_found": "该参考号不存在，或已超过保存期限。",
   "error.not_enabled": "两步验证未开启。",
   "error.not_found": "接口不存在。",
