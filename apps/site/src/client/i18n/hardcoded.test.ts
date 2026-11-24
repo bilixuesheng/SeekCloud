@@ -11,14 +11,7 @@ import { describe, expect, it } from "vitest";
  * 还没迁的文件先列在豁免清单里，#136 一页一页迁完，清单为空。清单里的文件已经没有汉字了，也会失败：提醒把它从清单里删掉。
  */
 const PENDING = new Set([
-  "legal/LegalPage.tsx",
-  "legal/licenses.ts",
-  "settings/DataSettings.tsx",
   "settings/ModelSettings.tsx",
-  "settings/PasskeySettings.tsx",
-  "settings/SessionSettings.tsx",
-  "settings/SettingsDialog.tsx",
-  "settings/TwoFactorSettings.tsx",
   "settings/models/AddProvider.tsx",
   "settings/models/KeyField.tsx",
   "settings/models/ModelEditor.tsx",

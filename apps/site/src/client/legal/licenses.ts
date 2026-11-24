@@ -1,3 +1,5 @@
+import type { PlainKey } from "../i18n";
+
 /**
  * 开源声明列出的软件。
  * - DeepSeek Harness 是沙箱里跑的 Agent，按 MIT 许可证的要求放上完整的版权声明和许可文本（ADR 0004）；
@@ -11,8 +13,8 @@ export interface OpenSourceItem {
   license: "MIT" | "Apache-2.0" | "OFL-1.1";
   copyright: string;
   url: string;
-  /** 用来做什么。 */
-  usage: string;
+  /** 用来做什么（文案目录里的键，按界面语言显示）。 */
+  usage: PlainKey;
 }
 
 export const OPEN_SOURCE: OpenSourceItem[] = [
@@ -22,16 +24,15 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "MIT",
     copyright: "Copyright (c) 2026 DeepSeek",
     url: "https://github.com/deepseek-ai/deepseek-harness",
-    usage: "沙箱中运行的 Agent（在其基础上修改）",
+    usage: "licenses.harness",
   },
   {
-    name: "pi-ai（@earendil-works/pi-ai）",
+    name: "pi-ai (@earendil-works/pi-ai)",
     packages: [],
     license: "MIT",
     copyright: "Copyright (c) Mario Zechner",
     url: "https://github.com/earendil-works/pi",
-    usage:
-      "第三方模型提供方的目录（设置中“添加模型提供商”列出的提供方和模型，与沙箱中的 DeepSeek Harness 使用同一份）",
+    usage: "licenses.piAi",
   },
   {
     name: "React",
@@ -39,7 +40,7 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "MIT",
     copyright: "Copyright (c) Meta Platforms, Inc. and affiliates.",
     url: "https://github.com/facebook/react",
-    usage: "网页界面",
+    usage: "licenses.react",
   },
   {
     name: "react-markdown",
@@ -47,7 +48,7 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "MIT",
     copyright: "Copyright (c) Espen Hovlandsdal",
     url: "https://github.com/remarkjs/react-markdown",
-    usage: "Markdown 渲染",
+    usage: "licenses.reactMarkdown",
   },
   {
     name: "remark-gfm",
@@ -55,10 +56,10 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "MIT",
     copyright: "Copyright (c) Titus Wormer",
     url: "https://github.com/remarkjs/remark-gfm",
-    usage: "Markdown 扩展语法（表格、任务列表等）",
+    usage: "licenses.remarkGfm",
   },
   {
-    name: "unified 的 HTML 和 Markdown 工具（hast-util-from-html、hast-util-to-mdast、mdast-util-gfm、mdast-util-to-markdown）",
+    name: "unified: hast-util-from-html, hast-util-to-mdast, mdast-util-gfm, mdast-util-to-markdown",
     packages: [
       "hast-util-from-html",
       "hast-util-to-mdast",
@@ -68,7 +69,7 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "MIT",
     copyright: "Copyright (c) Titus Wormer",
     url: "https://github.com/syntax-tree",
-    usage: "模型网关的网页抓取：把网页转成 Markdown",
+    usage: "licenses.unified",
   },
   {
     name: "Workbox",
@@ -76,15 +77,15 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "MIT",
     copyright: "Copyright 2018 Google LLC",
     url: "https://github.com/GoogleChrome/workbox",
-    usage: "离线缓存（由 vite-plugin-pwa 生成）",
+    usage: "licenses.workbox",
   },
   {
-    name: "Noto Serif SC（思源宋体）",
+    name: "Noto Serif SC",
     packages: ["@fontsource/noto-serif-sc"],
     license: "OFL-1.1",
     copyright: "Copyright Google Inc.",
     url: "https://github.com/notofonts/noto-cjk",
-    usage: "标题字体",
+    usage: "licenses.notoSerif",
   },
   {
     name: "Hono",
@@ -92,7 +93,7 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "MIT",
     copyright: "Copyright (c) 2021 - present, Yusuke Wada and Hono contributors",
     url: "https://github.com/honojs/hono",
-    usage: "服务端接口",
+    usage: "licenses.hono",
   },
   {
     name: "Zod",
@@ -100,7 +101,7 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "MIT",
     copyright: "Copyright (c) 2025 Colin McDonnell",
     url: "https://github.com/colinhacks/zod",
-    usage: "数据校验",
+    usage: "licenses.zod",
   },
   {
     name: "fflate",
@@ -108,7 +109,7 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "MIT",
     copyright: "Copyright (c) 2026 Arjun Barrett",
     url: "https://github.com/101arrowz/fflate",
-    usage: "数据导出的 zip 打包",
+    usage: "licenses.fflate",
   },
   {
     name: "SimpleWebAuthn",
@@ -116,7 +117,7 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "MIT",
     copyright: "Copyright (c) 2020 Matthew Miller",
     url: "https://github.com/MasterKale/SimpleWebAuthn",
-    usage: "通行密钥的添加和登录",
+    usage: "licenses.simpleWebAuthn",
   },
   {
     name: "uqr",
@@ -124,7 +125,7 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "MIT",
     copyright: "Copyright (c) Project Nayuki; Copyright (c) 2023 Anthony Fu",
     url: "https://github.com/unjs/uqr",
-    usage: "开启两步验证时显示的二维码",
+    usage: "licenses.uqr",
   },
   {
     name: "Drizzle ORM",
@@ -132,7 +133,7 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "Apache-2.0",
     copyright: "Copyright Drizzle Team",
     url: "https://github.com/drizzle-team/drizzle-orm",
-    usage: "数据库访问",
+    usage: "licenses.drizzle",
   },
   {
     name: "node-postgres",
@@ -140,7 +141,7 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     license: "MIT",
     copyright: "Copyright (c) 2010 - 2021 Brian Carlson",
     url: "https://github.com/brianc/node-postgres",
-    usage: "PostgreSQL 连接",
+    usage: "licenses.pg",
   },
   {
     name: "ws",
@@ -149,7 +150,7 @@ export const OPEN_SOURCE: OpenSourceItem[] = [
     copyright:
       "Copyright (c) 2011 Einar Otto Stangvik, Copyright (c) 2013 Arnout Kazemier and contributors, Copyright (c) 2016 Luigi Pinca and contributors",
     url: "https://github.com/websockets/ws",
-    usage: "主站和宿主机之间的连接（WebSocket）",
+    usage: "licenses.ws",
   },
 ];
 

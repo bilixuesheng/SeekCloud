@@ -3,6 +3,8 @@ import { encode } from "uqr";
 import { type ApiError, api } from "../api";
 import { useCopy } from "../copy";
 import { CheckIcon, CopyIcon } from "../Icons";
+import { useT } from "../i18n";
+import { errorText } from "../i18n/errors";
 import { Modal } from "../ui/modal";
 import { toast } from "../ui/toast";
 
@@ -46,6 +48,7 @@ export function TwoFactorRow({
   state: TwoFactorState;
   onChanged: () => void;
 }) {
+  const t = useT();
   const [step, setStep] = useState<Step>({ kind: "idle" });
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -69,18 +72,13 @@ export function TwoFactorRow({
       const err = e as ApiError;
       if (err.code === "setup_expired") {
         go({ kind: "password" });
-        toast("设置已超时，请重新输入密码。", "error");
+        toast(t("twoFactor.expired"), "error");
       } else if (step.kind === "scan" && err.code === "wrong_code") {
         const n = wrongCodes + 1;
         setWrongCodes(n);
-        toast(
-          n >= 2
-            ? "验证码错误。如果多次输入仍然错误，请检查服务器的时间是否准确。"
-            : "验证码错误。",
-          "error",
-        );
+        toast(n >= 2 ? t("twoFactor.wrongCodeHint") : t("error.wrong_code"), "error");
       } else {
-        toast(err.message, "error");
+        toast(errorText(err), "error");
       }
     } finally {
       setBusy(false);
@@ -104,13 +102,13 @@ export function TwoFactorRow({
           code,
         });
         onChanged();
-        go({ kind: "codes", codes: res.recoveryCodes }, "两步验证已开启。");
+        go({ kind: "codes", codes: res.recoveryCodes }, t("twoFactor.enabled"));
       });
     } else if (step.kind === "disable") {
       void run(async () => {
         await api("/api/auth/two-factor/disable", { password, code });
         onChanged();
-        go({ kind: "idle" }, "两步验证已关闭。");
+        go({ kind: "idle" }, t("twoFactor.disabled"));
       });
     } else if (step.kind === "regenerate") {
       void run(async () => {
@@ -119,7 +117,7 @@ export function TwoFactorRow({
           code,
         });
         onChanged();
-        go({ kind: "codes", codes: res.recoveryCodes }, "已生成新的恢复码，旧的恢复码已作废。");
+        go({ kind: "codes", codes: res.recoveryCodes }, t("twoFactor.regenerated"));
       });
     }
   };
@@ -127,12 +125,12 @@ export function TwoFactorRow({
   const left = state.recoveryCodesLeft;
   const sub = state.enabled
     ? left <= 3
-      ? `已开启，恢复码仅剩 ${left} 个，建议重新生成`
-      : `已开启，恢复码剩余 ${left} 个`
-    : "登录时除密码外，还需输入验证器 App 生成的验证码。";
+      ? t("twoFactor.onLow", { count: left })
+      : t("twoFactor.on", { count: left })
+    : t("twoFactor.offHint");
   const cancel = (
     <button type="button" className="secondary" onClick={() => go({ kind: "idle" })}>
-      取消
+      {t("common.cancel")}
     </button>
   );
   // 关弹窗时还要画着最后一步，播完收起的动画
@@ -140,19 +138,19 @@ export function TwoFactorRow({
   if (step.kind !== "idle") lastStep.current = step;
   const view = step.kind === "idle" ? lastStep.current : step;
   const titles: Record<Step["kind"], string> = {
-    idle: "两步验证",
-    password: "开启两步验证",
-    scan: "开启两步验证",
-    codes: "保存恢复码",
-    disable: "关闭两步验证",
-    regenerate: "重新生成恢复码",
+    idle: t("twoFactor.title"),
+    password: t("twoFactor.enableTitle"),
+    scan: t("twoFactor.enableTitle"),
+    codes: t("twoFactor.saveCodes"),
+    disable: t("twoFactor.disableTitle"),
+    regenerate: t("twoFactor.regenerateTitle"),
   };
 
   return (
     <div className="settings-card">
       <div className="settings-row">
         <span className="settings-row-text">
-          <span className="settings-row-name">验证器 App</span>
+          <span className="settings-row-name">{t("twoFactor.app")}</span>
           <span className={`settings-row-sub${state.enabled && left <= 3 ? " warn" : ""}`}>
             {sub}
           </span>
@@ -164,15 +162,15 @@ export function TwoFactorRow({
               className="pill-button"
               onClick={() => go({ kind: "regenerate" })}
             >
-              重新生成恢复码
+              {t("twoFactor.regenerateTitle")}
             </button>
             <button type="button" className="pill-button" onClick={() => go({ kind: "disable" })}>
-              关闭
+              {t("twoFactor.turnOff")}
             </button>
           </span>
         ) : (
           <button type="button" className="pill-button" onClick={() => go({ kind: "password" })}>
-            开启
+            {t("twoFactor.turnOn")}
           </button>
         )}
       </div>
@@ -188,7 +186,7 @@ export function TwoFactorRow({
             <div className="settings-form-actions">
               {cancel}
               <button type="submit" className="primary" disabled={busy}>
-                {busy ? "请稍候…" : "继续"}
+                {busy ? t("common.pleaseWait") : t("common.continue")}
               </button>
             </div>
           </form>
@@ -196,18 +194,14 @@ export function TwoFactorRow({
 
         {view.kind === "scan" && (
           <form className="settings-form" onSubmit={submit}>
-            <p className="settings-hint">
-              请使用验证器 App（如 Google Authenticator、Microsoft
-              Authenticator、1Password）扫描二维码，或手动输入密钥，然后填写 App 中显示的 6
-              位验证码。
-            </p>
+            <p className="settings-hint">{t("twoFactor.scanHint")}</p>
             <QrCode text={view.otpauthUrl} />
             <SecretKey secret={view.secret} />
-            <CodeField value={code} onChange={setCode} label="验证码" />
+            <CodeField value={code} onChange={setCode} label={t("twoFactor.code")} numeric />
             <div className="settings-form-actions">
               {cancel}
               <button type="submit" className="primary" disabled={busy}>
-                {busy ? "请稍候…" : "确认开启"}
+                {busy ? t("common.pleaseWait") : t("twoFactor.confirmEnable")}
               </button>
             </div>
           </form>
@@ -220,10 +214,10 @@ export function TwoFactorRow({
         {(view.kind === "disable" || view.kind === "regenerate") && (
           <form className="settings-form" onSubmit={submit}>
             {view.kind === "disable" && (
-              <p className="settings-hint">关闭后，登录时只需输入密码，恢复码全部作废。</p>
+              <p className="settings-hint">{t("twoFactor.disableHint")}</p>
             )}
             <PasswordField value={password} onChange={setPassword} />
-            <CodeField value={code} onChange={setCode} label="验证码或恢复码" />
+            <CodeField value={code} onChange={setCode} label={t("twoFactor.codeOrRecovery")} />
             <div className="settings-form-actions">
               {cancel}
               <button
@@ -231,7 +225,11 @@ export function TwoFactorRow({
                 className={view.kind === "disable" ? "primary danger" : "primary"}
                 disabled={busy}
               >
-                {busy ? "请稍候…" : view.kind === "disable" ? "关闭两步验证" : "重新生成"}
+                {busy
+                  ? t("common.pleaseWait")
+                  : view.kind === "disable"
+                    ? t("twoFactor.disableTitle")
+                    : t("twoFactor.regenerate")}
               </button>
             </div>
           </form>
@@ -242,12 +240,13 @@ export function TwoFactorRow({
 }
 
 function PasswordField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const t = useT();
   return (
     <>
       {/* 和登录页一样放一个看不见的用户名，密码管理器才认得出是哪个账户 */}
       <input type="text" name="username" autoComplete="username" value="admin" hidden readOnly />
       <label className="field">
-        <span>当前密码</span>
+        <span>{t("password.current")}</span>
         <input
           type="password"
           autoComplete="current-password"
@@ -265,17 +264,20 @@ export function CodeField({
   value,
   onChange,
   label,
+  numeric = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   label: string;
+  /** 只有验证码（6 位数字）时弹数字键盘；能填恢复码时不弹。 */
+  numeric?: boolean;
 }) {
   return (
     <label className="field">
       <span>{label}</span>
       <input
         type="text"
-        inputMode={label === "验证码" ? "numeric" : "text"}
+        inputMode={numeric ? "numeric" : "text"}
         autoComplete="one-time-code"
         autoCapitalize="off"
         spellCheck={false}
@@ -290,6 +292,7 @@ export function CodeField({
 
 /** 二维码：自己画成 SVG（不用 innerHTML），浅色深色主题下都是白底黑点，验证器 App 才扫得出来。 */
 function QrCode({ text }: { text: string }) {
+  const t = useT();
   const { data, size } = encode(text, { ecc: "M", border: 2 });
   let path = "";
   data.forEach((row, y) => {
@@ -303,7 +306,7 @@ function QrCode({ text }: { text: string }) {
       viewBox={`0 0 ${size} ${size}`}
       shapeRendering="crispEdges"
       role="img"
-      aria-label="两步验证的二维码"
+      aria-label={t("twoFactor.qr")}
     >
       <rect width={size} height={size} fill="#fff" />
       <path d={path} fill="#000" />
@@ -313,12 +316,18 @@ function QrCode({ text }: { text: string }) {
 
 /** 手动输入用的密钥：四个一组显示，复制时不带空格。 */
 function SecretKey({ secret }: { secret: string }) {
+  const t = useT();
   const [copied, copy] = useCopy(secret);
   return (
     <div className="secret-key">
-      <span className="settings-row-sub">密钥</span>
+      <span className="settings-row-sub">{t("twoFactor.secret")}</span>
       <code className="secret-key-text">{secret.replace(/(.{4})/g, "$1 ").trim()}</code>
-      <button type="button" className="icon-button" aria-label="复制密钥" onClick={copy}>
+      <button
+        type="button"
+        className="icon-button"
+        aria-label={t("twoFactor.copySecret")}
+        onClick={copy}
+      >
         {copied ? <CheckIcon /> : <CopyIcon />}
       </button>
     </div>
@@ -327,13 +336,11 @@ function SecretKey({ secret }: { secret: string }) {
 
 /** 恢复码：只显示这一次。 */
 function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void }) {
+  const t = useT();
   const [copied, copy] = useCopy(codes.join("\n"));
   return (
     <div className="settings-form">
-      <p className="settings-hint">
-        请将以下恢复码保存在安全的地方。无法使用验证器 App
-        时，可用恢复码代替验证码登录；每个恢复码只能使用一次，此后不会再显示。
-      </p>
+      <p className="settings-hint">{t("twoFactor.codesHint")}</p>
       <ul className="recovery-codes">
         {codes.map((c) => (
           <li key={c}>
@@ -343,10 +350,10 @@ function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void 
       </ul>
       <div className="settings-form-actions">
         <button type="button" className="secondary" onClick={copy}>
-          {copied ? "已复制" : "复制恢复码"}
+          {copied ? t("common.copied") : t("twoFactor.copyCodes")}
         </button>
         <button type="button" className="primary" onClick={onDone}>
-          我已保存
+          {t("twoFactor.saved")}
         </button>
       </div>
     </div>
