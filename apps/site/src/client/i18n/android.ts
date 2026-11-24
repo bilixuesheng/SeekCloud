@@ -22,8 +22,8 @@ export type AppKey = keyof typeof appZh;
 export type AppCatalog = { readonly [K in AppKey]: Message };
 
 /**
- * 网页目录里 App 也用的几组，两边说法一样：接口的报错、会话的状态、侧栏和会话列表、会话的菜单、分组、PR、通用的按钮。
- * 键改成安卓的资源名：点换成下划线，驼峰换成下划线（error.rate_limited → error_rate_limited，
+ * 网页目录里 App 也用的几组，两边说法一样：接口的报错、会话的状态、侧栏和会话列表、会话的菜单、分组、PR、通用的按钮、新会话页（仓库、环境、GitHub、模型）。
+ * 键改成安卓的资源名：点和连字符换成下划线，驼峰换成下划线（error.rate_limited → error_rate_limited，
  * sessionList.empty → session_list_empty，status.awaitingInput → status_awaiting_input）。
  */
 const SHARED = [
@@ -35,11 +35,20 @@ const SHARED = [
   "group.",
   "pr.",
   "common.",
+  "newSession.",
+  "repoPicker.",
+  "repo.",
+  "environment.",
+  "github.",
+  "model.",
+  "effort.",
+  "models.deepseekName",
+  "models.providerName.",
 ];
 
 const snake = (key: string) =>
   key
-    .replace(/\./g, "_")
+    .replace(/[.-]/g, "_")
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
     .toLowerCase();
 const RESERVED = SHARED.map((prefix) => snake(prefix));

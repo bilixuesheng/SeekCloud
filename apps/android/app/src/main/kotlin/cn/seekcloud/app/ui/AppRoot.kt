@@ -11,11 +11,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.seekcloud.app.AppViewModel
 import cn.seekcloud.app.Screen
 import cn.seekcloud.app.connect.ConnectRoute
+import cn.seekcloud.app.net.PreferencesStore
+import cn.seekcloud.app.sessions.NewSessionApi
+import cn.seekcloud.app.sessions.NewSessionViewModel
 import cn.seekcloud.app.sessions.SessionListViewModel
 
 /** 按 [AppViewModel]（[app]）现在的页面画出来，页面之间淡入淡出。 */
@@ -62,6 +66,17 @@ fun AppRoot(app: AppViewModel = viewModel()) {
                 // 每台主站一个，换服务器、改地址以后是新的
                 viewModel = viewModel(key = "sessions:${current.server.id}:${current.server.origin}") {
                     SessionListViewModel(app.client(current.server), onSignedOut = { app.signedOut(current.server) })
+                },
+                newSession = {
+                    val context = LocalContext.current
+                    viewModel(key = "new-session:${current.server.id}:${current.server.origin}") {
+                        NewSessionViewModel(
+                            source = NewSessionApi(app.client(current.server)),
+                            store = PreferencesStore(context.applicationContext, "new-session"),
+                            serverId = current.server.id,
+                            onSignedOut = { app.signedOut(current.server) },
+                        )
+                    }
                 },
                 onSwitchServer = app::showServers,
                 onSignOut = { app.logout(current.server) },

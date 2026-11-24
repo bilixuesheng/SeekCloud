@@ -132,6 +132,11 @@
     <string name="error_group_not_found" tools:ignore="UnusedResources">The group does not exist.</string>
     <string name="error_too_many_groups" tools:ignore="UnusedResources">You have reached the maximum number of groups.</string>
     <string name="error_invalid_group_name" tools:ignore="UnusedResources">Enter a group name within the length limit.</string>
+    <string name="github_auth_failed" tools:ignore="UnusedResources">GitHub authorization failed. Try again.</string>
+    <string name="github_connect_title" tools:ignore="UnusedResources">Connect GitHub</string>
+    <string name="github_connect_hint" tools:ignore="UnusedResources">Authorize GitHub and install the GitHub App on the repositories you want to use, so DeepSeek can read and write them. Sessions without a repository do not need GitHub.</string>
+    <string name="github_authorize" tools:ignore="UnusedResources">Authorize GitHub</string>
+    <string name="github_install" tools:ignore="UnusedResources">Install the GitHub App</string>
     <string name="sidebar_label" tools:ignore="UnusedResources">Sessions</string>
     <string name="sidebar_close" tools:ignore="UnusedResources">Close session list</string>
     <string name="sidebar_new_session" tools:ignore="UnusedResources">New session</string>
@@ -162,6 +167,35 @@
     <string name="status_done" tools:ignore="UnusedResources">Done</string>
     <string name="status_unread" tools:ignore="UnusedResources">Unread</string>
     <string name="status_with_detail" tools:ignore="UnusedResources">%1$s · %2$s</string>
+    <string name="new_session_placeholder" tools:ignore="UnusedResources">Describe a task or ask a question</string>
+    <string name="new_session_submit" tools:ignore="UnusedResources">Start session</string>
+    <string name="environment_label" tools:ignore="UnusedResources">Environment</string>
+    <string name="environment_search" tools:ignore="UnusedResources">Search environments</string>
+    <string name="new_session_no_repo" tools:ignore="UnusedResources">No repository</string>
+    <string name="repo_read_only" tools:ignore="UnusedResources">Read-only</string>
+    <string name="new_session_base_branch" tools:ignore="UnusedResources">Base branch</string>
+    <string name="new_session_search_branches" tools:ignore="UnusedResources">Search branches</string>
+    <string name="new_session_no_branch_match" tools:ignore="UnusedResources">No matching branches.</string>
+    <string name="new_session_choose_model" tools:ignore="UnusedResources">Select a model</string>
+    <string name="repo_picker_title" tools:ignore="UnusedResources">Select a repository</string>
+    <string name="repo_picker_search" tools:ignore="UnusedResources">Search repositories, including public ones</string>
+    <string name="repo_picker_search_label" tools:ignore="UnusedResources">Search repositories</string>
+    <string name="repo_picker_no_match" tools:ignore="UnusedResources">No matching repositories.</string>
+    <string name="repo_picker_empty" tools:ignore="UnusedResources">No repositories have the GitHub App installed.</string>
+    <string name="repo_private" tools:ignore="UnusedResources">Private</string>
+    <string name="repo_picker_manage" tools:ignore="UnusedResources">Manage repository access</string>
+    <string name="environment_default" tools:ignore="UnusedResources">Default</string>
+    <string name="environment_deleted" tools:ignore="UnusedResources">Deleted</string>
+    <string name="repo_no_repo" tools:ignore="UnusedResources">None</string>
+    <string name="model_dialog" tools:ignore="UnusedResources">Model and thinking effort</string>
+    <string name="model_choose" tools:ignore="UnusedResources">Choose a model. Current: %1$s</string>
+    <string name="model_reset_effort" tools:ignore="UnusedResources">Reset to default</string>
+    <string name="model_max_hint" tools:ignore="UnusedResources">Thinks longer and uses more.</string>
+    <string name="model_no_efforts" tools:ignore="UnusedResources">%1$s declares no reasoning levels. The API decides whether it thinks.</string>
+    <string name="model_list" tools:ignore="UnusedResources">Models</string>
+    <string name="model_desc_flash" tools:ignore="UnusedResources">Fast and economical, for everyday changes</string>
+    <string name="model_desc_pro" tools:ignore="UnusedResources">More capable, for complex tasks</string>
+    <string name="model_effort" tools:ignore="UnusedResources">Thinking effort</string>
     <string name="session_info" tools:ignore="UnusedResources">Session info</string>
     <string name="session_status" tools:ignore="UnusedResources">Status</string>
     <string name="session_repo" tools:ignore="UnusedResources">Repository</string>
@@ -191,7 +225,27 @@
     <string name="pr_merged" tools:ignore="UnusedResources">Merged</string>
     <string name="pr_closed" tools:ignore="UnusedResources">Closed</string>
     <string name="pr_text" tools:ignore="UnusedResources">PR #%1$s · %2$s</string>
+    <string name="github_unlink_title" tools:ignore="UnusedResources">Disconnect GitHub?</string>
+    <string name="github_unlink_body" tools:ignore="UnusedResources">DeepSeek will lose access to your repositories, and sessions using them will not be able to push. You can connect again at any time.</string>
+    <string name="github_unlink" tools:ignore="UnusedResources">Disconnect</string>
+    <string name="github_unlinked" tools:ignore="UnusedResources">GitHub disconnected.</string>
+    <string name="github_not_connected" tools:ignore="UnusedResources">Not connected</string>
+    <string name="github_connect" tools:ignore="UnusedResources">Connect</string>
     <string name="common_change" tools:ignore="UnusedResources">Change</string>
     <string name="common_set" tools:ignore="UnusedResources">Set</string>
     <string name="common_continue" tools:ignore="UnusedResources">Continue</string>
+    <string name="models_deepseek_name" tools:ignore="UnusedResources">DeepSeek</string>
+    <string name="models_provider_name_moonshotai" tools:ignore="UnusedResources">Kimi (Moonshot)</string>
+    <string name="models_provider_name_moonshotai_cn" tools:ignore="UnusedResources">Kimi (Moonshot China)</string>
+    <string name="models_provider_name_zai" tools:ignore="UnusedResources">Zhipu GLM (Z.ai)</string>
+    <string name="models_provider_name_zai_coding_cn" tools:ignore="UnusedResources">Zhipu GLM (China)</string>
+    <string name="models_provider_name_minimax_cn" tools:ignore="UnusedResources">MiniMax (China)</string>
+    <string name="models_provider_name_xiaomi" tools:ignore="UnusedResources">Xiaomi MiMo</string>
+    <string name="effort_off" tools:ignore="UnusedResources">Off</string>
+    <string name="effort_minimal" tools:ignore="UnusedResources">Minimal</string>
+    <string name="effort_low" tools:ignore="UnusedResources">Low</string>
+    <string name="effort_medium" tools:ignore="UnusedResources">Medium</string>
+    <string name="effort_high" tools:ignore="UnusedResources">High</string>
+    <string name="effort_xhigh" tools:ignore="UnusedResources">Extra high</string>
+    <string name="effort_max" tools:ignore="UnusedResources">Max</string>
 </resources>
