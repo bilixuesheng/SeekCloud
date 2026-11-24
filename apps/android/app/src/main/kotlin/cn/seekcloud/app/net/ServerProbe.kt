@@ -76,16 +76,18 @@ fun probeServer(
                 else -> ProbeResult.Connected(health.minAppVersion)
             }
         }
-    } catch (e: SSLException) {
-        val rejected = client.trust.rejected
-        if (rejected != null) {
-            val fingerprint = rejected.sha256Fingerprint()
-            ProbeResult.UntrustedCertificate(rejected, fingerprint, changed = trust.pinnedCertificate != null)
-        } else {
-            ProbeResult.TlsFailure
-        }
     } catch (e: IOException) {
-        ProbeResult.Unreachable
+        // 这次连接里有证书被拒过，就按证书的问题说：OkHttp 换一条线路重试时，最后抛出的可能是别的错误
+        val rejected = client.trust.rejected
+        when {
+            rejected != null -> ProbeResult.UntrustedCertificate(
+                rejected,
+                rejected.sha256Fingerprint(),
+                changed = trust.pinnedCertificate != null,
+            )
+            e is SSLException -> ProbeResult.TlsFailure
+            else -> ProbeResult.Unreachable
+        }
     }
 }
 

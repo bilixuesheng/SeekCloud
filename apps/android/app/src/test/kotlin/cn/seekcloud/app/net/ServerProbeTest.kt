@@ -84,7 +84,7 @@ class ServerProbeTest {
 
         // 系统不信任：给出证书的指纹，等管理员确认
         val first = probe(https, ServerTrust())
-        assertTrue(first is ProbeResult.UntrustedCertificate)
+        assertTrue("$first", first is ProbeResult.UntrustedCertificate)
         first as ProbeResult.UntrustedCertificate
         assertEquals(fingerprint, first.fingerprint)
         assertFalse(first.changed)
@@ -96,7 +96,7 @@ class ServerProbeTest {
         // 钉住的是别的证书（主站换了证书）：重新问，并说明证书变了
         val other = HeldCertificate.Builder().build().certificate.sha256Fingerprint()
         val changed = probe(https, ServerTrust(pinnedCertificate = other))
-        assertTrue(changed is ProbeResult.UntrustedCertificate && changed.changed)
+        assertTrue("$changed", changed is ProbeResult.UntrustedCertificate && changed.changed)
     }
 
     @Test
