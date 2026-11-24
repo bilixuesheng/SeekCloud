@@ -245,13 +245,15 @@ class AppUiTest {
         tap(title)
         // 会话页：回复、两次工具调用合成一行、这一回合的改动卡片（列出三个，"查看全部"展开第四个）
         waitFor("The health check is in place.")
-        waitFor(res.getQuantityString(R.plurals.tools_read, 1, 1))
+        // 两次工具调用合成一句（英文句首大写，所以找后半句"运行了 1 条命令"）
+        val toolSummary = res.getQuantityString(R.plurals.tools_bash, 1, 1)
+        waitFor(toolSummary)
         waitFor(res.getQuantityString(R.plurals.changes_changed_files, 4, 4))
         rule.onAllNodes(hasText("README.md")).assertCountEquals(0)
         tap(s(R.string.changes_view_all))
         waitFor("README.md")
         // 点开工具调用：每一次的名字，再点开看输入
-        tap(res.getQuantityString(R.plurals.tools_read, 1, 1), substring = true)
+        tap(toolSummary, substring = true)
         waitFor("pnpm test")
 
         // 在会话页里接着发：Agent 回复
@@ -321,7 +323,10 @@ class AppUiTest {
             // 撤回并编辑：排队的消息没了，字回到输入框
             rule.onNode(hasContentDescription(s(R.string.chat_withdraw)) and hasClickAction()).performClick()
             rule.waitUntil(20_000) { rule.onAllNodes(hasText(s(R.string.chat_send_now))).fetchSemanticsNodes().isEmpty() }
-            rule.onNode(hasSetTextAction()).assert(hasText("Make it blue"))
+            // 排队的消息由事件流拿掉，字由撤回的回应放回输入框：两样先后不定，等字回来
+            explain("text back in the composer") {
+                rule.waitUntil(20_000) { rule.onAllNodes(hasSetTextAction() and hasText("Make it blue")).fetchSemanticsNodes().isNotEmpty() }
+            }
 
             // ⌄ 里的"停止"：回合停下，输入框里的字不动
             rule.onNode(hasContentDescription(s(R.string.composer_more_send)) and hasClickAction()).performClick()
