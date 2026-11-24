@@ -1,6 +1,15 @@
 package cn.seekcloud.app.ui
 
 import android.content.Intent
+import android.os.Build
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.launch
 import android.text.format.DateUtils
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
@@ -93,7 +102,11 @@ fun SessionListRoute(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val connected by viewModel.connected.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+    val menu by viewModel.menu.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val copied = stringResource(R.string.session_link_copied)
     SessionListScreen(
         server = server,
         state = state,
@@ -102,9 +115,29 @@ fun SessionListRoute(
         onRefresh = viewModel::refresh,
         // 会话页（#182）做好以前，先在浏览器里打开网页上的会话页
         onOpen = { context.startActivity(Intent(Intent.ACTION_VIEW, "${server.origin}/s/${it.shortId}".toUri())) },
+        onMenu = { viewModel.openMenu(it.shortId) },
         onSwitchServer = onSwitchServer,
         onSignOut = onSignOut,
+        snackbar = snackbar,
     )
+    val open = menu
+    val session = open?.let { m -> state.sessions.firstOrNull { it.shortId == m.shortId } }
+    if (open != null && session != null) {
+        SessionMenuSheet(
+            origin = server.origin,
+            session = session,
+            groups = state.groups,
+            menu = open,
+            onPage = viewModel::showPage,
+            onPerform = viewModel::perform,
+            onCopied = {
+                viewModel.closeMenu()
+                // 安卓 13 以上系统自己会提示复制了什么，不再重复
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) scope.launch { snackbar.showSnackbar(copied) }
+            },
+            onDismiss = viewModel::closeMenu,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,8 +149,10 @@ fun SessionListScreen(
     refreshing: Boolean,
     onRefresh: () -> Unit,
     onOpen: (SessionSummary) -> Unit,
+    onMenu: (SessionSummary) -> Unit,
     onSwitchServer: () -> Unit,
     onSignOut: () -> Unit,
+    snackbar: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
@@ -156,6 +191,7 @@ fun SessionListScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
@@ -187,7 +223,7 @@ fun SessionListScreen(
                     !state.loaded -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
-                    else -> SessionSections(state, query, archivedOpen, { archivedOpen = !archivedOpen }, onOpen)
+                    else -> SessionSections(state, query, archivedOpen, { archivedOpen = !archivedOpen }, onOpen, onMenu)
                 }
             }
         }
@@ -235,7 +271,9 @@ private fun SessionSections(
     archivedOpen: Boolean,
     onToggleArchived: () -> Unit,
     onOpen: (SessionSummary) -> Unit,
+    onMenu: (SessionSummary) -> Unit,
 ) {
+    val row: @Composable (SessionSummary) -> Unit = { SessionRow(it, now(state), onOpen, onMenu) }
     val s = sections(state.sessions, state.groups, query)
     val empty = s.pinned.isEmpty() && s.recent.isEmpty() && s.archived.isEmpty() && s.groups.all { it.second.isEmpty() }
     if (empty) {
@@ -245,14 +283,13 @@ private fun SessionSections(
         }
         return
     }
-    val now = remember(state) { System.currentTimeMillis() }
     val pinned = stringResource(R.string.sidebar_pinned)
     val recent = stringResource(R.string.sidebar_recent)
     val archived = stringResource(R.string.sidebar_archived)
     LazyColumn(Modifier.fillMaxSize()) {
-        section("pinned", pinned, s.pinned, now, onOpen)
-        for ((group, sessions) in s.groups) section("group:${group.id}", group.name, sessions, now, onOpen, showEmpty = true)
-        section("recent", if (query.isBlank()) recent else null, s.recent, now, onOpen)
+        section("pinned", pinned, s.pinned, row)
+        for ((group, sessions) in s.groups) section("group:${group.id}", group.name, sessions, row, showEmpty = true)
+        section("recent", if (query.isBlank()) recent else null, s.recent, row)
         if (s.archived.isNotEmpty()) {
             item(key = "archived") {
                 SectionHeader(
@@ -261,7 +298,7 @@ private fun SessionSections(
                     onToggle = onToggleArchived,
                 )
             }
-            if (archivedOpen) items(s.archived, key = { "archived:${it.shortId}" }) { SessionRow(it, now, onOpen) }
+            if (archivedOpen) items(s.archived, key = { "archived:${it.shortId}" }) { row(it) }
         }
     }
 }
@@ -270,8 +307,7 @@ private fun LazyListScope.section(
     key: String,
     title: String?,
     sessions: List<SessionSummary>,
-    now: Long,
-    onOpen: (SessionSummary) -> Unit,
+    row: @Composable (SessionSummary) -> Unit,
     showEmpty: Boolean = false,
 ) {
     if (sessions.isEmpty() && !showEmpty) return
@@ -286,7 +322,7 @@ private fun LazyListScope.section(
             )
         }
     }
-    items(sessions, key = { "$key:${it.shortId}" }) { SessionRow(it, now, onOpen) }
+    items(sessions, key = { "$key:${it.shortId}" }) { row(it) }
 }
 
 @Composable
@@ -321,14 +357,34 @@ private fun SectionHeader(title: String, expanded: Boolean? = null, onToggle: ((
     }
 }
 
-/** 一个会话一行：标题（普通文字，不当 Markdown）、主仓库、多久以前，右边是状态标记。 */
+/** 列表里"多久以前"按哪个时间算：列表变了就重新取一次。 */
 @Composable
-private fun SessionRow(session: SessionSummary, now: Long, onOpen: (SessionSummary) -> Unit) {
+private fun now(state: SessionListState): Long = remember(state) { System.currentTimeMillis() }
+
+/**
+ * 一个会话一行：标题（普通文字，不当 Markdown）、主仓库、多久以前，右边是状态标记和"⋯"。
+ * 长按也打开菜单（照 Claude 的 App）。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SessionRow(
+    session: SessionSummary,
+    now: Long,
+    onOpen: (SessionSummary) -> Unit,
+    onMenu: (SessionSummary) -> Unit,
+) {
+    val haptics = LocalHapticFeedback.current
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable { onOpen(session) }
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .combinedClickable(
+                onClick = { onOpen(session) },
+                onLongClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onMenu(session)
+                },
+            )
+            .padding(start = 20.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -351,6 +407,13 @@ private fun SessionRow(session: SessionSummary, now: Long, onOpen: (SessionSumma
         }
         Spacer(Modifier.width(12.dp))
         StatusMarkView(statusMark(session))
+        IconButton(onClick = { onMenu(session) }) {
+            Icon(
+                painterResource(R.drawable.ic_more_vert),
+                contentDescription = stringResource(R.string.session_list_options, session.title),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -439,6 +502,6 @@ private fun SessionListPreview() {
         loaded = true,
     )
     SeekCloudTheme {
-        SessionListScreen(SavedServer("p", "https://seekcloud.example.com"), state, false, false, {}, {}, {}, {})
+        SessionListScreen(SavedServer("p", "https://seekcloud.example.com"), state, false, false, {}, {}, {}, {}, {})
     }
 }

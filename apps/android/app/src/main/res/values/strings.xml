@@ -67,6 +67,20 @@
     <string name="update_title">App update required</string>
     <string name="update_body">%1$s requires app version %2$s or later. This is version %3$s. Download the new version, then connect again.</string>
     <string name="update_download">Download new version</string>
+    <string name="common_cancel" tools:ignore="UnusedResources">Cancel</string>
+    <string name="common_close" tools:ignore="UnusedResources">Close</string>
+    <string name="common_back" tools:ignore="UnusedResources">Back</string>
+    <string name="common_please_wait" tools:ignore="UnusedResources">Please wait…</string>
+    <string name="common_ok" tools:ignore="UnusedResources">OK</string>
+    <string name="common_delete" tools:ignore="UnusedResources">Delete</string>
+    <string name="common_loading" tools:ignore="UnusedResources">Loading…</string>
+    <string name="common_search" tools:ignore="UnusedResources">Search</string>
+    <string name="common_no_match" tools:ignore="UnusedResources">No matching options.</string>
+    <string name="common_copy" tools:ignore="UnusedResources">Copy</string>
+    <string name="common_copied" tools:ignore="UnusedResources">Copied</string>
+    <string name="common_rename" tools:ignore="UnusedResources">Rename</string>
+    <string name="common_save" tools:ignore="UnusedResources">Save</string>
+    <string name="common_dismiss" tools:ignore="UnusedResources">Dismiss notification</string>
     <string name="error_network" tools:ignore="UnusedResources">Network error. Try again later.</string>
     <string name="error_wrong_password" tools:ignore="UnusedResources">Incorrect password.</string>
     <string name="error_wrong_code" tools:ignore="UnusedResources">Incorrect code.</string>
@@ -133,6 +147,10 @@
     <string name="session_list_empty" tools:ignore="UnusedResources">No sessions yet. Describe a task to start one.</string>
     <string name="session_list_no_match" tools:ignore="UnusedResources">No matching sessions.</string>
     <string name="session_list_options" tools:ignore="UnusedResources">Session options: %1$s</string>
+    <string name="group_menu" tools:ignore="UnusedResources">Group options</string>
+    <string name="group_name" tools:ignore="UnusedResources">Group name</string>
+    <string name="group_delete" tools:ignore="UnusedResources">Delete group</string>
+    <string name="group_delete_hint" tools:ignore="UnusedResources">Sessions in this group move back to Recent. The sessions themselves are not affected.</string>
     <string name="status_queued" tools:ignore="UnusedResources">Queued</string>
     <string name="status_running" tools:ignore="UnusedResources">Running</string>
     <string name="status_waiting" tools:ignore="UnusedResources">Waiting</string>
@@ -144,4 +162,36 @@
     <string name="status_done" tools:ignore="UnusedResources">Done</string>
     <string name="status_unread" tools:ignore="UnusedResources">Unread</string>
     <string name="status_with_detail" tools:ignore="UnusedResources">%1$s · %2$s</string>
+    <string name="session_info" tools:ignore="UnusedResources">Session info</string>
+    <string name="session_status" tools:ignore="UnusedResources">Status</string>
+    <string name="session_repo" tools:ignore="UnusedResources">Repository</string>
+    <string name="session_branch" tools:ignore="UnusedResources">Branch</string>
+    <string name="session_changes" tools:ignore="UnusedResources">Changes</string>
+    <string name="session_menu" tools:ignore="UnusedResources">Session options</string>
+    <string name="session_open_pr" tools:ignore="UnusedResources">Open PR</string>
+    <string name="session_pin" tools:ignore="UnusedResources">Pin</string>
+    <string name="session_unpin" tools:ignore="UnusedResources">Unpin</string>
+    <string name="session_move_to_group" tools:ignore="UnusedResources">Move to group</string>
+    <string name="session_remove_from_group" tools:ignore="UnusedResources">Remove from group</string>
+    <string name="session_create_and_move" tools:ignore="UnusedResources">Create and move</string>
+    <string name="session_mark_read" tools:ignore="UnusedResources">Mark as read</string>
+    <string name="session_mark_unread" tools:ignore="UnusedResources">Mark as unread</string>
+    <string name="session_open_on" tools:ignore="UnusedResources">Open on GitHub</string>
+    <string name="session_read_only_repo" tools:ignore="UnusedResources">Read-only repository. Changes are not pushed.</string>
+    <string name="session_copy_link" tools:ignore="UnusedResources">Copy link</string>
+    <string name="session_link_copied" tools:ignore="UnusedResources">Link copied</string>
+    <string name="session_archive" tools:ignore="UnusedResources">Archive</string>
+    <string name="session_unarchive" tools:ignore="UnusedResources">Unarchive</string>
+    <string name="session_delete" tools:ignore="UnusedResources">Delete session</string>
+    <string name="session_delete_hint" tools:ignore="UnusedResources">The conversation will be permanently deleted and cannot be recovered. Branches and PRs on GitHub are not affected.</string>
+    <string name="session_delete_forever" tools:ignore="UnusedResources">Delete permanently</string>
+    <string name="session_title_label" tools:ignore="UnusedResources">Session title</string>
+    <string name="pr_open" tools:ignore="UnusedResources">Open</string>
+    <string name="pr_draft" tools:ignore="UnusedResources">Draft</string>
+    <string name="pr_merged" tools:ignore="UnusedResources">Merged</string>
+    <string name="pr_closed" tools:ignore="UnusedResources">Closed</string>
+    <string name="pr_text" tools:ignore="UnusedResources">PR #%1$s · %2$s</string>
+    <string name="common_change" tools:ignore="UnusedResources">Change</string>
+    <string name="common_set" tools:ignore="UnusedResources">Set</string>
+    <string name="common_continue" tools:ignore="UnusedResources">Continue</string>
 </resources>

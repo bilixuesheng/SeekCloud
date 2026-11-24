@@ -9,7 +9,9 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
@@ -80,6 +82,13 @@ class AppUiTest {
     /** 页面上（不在弹窗里）的按钮：页面能滚动时先滚到它那里再点。 */
     private fun tap(text: String) {
         val node = rule.onNode(hasText(text) and hasClickAction() and !hasAnyAncestor(isDialog()))
+        runCatching { node.performScrollTo() }
+        node.performClick()
+    }
+
+    /** 底部弹层（会话菜单）里的一项：弹层是单独的窗口，不按"在不在弹窗里"区分。 */
+    private fun tapSheet(text: String) {
+        val node = rule.onNode(hasText(text) and hasClickAction())
         runCatching { node.performScrollTo() }
         node.performClick()
     }
@@ -175,6 +184,51 @@ class AppUiTest {
         val title = "Live session ${System.nanoTime()}"
         startSession(siteA, title)
         waitFor(title)
+    }
+
+    @Test
+    fun sessionMenuActions() {
+        launch()
+        connect(siteA)
+        signIn()
+        val title = "Menu session ${System.nanoTime()}"
+        startSession(siteA, title)
+        waitFor(title)
+
+        // 长按打开菜单，重命名
+        val renamed = "$title renamed"
+        rule.onNode(hasText(title) and hasClickAction()).performTouchInput { longClick() }
+        waitFor(s(R.string.session_copy_link))
+        tapSheet(s(R.string.common_rename))
+        waitFor(s(R.string.session_title_label))
+        type(renamed)
+        tapSheet(s(R.string.common_save))
+        waitFor(renamed)
+
+        // 用"⋯"打开菜单，置顶：出现"已置顶"这一类
+        openMenuOf(renamed)
+        tapSheet(s(R.string.session_pin))
+        waitFor(s(R.string.sidebar_pinned))
+
+        // 归档：进"已归档"（收着），置顶取消
+        openMenuOf(renamed)
+        tapSheet(s(R.string.session_archive))
+        waitFor(s(R.string.sidebar_archived))
+        rule.waitUntil(20_000) { rule.onAllNodes(hasText(renamed)).fetchSemanticsNodes().isEmpty() }
+
+        // 展开"已归档"，删除（要确认）：从列表里消失
+        tap(s(R.string.sidebar_archived))
+        waitFor(renamed)
+        openMenuOf(renamed)
+        tapSheet(s(R.string.common_delete))
+        waitFor(s(R.string.session_delete_hint))
+        tapSheet(s(R.string.session_delete_forever))
+        rule.waitUntil(20_000) { rule.onAllNodes(hasText(renamed)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    private fun openMenuOf(title: String) {
+        rule.onNode(hasContentDescription(s(R.string.session_list_options, title))).performScrollTo().performClick()
+        waitFor(s(R.string.session_copy_link))
     }
 
     @Test
