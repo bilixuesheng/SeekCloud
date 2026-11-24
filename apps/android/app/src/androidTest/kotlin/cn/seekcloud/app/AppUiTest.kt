@@ -2,6 +2,7 @@ package cn.seekcloud.app
 
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.view.KeyEvent
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -291,6 +292,54 @@ class AppUiTest {
         waitFor("https://example.com/docs")
         tapInDialog(s(R.string.common_cancel))
         rule.waitUntil(20_000) { rule.onAllNodes(hasText(s(R.string.link_open_body))).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun sessionHeaderMenuInfoAndModel() {
+        launch()
+        connect(siteA)
+        signIn()
+        val title = "Header ${System.nanoTime()}"
+        startSession(siteA, title)
+        waitFor(title)
+        tap(title)
+        waitFor(REPLY)
+
+        // 会话信息：状态、环境、仓库
+        rule.onNode(hasContentDescription(s(R.string.session_info)) and hasClickAction()).performClick()
+        waitFor(s(R.string.environment_default))
+        waitFor(s(R.string.repo_no_repo))
+        back()
+
+        // 输入框下面的模型按钮：打开模型和思考强度的弹层
+        val choose = s(R.string.model_choose, "").trimEnd()
+        rule.onNode(hasContentDescription(choose, substring = true) and hasClickAction()).performClick()
+        waitFor(s(R.string.model_dialog))
+        back()
+
+        // 点标题打开会话菜单：重命名以后顶栏跟着变
+        val renamed = "$title renamed"
+        rule.onNode(hasContentDescription(s(R.string.session_menu)) and hasClickAction()).performClick()
+        waitFor(s(R.string.session_copy_link))
+        tapSheet(s(R.string.common_rename))
+        waitFor(s(R.string.session_title_label))
+        explain("rename") { rule.onNode(hasSetTextAction() and hasText(title)).performTextReplacement(renamed) }
+        tapSheet(s(R.string.common_save))
+        waitFor(renamed)
+
+        // 在会话页里删除：回到列表
+        rule.onNode(hasContentDescription(s(R.string.session_menu)) and hasClickAction()).performClick()
+        waitFor(s(R.string.session_copy_link))
+        tapSheet(s(R.string.common_delete))
+        tapSheet(s(R.string.session_delete_forever))
+        waitForList()
+        rule.waitUntil(20_000) { rule.onAllNodes(hasText(renamed)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    /** 系统的返回键（收起底部弹层）。 */
+    private fun back() {
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        rule.waitForIdle()
     }
 
     @Test

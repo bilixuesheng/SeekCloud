@@ -86,6 +86,14 @@ class SessionViewModel(
     private val _missing = MutableStateFlow(false)
     val missing: StateFlow<Boolean> = _missing.asStateFlow()
 
+    /** 能用的模型（换模型的弹层）；还没取到或取失败时为 null。 */
+    private val _models = MutableStateFlow<ModelList?>(null)
+    val models: StateFlow<ModelList?> = _models.asStateFlow()
+
+    /** 选了别的模型、思考强度（"提供方/模型"和档位）：随下一条消息发出去，从那个回合起生效；没选时为 null，跟着会话走。 */
+    private val _choice = MutableStateFlow<Pair<String, String>?>(null)
+    val choice: StateFlow<Pair<String, String>?> = _choice.asStateFlow()
+
     /** 打开时取一次的会话（会话列表里没有时用它的标题）。 */
     private val _session = MutableStateFlow<SessionSummary?>(null)
     val session: StateFlow<SessionSummary?> = _session.asStateFlow()
@@ -119,6 +127,15 @@ class SessionViewModel(
                 // 连不上：事件流会自己重连，标题先用会话列表里的
             }
         }
+        viewModelScope.launch {
+            _models.value = runCatching { withContext(io) { api.models() } }.getOrNull()
+        }
+    }
+
+    /** 换模型或思考强度：模型不支持这一档时换成最近的一档；没声明推理等级的模型只有"关闭"。 */
+    fun choose(model: String, effort: String) {
+        val efforts = _models.value?.models?.firstOrNull { it.id == model }?.efforts.orEmpty()
+        _choice.value = model to (if (efforts.isEmpty()) "off" else fitEffort(efforts, effort) ?: effort)
     }
 
     /** App 在前台、页面开着时连上事件流。 */
@@ -251,9 +268,12 @@ class SessionViewModel(
                 text = if (fromComposer) "" else it.text,
             )
         }
+        val chosen = _choice.value
         viewModelScope.launch {
             try {
-                withContext(io) { api.send(shortId, text, mode) }
+                withContext(io) { api.send(shortId, text, mode, chosen?.first, chosen?.second) }
+                // 换的模型随这条消息生效了，之后跟着会话走
+                if (_choice.value == chosen) _choice.value = null
                 _composer.update { it.copy(busy = false) }
             } catch (e: CancellationException) {
                 throw e

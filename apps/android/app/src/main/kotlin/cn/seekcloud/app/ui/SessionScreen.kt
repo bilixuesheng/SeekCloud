@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,6 +37,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -88,6 +90,7 @@ import cn.seekcloud.app.net.errorTexts
 import cn.seekcloud.app.net.failureText
 import cn.seekcloud.app.sessions.ComposerUi
 import cn.seekcloud.app.sessions.FileChange
+import cn.seekcloud.app.sessions.ModelList
 import cn.seekcloud.app.sessions.ModelProgress
 import cn.seekcloud.app.sessions.PACED_TICK_MS
 import cn.seekcloud.app.sessions.Plan
@@ -116,6 +119,8 @@ fun SessionRoute(
     listed: SessionSummary?,
     viewModel: SessionViewModel,
     onBack: (() -> Unit)?,
+    /** 打开会话菜单（和会话列表里长按的是同一个）。 */
+    onMenu: (() -> Unit)? = null,
 ) {
     LifecycleStartEffect(viewModel) {
         viewModel.start()
@@ -126,11 +131,18 @@ fun SessionRoute(
     val connected by viewModel.connected.collectAsStateWithLifecycle()
     val missing by viewModel.missing.collectAsStateWithLifecycle()
     val fetched by viewModel.session.collectAsStateWithLifecycle()
+    val models by viewModel.models.collectAsStateWithLifecycle()
+    val choice by viewModel.choice.collectAsStateWithLifecycle()
     val session = listed ?: fetched
     val markdown = MarkdownEnv(viewModel.images, viewModel.serverHost, session?.repos?.firstOrNull()?.fullName)
     CompositionLocalProvider(LocalMarkdownEnv provides markdown) {
         SessionScreen(
             title = session?.title.orEmpty(),
+            session = session,
+            models = models,
+            choice = choice,
+            onChoose = viewModel::choose,
+            onMenu = onMenu,
             fallbackStatus = session?.status,
             page = page,
             composer = composer,
@@ -176,6 +188,11 @@ private sealed interface Entry {
 fun SessionScreen(
     title: String,
     fallbackStatus: String?,
+    session: SessionSummary? = null,
+    models: ModelList? = null,
+    choice: Pair<String, String>? = null,
+    onChoose: (String, String) -> Unit = { _, _ -> },
+    onMenu: (() -> Unit)? = null,
     page: SessionPage,
     composer: ComposerUi,
     connected: Boolean,
@@ -191,6 +208,9 @@ fun SessionScreen(
     onDismissFailure: () -> Unit,
 ) {
     if (onBack != null) BackHandler(onBack = onBack)
+    var info by rememberSaveable { mutableStateOf(false) }
+    var picking by rememberSaveable { mutableStateOf(false) }
+    val nameOf = { id: String -> models?.models?.firstOrNull { it.id == id }?.let { modelName(it) } ?: id.substringAfter('/') }
     val timeline = page.timeline
     val status = timeline.status ?: fallbackStatus
     val working = status == "running" || status == "queued"
@@ -234,11 +254,30 @@ fun SessionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = {
+                    // 点标题打开会话菜单（照网页的标题菜单）
+                    val menuLabel = stringResource(R.string.session_menu)
+                    Row(
+                        Modifier
+                            .then(if (onMenu != null) Modifier.clickable(onClickLabel = menuLabel, onClick = onMenu) else Modifier)
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        if (onMenu != null) Icon(painterResource(R.drawable.ic_expand_more), contentDescription = menuLabel, modifier = Modifier.size(20.dp))
+                    }
+                },
                 navigationIcon = {
                     if (onBack != null) {
                         IconButton(onClick = onBack) {
                             Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.common_back))
+                        }
+                    }
+                },
+                actions = {
+                    if (session != null) {
+                        IconButton(onClick = { info = true }) {
+                            Icon(painterResource(R.drawable.ic_info), contentDescription = stringResource(R.string.session_info))
                         }
                     }
                 },
@@ -271,7 +310,7 @@ fun SessionScreen(
                 )
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                Conversation(entries, onRetry = onRetry.takeIf { canRetry }, onWithdraw, onSendNow, composer.queue)
+                Conversation(entries, onRetry = onRetry.takeIf { canRetry }, onWithdraw, onSendNow, composer.queue, nameOf)
             }
             composer.failure?.let {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -299,8 +338,102 @@ fun SessionScreen(
                 onSend = onSend,
                 onStop = onStop,
             )
+            // 输入框下面：模型和思考强度，换了从下一条消息起生效（照网页的 composer-below）
+            val picked = choice ?: session?.let { it.model to it.effort }
+            val current = picked?.let { (id, _) -> models?.models?.firstOrNull { it.id == id } }
+            if (models != null && picked != null && !closed) {
+                val name = current?.let { modelName(it) } ?: picked.first.substringAfter('/')
+                val label = if (current?.efforts?.isNotEmpty() == true) "$name · ${effortName(picked.second)}" else name
+                val chooseLabel = stringResource(R.string.model_choose, name)
+                TextButton(
+                    onClick = { picking = true },
+                    modifier = Modifier.padding(start = 12.dp, bottom = 4.dp).semantics { contentDescription = chooseLabel },
+                ) {
+                    Text(label, style = MaterialTheme.typography.labelLarge)
+                    Icon(painterResource(R.drawable.ic_expand_more), contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+                if (picking) {
+                    ModelSheet(
+                        models = models,
+                        model = picked.first,
+                        effort = picked.second,
+                        onChange = onChoose,
+                        onDismiss = { picking = false },
+                    )
+                }
+            }
         }
     }
+    if (info && session != null) SessionInfoSheet(session, page.timeline.status ?: session.status, page.timeline.detail ?: session.detail) { info = false }
+}
+
+/** 会话信息（照网页）：状态、环境、仓库、分支、PR。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SessionInfoSheet(session: SessionSummary, status: String, detail: String?, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+            Text(stringResource(R.string.session_info), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 12.dp).semantics { heading() })
+            InfoRow(stringResource(R.string.session_status), statusText(status, detail))
+            InfoRow(
+                stringResource(R.string.environment_label),
+                when (val env = session.environmentName) {
+                    null -> stringResource(R.string.environment_deleted)
+                    "" -> stringResource(R.string.environment_default)
+                    else -> env
+                },
+            )
+            if (session.repos.isEmpty()) InfoRow(stringResource(R.string.session_repo), stringResource(R.string.repo_no_repo))
+            for (repo in session.repos) {
+                InfoRow(
+                    stringResource(R.string.session_repo),
+                    repo.fullName + if (repo.access == "read") " · " + stringResource(R.string.repo_read_only) else "",
+                )
+                InfoRow(stringResource(R.string.session_branch), listOf(repo.baseBranch, repo.branch).filter { it.isNotEmpty() }.joinToString(" → "), mono = true)
+                repo.pullRequest?.let { pr ->
+                    val state = stringResource(
+                        when (pr.state) {
+                            "draft" -> R.string.pr_draft
+                            "merged" -> R.string.pr_merged
+                            "closed" -> R.string.pr_closed
+                            else -> R.string.pr_open
+                        },
+                    )
+                    InfoRow(stringResource(R.string.session_changes), stringResource(R.string.pr_text, pr.number.toString(), state))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String, mono: Boolean = false) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(88.dp))
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontFamily = if (mono) FontFamily.Monospace else null, modifier = Modifier.weight(1f))
+    }
+}
+
+/** 状态和附加说明（照网页的 statusWithDetail）："运行中 · 正在准备沙箱"。 */
+@Composable
+private fun statusText(status: String, detail: String?): String {
+    val label = stringResource(
+        when (status) {
+            "queued" -> R.string.status_queued
+            "running" -> R.string.status_running
+            "dormant" -> R.string.status_dormant
+            "archived" -> R.string.status_archived
+            "failed" -> R.string.status_failed
+            else -> R.string.status_waiting
+        },
+    )
+    val extra = when (detail) {
+        "preparing_sandbox" -> R.string.status_preparing_sandbox
+        "awaiting_input" -> R.string.status_awaiting_input
+        "done" -> R.string.status_done
+        else -> null
+    } ?: return label
+    return stringResource(R.string.status_with_detail, label, stringResource(extra))
 }
 
 /**
@@ -314,6 +447,7 @@ private fun Conversation(
     onWithdraw: (String, Boolean) -> Unit,
     onSendNow: (String) -> Unit,
     queueActions: Map<String, QueueAction>,
+    nameOf: (String) -> String,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -345,7 +479,7 @@ private fun Conversation(
             items(entries.asReversed(), key = { it.key }) { entry ->
                 Box(Modifier.fillMaxWidth().widthIn(max = 760.dp)) {
                     when (entry) {
-                        is Entry.Item -> TimelineEntry(entry.item, entry.live, now, onRetry)
+                        is Entry.Item -> TimelineEntry(entry.item, entry.live, now, onRetry, nameOf)
                         is Entry.Queued -> QueuedBubble(
                             entry.message,
                             first = entry.first,
@@ -380,7 +514,7 @@ private fun Conversation(
 }
 
 @Composable
-private fun TimelineEntry(item: TimelineItem, live: Boolean, now: Long, onRetry: ((String) -> Unit)?) {
+private fun TimelineEntry(item: TimelineItem, live: Boolean, now: Long, onRetry: ((String) -> Unit)?, nameOf: (String) -> String) {
     when (item) {
         is TimelineItem.User -> UserBubble(item.text, item.at, item.delivered, sending = false, now = now, onRetry = onRetry)
         is TimelineItem.Assistant -> AssistantReply(item, live, now)
@@ -388,7 +522,7 @@ private fun TimelineEntry(item: TimelineItem, live: Boolean, now: Long, onRetry:
         is TimelineItem.Changes -> ChangesCard(item.changes)
         is TimelineItem.Notice -> NoticeLine(noticeText(item.notice), item.notice.error)
         is TimelineItem.ModelSwitch -> NoticeLine(
-            stringResource(R.string.chat_switched_model, item.model.substringAfter('/'), effortName(item.effort)),
+            stringResource(R.string.chat_switched_model, nameOf(item.model), effortName(item.effort)),
             error = false,
         )
     }

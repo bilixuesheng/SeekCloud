@@ -56,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -145,18 +146,15 @@ fun SessionListRoute(
             listed = state.sessions.firstOrNull { it.shortId == shortId },
             viewModel = sessionPage(shortId),
             onBack = { openId = null },
+            onMenu = { viewModel.openMenu(shortId) },
         )
     }
     val open = openId
-    if (!wide) {
-        if (open != null) {
-            sessionPageFor(open)
-            return
-        }
-        if (composing) {
-            newSessionPage { composing = false }
-            return
-        }
+    // 开着的会话在列表里出现过、又不在了（在菜单里或者别处删掉了）：回到列表
+    var seen by remember(open) { mutableStateOf(false) }
+    val present = open != null && state.sessions.any { it.shortId == open }
+    LaunchedEffect(open, present) {
+        if (present) seen = true else if (seen) openId = null
     }
     val list = @Composable { modifier: Modifier ->
         Box(modifier) {
@@ -176,7 +174,11 @@ fun SessionListRoute(
             )
         }
     }
-    if (wide) {
+    if (!wide && open != null) {
+        sessionPageFor(open)
+    } else if (!wide && composing) {
+        newSessionPage { composing = false }
+    } else if (wide) {
         Row(Modifier.fillMaxSize()) {
             list(Modifier.width(380.dp).fillMaxHeight())
             VerticalDivider()

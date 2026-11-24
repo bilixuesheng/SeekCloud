@@ -77,6 +77,7 @@ import cn.seekcloud.app.R
 import cn.seekcloud.app.net.errorTexts
 import cn.seekcloud.app.net.failureText
 import cn.seekcloud.app.sessions.Environment
+import cn.seekcloud.app.sessions.ModelList
 import cn.seekcloud.app.sessions.ModelOption
 import cn.seekcloud.app.sessions.NewSessionUi
 import cn.seekcloud.app.sessions.NewSessionViewModel
@@ -298,11 +299,15 @@ fun NewSessionScreen(
             onManage = { ui.github?.installUrl?.takeIf { it.isNotBlank() }?.let { context.startActivity(Intent(Intent.ACTION_VIEW, it.toUri())) } },
             onDismiss = { picker = Picker.None },
         )
-        Picker.Model -> ModelSheet(
-            ui = ui,
-            onChange = onModel,
-            onDismiss = { picker = Picker.None },
-        )
+        Picker.Model -> ui.models?.let { models ->
+            ModelSheet(
+                models = models,
+                model = ui.model.orEmpty(),
+                effort = ui.effort,
+                onChange = onModel,
+                onDismiss = { picker = Picker.None },
+            )
+        }
         Picker.None -> Unit
     }
 }
@@ -539,13 +544,12 @@ private fun RepoSheet(
 /** 模型和思考强度（照网页的 ModelPicker，#20）：模型按提供方分组，下面是只画这个模型支持的几档的滑块。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ModelSheet(ui: NewSessionUi, onChange: (String, String) -> Unit, onDismiss: () -> Unit) {
-    val models = ui.models ?: return
-    val current = models.models.firstOrNull { it.id == ui.model }
+internal fun ModelSheet(models: ModelList, model: String, effort: String, onChange: (String, String) -> Unit, onDismiss: () -> Unit) {
+    val current = models.models.firstOrNull { it.id == model }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
             SheetTitle(stringResource(R.string.model_dialog))
-            if (current != null) EffortSlider(current, ui.effort, models.defaultEffort) { onChange(current.id, it) }
+            if (current != null) EffortSlider(current, effort, models.defaultEffort) { onChange(current.id, it) }
             Text(
                 stringResource(R.string.model_list),
                 style = MaterialTheme.typography.labelLarge,
@@ -562,10 +566,10 @@ private fun ModelSheet(ui: NewSessionUi, onChange: (String, String) -> Unit, onD
                             modifier = Modifier.padding(start = 24.dp, top = 8.dp, bottom = 2.dp),
                         )
                     }
-                    items(list, key = { it.id }) { model ->
-                        SheetRow(modelName(model), sub = modelDescription(model), selected = model.id == ui.model) {
-                            // 换模型时思考强度沿用现在的那一档（新模型不支持就换成最近的一档，见 NewSessionUi.effort）
-                            onChange(model.id, ui.effort)
+                    items(list, key = { it.id }) { option ->
+                        SheetRow(modelName(option), sub = modelDescription(option), selected = option.id == model) {
+                            // 换模型时思考强度沿用现在的那一档（新模型不支持就换成最近的一档，调用方用 fitEffort 定）
+                            onChange(option.id, effort)
                         }
                     }
                 }
@@ -626,8 +630,7 @@ internal fun effortName(effort: String): String = stringResource(
     },
 )
 
-@Composable
-private fun modelName(model: ModelOption): String = model.name.ifBlank { model.id.substringAfter('/') }
+internal fun modelName(model: ModelOption): String = model.name.ifBlank { model.id.substringAfter('/') }
 
 /** 内置的 DeepSeek 两个模型有说明（照网页）。 */
 @Composable

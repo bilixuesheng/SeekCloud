@@ -62,14 +62,23 @@ class SessionViewModelTest {
     private class FakeApi : SessionPageApi {
         var summary = SessionSummary("s1", "修一下测试", "waiting", createdAt = "t", updatedAt = "t")
         val sent = mutableListOf<Pair<String, String>>()
+        val models = mutableListOf<Pair<String?, String?>>()
         var failSend: Exception? = null
         var withdrawn: String? = "改成蓝色"
 
         override fun session(shortId: String) = summary
-        override fun send(shortId: String, text: String, mode: String) {
+        override fun send(shortId: String, text: String, mode: String, model: String?, effort: String?) {
             failSend?.let { throw it }
             sent += text to mode
+            models += model to effort
         }
+        override fun models() = ModelList(
+            models = listOf(
+                ModelOption("deepseek/deepseek-flash", efforts = listOf("off", "high", "max")),
+                ModelOption("acme/plain"),
+            ),
+            defaultEffort = "high",
+        )
         override fun stop(shortId: String) = Unit
         override fun withdraw(shortId: String, queueId: String) = withdrawn
         override fun sendNow(shortId: String, queueId: String) = Unit
@@ -167,6 +176,26 @@ class SessionViewModelTest {
         stream.send(1, """"type":"user.message","text":"改成蓝色"""")
         advanceUntilIdle()
         assertNull(vm.composer.value.pending)
+        vm.stop()
+    }
+
+    @Test
+    fun chosenModelGoesWithTheNextMessageOnly() = runTest(dispatcher) {
+        val vm = model()
+        advanceTimeBy(2000)
+        // 模型不支持的档位换成最近的一档；没声明推理等级的模型只有"关闭"
+        vm.choose("deepseek/deepseek-flash", "medium")
+        assertEquals("deepseek/deepseek-flash" to "high", vm.choice.value)
+        vm.choose("acme/plain", "high")
+        assertEquals("acme/plain" to "off", vm.choice.value)
+        vm.send("换个模型试试")
+        advanceUntilIdle()
+        assertEquals(listOf<Pair<String?, String?>>("acme/plain" to "off"), api.models)
+        // 发出去以后跟着会话走
+        assertNull(vm.choice.value)
+        vm.send("接着来")
+        advanceUntilIdle()
+        assertEquals(null to null, api.models.last())
         vm.stop()
     }
 

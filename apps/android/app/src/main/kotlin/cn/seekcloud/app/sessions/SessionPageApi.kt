@@ -22,9 +22,12 @@ interface SessionPageApi {
 
     /**
      * 发一条消息。会话在等回复就开始下一个回合；Agent 在工作时 [mode] 为 now 插进当前回合（下一步读到），
-     * later 排队到这个回合结束。
+     * later 排队到这个回合结束。[model]、[effort] 不为 null 时从这个回合起换模型和思考强度（Agent 在工作时总是排队）。
      */
-    fun send(shortId: String, text: String, mode: String)
+    fun send(shortId: String, text: String, mode: String, model: String? = null, effort: String? = null)
+
+    /** 能用的模型和默认的思考强度（换模型的弹层用）。 */
+    fun models(): ModelList
 
     /** 停下当前回合。 */
     fun stop(shortId: String)
@@ -40,9 +43,17 @@ class HttpSessionPageApi(private val client: ServerClient) : SessionPageApi {
     override fun session(shortId: String): SessionSummary =
         json.decodeFromString(SessionSummary.serializer(), get("/api/sessions/$shortId"))
 
-    override fun send(shortId: String, text: String, mode: String) {
-        post("/api/sessions/$shortId/messages", "text" to JsonPrimitive(text), "mode" to JsonPrimitive(mode))
+    override fun send(shortId: String, text: String, mode: String, model: String?, effort: String?) {
+        val fields = listOfNotNull(
+            "text" to JsonPrimitive(text),
+            "mode" to JsonPrimitive(mode),
+            model?.let { "model" to JsonPrimitive(it) },
+            effort?.let { "effort" to JsonPrimitive(it) },
+        )
+        post("/api/sessions/$shortId/messages", *fields.toTypedArray())
     }
+
+    override fun models(): ModelList = json.decodeFromString(ModelList.serializer(), get("/api/models"))
 
     override fun stop(shortId: String) {
         post("/api/sessions/$shortId/stop")
