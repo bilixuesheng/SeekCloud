@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 默认只连 HTTPS、只认系统信任的证书。内网的 HTTP 和自签证书要管理员连接时明确确认（#123），在 App 的网络层里放行。 -->
-<network-security-config>
-    <base-config cleartextTrafficPermitted="false">
+<!--
+  只认系统信任的证书（不认用户自己装的 CA）。
+  明文（HTTP）在这里不拦，由 App 的网络层按服务器拦（#204）：服务器列表是管理员运行时填的，这里写不出来。
+  App 的每个请求都经 net/ServerTrust.kt 的 serverClient()，地址是 http 而管理员没确认"连接未加密"时，
+  OkHttp 只允许 TLS，直接拒绝明文的请求。以后加的网络请求（图片、事件流）也一律走它。
+-->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
