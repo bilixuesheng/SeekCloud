@@ -3,6 +3,9 @@ import { useMemo, useState } from "react";
 import { type ApiError, api } from "../../api";
 import { useCached } from "../../cached";
 import { PlusIcon, SearchIcon } from "../../Icons";
+import { t as translate, useT } from "../../i18n";
+import { errorText } from "../../i18n/errors";
+import { joinNames } from "../../i18n/format";
 import { confirmDialog } from "../../ui/confirm";
 import { Modal } from "../../ui/modal";
 import { Select } from "../../ui/select";
@@ -17,6 +20,7 @@ import {
   MODEL_PROVIDERS,
   PROTOCOL_LABELS,
   type ProviderView,
+  providerLabel,
 } from "./types";
 import { urlWarnings } from "./url-check";
 
@@ -28,25 +32,26 @@ const PROVIDER_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
  * API 协议、凭据和至少一个模型。
  */
 export function AddProvider({ onAdded }: { onAdded: (provider: ProviderView) => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"catalog" | "custom">("catalog");
   const done = (provider: ProviderView) => {
     onAdded(provider);
     setOpen(false);
-    toast(`已添加 ${provider.name}。`);
+    toast(translate("models.added", { name: providerLabel(provider.id, provider.name) }));
   };
   return (
     <>
       <button type="button" className="add-provider-button" onClick={() => setOpen(true)}>
-        <PlusIcon size={16} /> 添加模型提供商
+        <PlusIcon size={16} /> {t("models.addProvider")}
       </button>
-      <Modal open={open} wide title="添加模型提供商" onClose={() => setOpen(false)}>
+      <Modal open={open} wide title={t("models.addProvider")} onClose={() => setOpen(false)}>
         <fieldset className="segmented add-provider-tabs">
-          <legend className="visually-hidden">提供商的类型</legend>
+          <legend className="visually-hidden">{t("models.providerType")}</legend>
           {(
             [
-              ["catalog", "第三方模型提供商"],
-              ["custom", "自定义模型 API"],
+              ["catalog", t("models.thirdParty")],
+              ["custom", t("models.customApi")],
             ] as const
           ).map(([id, label]) => (
             <label key={id} className={`segment${tab === id ? " current" : ""}`}>
@@ -77,6 +82,7 @@ function CatalogForm({
   onCancel: () => void;
   onAdded: (provider: ProviderView) => void;
 }) {
+  const t = useT();
   const catalog = useCached<{ providers: CatalogEntry[] }>(CATALOG);
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<CatalogEntry>();
@@ -86,7 +92,12 @@ function CatalogForm({
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (catalog.data?.providers ?? []).filter(
-      (p) => !p.added && (!q || p.id.includes(q) || p.name.toLowerCase().includes(q)),
+      (p) =>
+        !p.added &&
+        (!q ||
+          p.id.includes(q) ||
+          p.name.toLowerCase().includes(q) ||
+          providerLabel(p.id, p.name).toLowerCase().includes(q)),
     );
   }, [catalog.data, query]);
 
@@ -103,7 +114,7 @@ function CatalogForm({
         }),
       );
     } catch (e) {
-      toast((e as ApiError).message, "error");
+      toast(errorText(e as ApiError), "error");
     } finally {
       setBusy(false);
     }
@@ -115,14 +126,17 @@ function CatalogForm({
         <>
           <div className="settings-row">
             <span className="settings-row-text">
-              <span className="settings-row-name">{chosen.name}</span>
+              <span className="settings-row-name">{providerLabel(chosen.id, chosen.name)}</span>
               <span className="settings-row-sub">
-                {chosen.id} · {chosen.protocols.map((p) => PROTOCOL_LABELS[p]).join("、")} ·{" "}
-                {chosen.models} 个模型
+                {[
+                  chosen.id,
+                  joinNames(chosen.protocols.map((p) => PROTOCOL_LABELS[p])),
+                  t("models.modelCount", { count: chosen.models }),
+                ].join(" · ")}
               </span>
             </span>
             <button type="button" className="pill-button" onClick={() => setChosen(undefined)}>
-              换一个
+              {t("models.change")}
             </button>
           </div>
           <KeyField
@@ -132,17 +146,15 @@ function CatalogForm({
             draft={key}
             onDraft={setKey}
           />
-          <p className="settings-hint">
-            密钥留空时读取上面列出的环境变量（主站进程的环境变量）。检测只看是否存在，不验证、不测试连接。
-          </p>
+          <p className="settings-hint">{t("models.envHint")}</p>
         </>
       ) : (
         <>
           <span className="probe-search">
             <SearchIcon />
             <input
-              aria-label="搜索提供商"
-              placeholder="搜索提供商，例如 openai、anthropic、moonshotai"
+              aria-label={t("models.searchProvider")}
+              placeholder={t("models.searchProviderHint")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -151,24 +163,26 @@ function CatalogForm({
             {shown.map((p) => (
               <li key={p.id}>
                 <button type="button" className="catalog-item" onClick={() => setChosen(p)}>
-                  <span className="settings-row-name">{p.name}</span>
+                  <span className="settings-row-name">{providerLabel(p.id, p.name)}</span>
                   <span className="settings-row-sub">
-                    {p.id} · {p.models} 个模型{p.envDetected ? ` · 检测到 ${p.envDetected}` : ""}
+                    {[
+                      p.id,
+                      t("models.modelCount", { count: p.models }),
+                      ...(p.envDetected ? [t("models.detected", { env: p.envDetected })] : []),
+                    ].join(" · ")}
                   </span>
                 </button>
               </li>
             ))}
             {catalog.data && shown.length === 0 && (
-              <li className="settings-hint">
-                没有匹配的提供商。目录中没有的，请用“自定义模型 API”。
-              </li>
+              <li className="settings-hint">{t("models.noProviderMatch")}</li>
             )}
           </ul>
         </>
       )}
       <div className="settings-form-actions">
         <button type="button" className="secondary" onClick={onCancel}>
-          取消
+          {t("common.cancel")}
         </button>
         <button
           type="button"
@@ -176,7 +190,7 @@ function CatalogForm({
           disabled={!chosen || busy}
           onClick={() => void save()}
         >
-          {busy ? "请稍候…" : "保存"}
+          {busy ? t("common.pleaseWait") : t("common.save")}
         </button>
       </div>
     </div>
@@ -190,6 +204,7 @@ function CustomForm({
   onCancel: () => void;
   onAdded: (provider: ProviderView) => void;
 }) {
+  const t = useT();
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -208,7 +223,7 @@ function CustomForm({
     if (
       found.length > 0 &&
       !(await confirmDialog({
-        title: "确认使用这个地址？",
+        title: t("models.confirmUrl"),
         body: (
           <>
             {found.map((w) => (
@@ -216,7 +231,7 @@ function CustomForm({
             ))}
           </>
         ),
-        confirmText: "仍然添加",
+        confirmText: t("models.addAnyway"),
       }))
     ) {
       return;
@@ -237,7 +252,7 @@ function CustomForm({
         }),
       );
     } catch (e) {
-      toast((e as ApiError).message, "error");
+      toast(errorText(e as ApiError), "error");
     } finally {
       setBusy(false);
     }
@@ -269,19 +284,19 @@ function CustomForm({
         />
       </label>
       <p className={`settings-hint${id && !idValid ? " warn" : ""}`}>
-        小写字母、数字和 -，以字母或数字开头；保存后不能修改（会话、默认模型都记着它）。
+        {t("models.providerIdHint")}
       </p>
       <label className="field">
-        <span>显示名称</span>
+        <span>{t("models.displayName")}</span>
         <input
           value={name}
           maxLength={60}
-          placeholder={id || "公司网关"}
+          placeholder={id || t("models.namePlaceholder")}
           onChange={(e) => setName(e.target.value)}
         />
       </label>
       <label className="field">
-        <span>基础 URL</span>
+        <span>{t("models.baseUrl")}</span>
         <input
           value={baseUrl}
           inputMode="url"
@@ -291,9 +306,9 @@ function CustomForm({
         />
       </label>
       <div className="field">
-        <span>API 协议</span>
+        <span>{t("models.protocol")}</span>
         <Select
-          label="API 协议"
+          label={t("models.protocol")}
           value={protocol}
           options={MODEL_PROTOCOLS.map((p) => ({ value: p, label: PROTOCOL_LABELS[p] }))}
           onChange={(v) => {
@@ -304,8 +319,7 @@ function CustomForm({
         />
       </div>
       <p className="settings-hint">
-        选网关实际使用的协议；同时提供两种协议的网关要建两个提供商。Gemini API 的基础 URL 包含 API
-        版本，例如 https://gateway.example/v1beta。
+        {t("models.protocolHint", { example: "https://gateway.example/v1beta" })}
       </p>
       <KeyField
         masked={null}
@@ -315,7 +329,7 @@ function CustomForm({
         onDraft={setKey}
       />
       <label className="field">
-        <span>环境变量名（可选）</span>
+        <span>{t("models.envName")}</span>
         <input
           value={apiKeyEnv}
           maxLength={100}
@@ -324,7 +338,7 @@ function CustomForm({
         />
       </label>
       <div className="field">
-        <span>模型</span>
+        <span>{t("model.list")}</span>
         <ModelEditor
           models={models}
           onChange={setModels}
@@ -333,10 +347,10 @@ function CustomForm({
       </div>
       <div className="settings-form-actions">
         <button type="button" className="secondary" onClick={onCancel}>
-          取消
+          {t("common.cancel")}
         </button>
         <button type="submit" className="primary" disabled={!ready || busy}>
-          {busy ? "请稍候…" : "保存"}
+          {busy ? t("common.pleaseWait") : t("common.save")}
         </button>
       </div>
     </form>

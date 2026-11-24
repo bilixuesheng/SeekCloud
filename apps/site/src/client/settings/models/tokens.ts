@@ -1,3 +1,5 @@
+import { t } from "../../i18n";
+
 /**
  * 上下文窗口、最大输出这类 token 数的写法（2026-11-22 用户说直接填 1000000 反人类）：
  * 输入框里可以写 128K、1M、1.5M、12.8万、131072、131,072，存的还是整数；显示时写成最短的、能原样读回来的样子。
@@ -60,5 +62,5 @@ export function pricePair(cost: [number, number]): [string, string] {
 /** 一个模型的价格：输入 $0.30 / 输出 $1.20。 */
 export function costText(cost: [number, number]): string {
   const [input, output] = pricePair(cost);
-  return `输入 ${input} / 输出 ${output}`;
+  return t("models.cost", { input, output });
 }

@@ -118,6 +118,13 @@ export function joinNames(names: string[]): string {
   return locale === "zh-CN" ? names.join("、") : englishList(locale).format(names);
 }
 
+/** 几个可以互相替代的名字（环境变量这类，有一个就行）：中文用顿号，英文 "a, b, or c"。 */
+export function joinAlternatives(names: string[]): string {
+  const locale = currentLocale();
+  if (locale === "zh-CN") return names.join("、");
+  return new Intl.ListFormat(locale, { style: "long", type: "disjunction" }).format(names);
+}
+
 /**
  * 几分钟拆成数字和单位（分段选择里数字在上、单位在下）：单位的说法和单复数按语言，用 Intl 的单位格式
  * （英文 minute、minutes；中文"分钟"）。

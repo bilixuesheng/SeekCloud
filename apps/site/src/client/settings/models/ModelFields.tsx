@@ -1,6 +1,7 @@
 import type { ModelProtocol, ThinkingEffort } from "@seekcloud/protocol";
 import { useId, useState } from "react";
 import { ChevronDownIcon } from "../../Icons";
+import { t, useT } from "../../i18n";
 import { effortLabels } from "../../session/ModelPicker";
 import {
   ADAPTIVE,
@@ -39,6 +40,7 @@ export function TokenField({
   /** 外面查出来的问题（比如最大输出超过了上下文窗口）。 */
   problem?: string;
 }) {
+  const t = useT();
   const id = useId();
   // 正在输入时保留原样（"1." 这种半截的不要被改写），离开输入框再写成规整的样子
   const [typing, setTyping] = useState<string>();
@@ -46,9 +48,13 @@ export function TokenField({
   const parsed = parseTokens(text);
   const invalid = parsed !== undefined && Number.isNaN(parsed);
   const hint = invalid
-    ? "请填写数字，可以带 K、M 或“万”，例如 128K、1M。"
+    ? t("models.tokenInvalid")
     : (problem ??
-      (parsed ? `${fullTokens(parsed)} token` : placeholder ? `不填时按 ${placeholder} 计` : ""));
+      (parsed
+        ? t("models.tokens", { count: fullTokens(parsed) })
+        : placeholder
+          ? t("models.tokenDefault", { value: placeholder })
+          : ""));
   return (
     <div className="field token-field">
       <label htmlFor={id}>{label}</label>
@@ -102,6 +108,7 @@ export function PriceField({
   listed?: [number, number] | null;
   note?: string;
 }) {
+  const t = useT();
   const [text, setText] = useState<[string, string]>(() => [
     value ? String(value[0]) : "",
     value ? String(value[1]) : "",
@@ -120,9 +127,9 @@ export function PriceField({
   const bad = [a, b].some((n) => n !== undefined && (Number.isNaN(n) || n < 0));
   return (
     <fieldset className="price-field">
-      <legend>价格（选填）</legend>
+      <legend>{t("models.priceOptional")}</legend>
       <div className="price-inputs">
-        {(["输入", "输出"] as const).map((label, i) => (
+        {[t("models.priceInput"), t("models.priceOutput")].map((label, i) => (
           <label key={label} className="price-input">
             <span>{label}</span>
             <span className="price-box">
@@ -131,7 +138,7 @@ export function PriceField({
                 inputMode="decimal"
                 value={text[i]}
                 placeholder={listed ? String(listed[i]) : "0.00"}
-                aria-label={`${label}价格（美元每百万 token）`}
+                aria-label={t("models.priceAria", { label })}
                 onChange={(e) => {
                   const next: [string, string] = [...text];
                   next[i] = e.target.value;
@@ -141,14 +148,14 @@ export function PriceField({
             </span>
           </label>
         ))}
-        <span className="price-unit">美元 / 百万 token</span>
+        <span className="price-unit">{t("models.priceUnit")}</span>
       </div>
       <span className={`field-hint${half || bad ? " warn" : ""}`}>
         {bad
-          ? "请填写不小于 0 的数字。"
+          ? t("models.priceInvalid")
           : half
-            ? "输入和输出的价格要一起填。"
-            : (note ?? "平台调用的模型选“自动”时，按价格挑最省的；不填就不参与比较。")}
+            ? t("models.priceHalf")
+            : (note ?? t("models.priceHint"))}
       </span>
     </fieldset>
   );
@@ -167,6 +174,7 @@ export function ReasoningField({
   protocol: ModelProtocol;
   onChange: (patch: Pick<ModelSpec, "reasoningEfforts" | "compat">) => void;
 }) {
+  const t = useT();
   const efforts = spec.reasoningEfforts ?? null;
   const adaptive = protocol === "anthropic-messages" && spec.compat?.[ADAPTIVE] === true;
   const rules = protocolRules(protocol, adaptive);
@@ -202,14 +210,14 @@ export function ReasoningField({
     <div className="reasoning">
       <div className="reasoning-head">
         <span>
-          支持思考
-          <span className="reasoning-sub">打开后，模型选择器里可以为它选思考强度。</span>
+          {t("models.supportsThinking")}
+          <span className="reasoning-sub">{t("models.supportsThinkingHint")}</span>
         </span>
         <button
           type="button"
           role="switch"
           aria-checked={on}
-          aria-label="支持思考"
+          aria-label={t("models.supportsThinking")}
           className="switch"
           onClick={() => setEfforts(on ? null : defaultLevels(protocol, adaptive))}
         >
@@ -226,16 +234,13 @@ export function ReasoningField({
                 onChange={(e) => setAdaptive(e.target.checked)}
               />
               <span>
-                自适应思考
-                <span className="reasoning-sub">
-                  较新的 Claude 模型（Opus 4.6、Sonnet 4.6 之后）用 effort
-                  控制思考；较早的模型不要打开。
-                </span>
+                {t("models.adaptive")}
+                <span className="reasoning-sub">{t("models.adaptiveHint")}</span>
               </span>
             </label>
           )}
           <fieldset className="reasoning-levels">
-            <legend className="visually-hidden">可选的思考档位</legend>
+            <legend className="visually-hidden">{t("models.levelsLegend")}</legend>
             {rules.levels.map((level) => {
               const active = chosen.includes(level);
               // 至少留一档思考
@@ -247,7 +252,7 @@ export function ReasoningField({
                   className={`reasoning-level${active ? " current" : ""}`}
                   aria-pressed={active}
                   disabled={last}
-                  title={last ? "至少保留一档思考" : undefined}
+                  title={last ? t("models.keepOne") : undefined}
                   onClick={() => toggle(level)}
                 >
                   {effortLabels[level]}
@@ -272,9 +277,9 @@ export function ReasoningField({
                 <span className="disclosure-chevron" aria-hidden="true">
                   <ChevronDownIcon />
                 </span>
-                参数值
+                {t("models.values")}
                 {!showValues && hasCustomValues(efforts) && (
-                  <span className="reasoning-sub">已修改</span>
+                  <span className="reasoning-sub">{t("models.modified")}</span>
                 )}
               </button>
               {showValues && (
@@ -283,9 +288,12 @@ export function ReasoningField({
                     <li key={level} className="reasoning-row">
                       <span className="reasoning-level-name">{effortLabels[level]}</span>
                       <input
-                        aria-label={`${effortLabels[level]}发送的 ${rules.field} 值`}
+                        aria-label={t("models.valueAria", {
+                          level: effortLabels[level],
+                          field: rules.field ?? "",
+                        })}
                         value={efforts?.[level] ?? ""}
-                        placeholder={level === "off" ? "不发送" : level}
+                        placeholder={level === "off" ? t("models.notSent") : level}
                         maxLength={40}
                         spellCheck={false}
                         onChange={(e) =>
@@ -309,17 +317,17 @@ export function ReasoningField({
 
 /** 每种协议下，选的档位怎么发给接口（说明文字）。 */
 function reasoningHint(protocol: ModelProtocol, adaptive: boolean, canOff: boolean): string {
-  const off = canOff ? "" : "未选“关闭”时，无法关闭这个模型的思考。";
+  // 没选"关闭"时，后面再加一句"无法关闭思考"
+  const withOff = (first: string) =>
+    canOff ? first : t("models.twoSentences", { first, second: t("models.hintCannotOff") });
   switch (protocol) {
     case "openai-completions":
-      return `选中的档位作为 reasoning_effort 发送，默认就是档位名；“关闭”默认不发送这个参数。${off}`;
+      return withOff(t("models.hintCompletions"));
     case "openai-responses":
-      return `选中的档位作为 reasoning.effort 发送，默认就是档位名；“关闭”默认不发送。${off}`;
+      return withOff(t("models.hintResponses"));
     case "anthropic-messages":
-      return adaptive
-        ? `开启思考时作为 effort 发送，默认就是档位名。${off}`
-        : `按思考预算发送：每档的 token 数写在档位旁边。${off}`;
+      return withOff(adaptive ? t("models.hintAdaptive") : t("models.hintBudget"));
     case "google-generative-ai":
-      return "Gemini API 只有这四档，按档位名发送，无法关闭思考。";
+      return t("models.hintGemini");
   }
 }

@@ -1,7 +1,9 @@
 import { MODEL_PROTOCOLS, type ModelProtocol } from "@seekcloud/protocol";
 import { useState } from "react";
 import { type ApiError, api } from "../../api";
-import { shortDateTime } from "../../i18n/format";
+import { type PlainKey, t, useT } from "../../i18n";
+import { errorText } from "../../i18n/errors";
+import { joinAlternatives, shortDateTime } from "../../i18n/format";
 import { confirmDialog } from "../../ui/confirm";
 import { Modal } from "../../ui/modal";
 import { Select } from "../../ui/select";
@@ -9,27 +11,29 @@ import { toast } from "../../ui/toast";
 import { KeyField } from "./KeyField";
 import { type DraftModel, draftOf, fitDrafts, ModelEditor, specOfDraft } from "./ModelEditor";
 import {
+  isDefaultName,
   type KeyDraft,
   keyPatch,
   MODEL_PROVIDERS,
   PROTOCOL_LABELS,
   type ProviderView,
+  providerLabel,
 } from "./types";
 import { urlWarnings } from "./url-check";
 
-const KIND_LABELS: Record<ProviderView["kind"], string> = {
-  deepseek: "内置",
-  catalog: "第三方",
-  custom: "自定义",
+const KIND_LABELS: Record<ProviderView["kind"], PlainKey> = {
+  deepseek: "models.kindDeepseek",
+  catalog: "models.kindCatalog",
+  custom: "models.kindCustom",
 };
 
 /** 卡片上一行的状态：用的是哪把 key。 */
 export function credentialLine(p: ProviderView): string {
-  if (p.credential.masked) return `已保存密钥 ${p.credential.masked}`;
-  if (p.credential.envDetected) return `使用环境变量 ${p.credential.envDetected}`;
+  if (p.credential.masked) return t("models.keySaved", { masked: p.credential.masked });
+  if (p.credential.envDetected) return t("models.keyEnv", { env: p.credential.envDetected });
   return p.credential.env.length > 0
-    ? `未设置密钥，也未检测到 ${p.credential.env.join("、")}`
-    : "未设置密钥";
+    ? t("models.keyMissingEnv", { env: joinAlternatives(p.credential.env) })
+    : t("models.keyMissing");
 }
 
 /** 卡片上最多直接列出几个模型，多的写"还有 N 个"。 */
@@ -49,9 +53,11 @@ export function ProviderCard({
   onSaved: (next: ProviderView) => void;
   onDeleted: () => void;
 }) {
+  const t = useT();
   const [dialog, setDialog] = useState<"models" | "connection">();
   const [busy, setBusy] = useState(false);
   const close = () => setDialog(undefined);
+  const name = providerLabel(provider.id, provider.name);
 
   const toggle = async () => {
     setBusy(true);
@@ -62,9 +68,11 @@ export function ProviderCard({
         "PATCH",
       );
       onSaved(next);
-      toast(next.enabled ? `已启用 ${provider.name}。` : `已停用 ${provider.name}。`);
+      toast(
+        next.enabled ? t("models.enabledToast", { name }) : t("models.disabledToast", { name }),
+      );
     } catch (e) {
-      toast((e as ApiError).message, "error");
+      toast(errorText(e as ApiError), "error");
     } finally {
       setBusy(false);
     }
@@ -77,29 +85,27 @@ export function ProviderCard({
         `${MODEL_PROVIDERS}/${provider.id}/sessions`,
       ));
     } catch (e) {
-      toast((e as ApiError).message, "error");
+      toast(errorText(e as ApiError), "error");
       return;
     }
     const ok = await confirmDialog({
-      title: `删除“${provider.name}”？`,
+      title: t("models.deleteTitle", { name }),
       body: (
         <>
-          <p>它的密钥和模型列表将一并删除，无法恢复。</p>
-          {sessions > 0 && (
-            <p>有 {sessions} 个会话正在使用它的模型，这些会话下次发消息时需要换一个模型。</p>
-          )}
+          <p>{t("models.deleteBody")}</p>
+          {sessions > 0 && <p>{t("models.deleteSessions", { count: sessions })}</p>}
         </>
       ),
-      confirmText: "删除",
+      confirmText: t("common.delete"),
       danger: true,
     });
     if (!ok) return;
     try {
       await api(`${MODEL_PROVIDERS}/${provider.id}`, {}, "DELETE");
       onDeleted();
-      toast(`已删除 ${provider.name}。`);
+      toast(t("models.deleted", { name }));
     } catch (e) {
-      toast((e as ApiError).message, "error");
+      toast(errorText(e as ApiError), "error");
     }
   };
 
@@ -109,11 +115,11 @@ export function ProviderCard({
       <div className="settings-row">
         <span className="settings-row-text">
           <span className="settings-row-name">
-            {provider.name}
-            <span className="provider-kind">{KIND_LABELS[provider.kind]}</span>
+            {name}
+            <span className="provider-kind">{t(KIND_LABELS[provider.kind])}</span>
           </span>
           <span className="settings-row-sub provider-status">
-            {provider.enabled ? credentialLine(provider) : "已停用"}
+            {provider.enabled ? credentialLine(provider) : t("models.disabled")}
             {provider.kind === "custom" && provider.api && ` · ${PROTOCOL_LABELS[provider.api]}`}
           </span>
         </span>
@@ -121,7 +127,7 @@ export function ProviderCard({
           type="button"
           role="switch"
           aria-checked={provider.enabled}
-          aria-label={`启用 ${provider.name}`}
+          aria-label={t("models.enable", { name })}
           className="switch"
           disabled={busy}
           onClick={() => void toggle()}
@@ -131,13 +137,12 @@ export function ProviderCard({
       </div>
       {provider.keyRejectedAt && (
         <p className="alert" role="alert">
-          模型服务于 {shortDateTime(new Date(provider.keyRejectedAt))}{" "}
-          拒绝了当前的密钥，请检查它是否正确、是否已失效或余额不足，必要时在“连接设置”中替换。
+          {t("models.keyRejected", { time: shortDateTime(new Date(provider.keyRejectedAt)) })}
         </p>
       )}
       <div className="model-chips">
         {models.length === 0 ? (
-          <span className="settings-row-sub">还没有模型，请在“管理模型”中添加。</span>
+          <span className="settings-row-sub">{t("models.noModelsYet")}</span>
         ) : (
           <>
             {models.slice(0, CHIPS).map((m) => (
@@ -147,7 +152,7 @@ export function ProviderCard({
             ))}
             {models.length > CHIPS && (
               <button type="button" className="model-chip more" onClick={() => setDialog("models")}>
-                还有 {models.length - CHIPS} 个
+                {t("models.more", { count: models.length - CHIPS })}
               </button>
             )}
           </>
@@ -155,19 +160,19 @@ export function ProviderCard({
       </div>
       <div className="provider-actions">
         <button type="button" className="pill-button accent" onClick={() => setDialog("models")}>
-          管理模型
+          {t("models.manage")}
         </button>
         <button type="button" className="pill-button" onClick={() => setDialog("connection")}>
-          连接设置
+          {t("models.connection")}
         </button>
         {provider.kind !== "deepseek" && (
           <button type="button" className="pill-button danger-text" onClick={() => void remove()}>
-            删除
+            {t("common.delete")}
           </button>
         )}
       </div>
 
-      <Modal open={dialog === "models"} wide title={`${provider.name} 的模型`} onClose={close}>
+      <Modal open={dialog === "models"} wide title={t("models.modelsOf", { name })} onClose={close}>
         <ModelsForm
           provider={provider}
           onCancel={close}
@@ -177,7 +182,11 @@ export function ProviderCard({
           }}
         />
       </Modal>
-      <Modal open={dialog === "connection"} title={`${provider.name} 的连接设置`} onClose={close}>
+      <Modal
+        open={dialog === "connection"}
+        title={t("models.connectionOf", { name })}
+        onClose={close}
+      >
         <ConnectionForm
           provider={provider}
           onCancel={close}
@@ -204,6 +213,7 @@ function ModelsForm({
   onCancel: () => void;
   onSaved: (next: ProviderView) => void;
 }) {
+  const t = useT();
   const custom = provider.kind === "custom";
   const [models, setModels] = useState<DraftModel[]>(() =>
     provider.models.map((m) => draftOf(m, provider.kind)),
@@ -216,22 +226,22 @@ function ModelsForm({
       onSaved(await api<ProviderView>(`${MODEL_PROVIDERS}/${provider.id}`, body, "PATCH"));
       toast(done);
     } catch (e) {
-      toast((e as ApiError).message, "error");
+      toast(errorText(e as ApiError), "error");
     } finally {
       setBusy(false);
     }
   };
 
   const save = () =>
-    patch({ models: models.map((m) => specOfDraft(m, provider.kind)) }, "模型列表已保存。");
+    patch({ models: models.map((m) => specOfDraft(m, provider.kind)) }, t("models.listSaved"));
 
   const reset = async () => {
     const ok = await confirmDialog({
-      title: "恢复默认的模型列表？",
-      body: "将改回目录提供的模型和顺序，你添加和修改过的模型会被移除。",
-      confirmText: "恢复默认",
+      title: t("models.resetTitle"),
+      body: t("models.resetBody"),
+      confirmText: t("models.resetConfirm"),
     });
-    if (ok) await patch({ resetModels: true }, "已恢复默认的模型列表。");
+    if (ok) await patch({ resetModels: true }, t("models.resetDone"));
   };
 
   return (
@@ -243,9 +253,7 @@ function ModelsForm({
       }}
     >
       {provider.kind === "deepseek" && !provider.customModels && (
-        <p className="settings-hint">
-          使用 DeepSeek 发布的模型列表时，这里显示内置的模型；新发布的模型会自动出现在模型选择器中。
-        </p>
+        <p className="settings-hint">{t("models.deepseekListingHint")}</p>
       )}
       <ModelEditor
         models={models}
@@ -266,21 +274,21 @@ function ModelsForm({
             disabled={busy}
             onClick={() => void reset()}
           >
-            恢复默认模型
+            {t("models.resetModels")}
           </button>
         ) : (
           <span />
         )}
         <span className="settings-form-actions">
           <button type="button" className="secondary" onClick={onCancel}>
-            取消
+            {t("common.cancel")}
           </button>
           <button
             type="submit"
             className="primary"
             disabled={busy || (custom && models.length === 0)}
           >
-            {busy ? "请稍候…" : "保存"}
+            {busy ? t("common.pleaseWait") : t("common.save")}
           </button>
         </span>
       </div>
@@ -298,8 +306,11 @@ function ConnectionForm({
   onCancel: () => void;
   onSaved: (next: ProviderView) => void;
 }) {
+  const t = useT();
   const custom = provider.kind === "custom";
-  const [name, setName] = useState(provider.name);
+  // 默认名字（按界面语言写的）不填进输入框，放在占位里：没改就不保存，清空就回到默认
+  const initialName = isDefaultName(provider.id, provider.name) ? "" : provider.name;
+  const [name, setName] = useState(initialName);
   const [key, setKey] = useState<KeyDraft>({ kind: "keep" });
   const [apiKeyEnv, setApiKeyEnv] = useState(provider.credential.apiKeyEnv ?? "");
   const [baseUrl, setBaseUrl] = useState(provider.baseUrl ?? "");
@@ -309,14 +320,14 @@ function ConnectionForm({
 
   const save = async () => {
     const url = baseUrl.trim();
-    if (custom && !url) return toast("请填写基础 URL", "error");
+    if (custom && !url) return toast(t("models.baseUrlRequired"), "error");
     // 改了地址：不是 HTTPS、在内网时先确认
     if (url && url !== (provider.baseUrl ?? "")) {
       const found = await urlWarnings(url);
       if (
         found.length > 0 &&
         !(await confirmDialog({
-          title: "确认使用这个地址？",
+          title: t("models.confirmUrl"),
           body: (
             <>
               {found.map((w) => (
@@ -324,14 +335,14 @@ function ConnectionForm({
               ))}
             </>
           ),
-          confirmText: "仍然保存",
+          confirmText: t("models.saveAnyway"),
         }))
       ) {
         return;
       }
     }
     const patch: Record<string, unknown> = {};
-    if (name.trim() !== provider.name) patch.name = name.trim();
+    if (name.trim() !== initialName) patch.name = name.trim();
     const apiKey = keyPatch(key);
     if (apiKey !== undefined) patch.apiKey = apiKey;
     if (custom && apiKeyEnv.trim() !== (provider.credential.apiKeyEnv ?? "")) {
@@ -356,11 +367,11 @@ function ConnectionForm({
       onSaved(await api<ProviderView>(`${MODEL_PROVIDERS}/${provider.id}`, patch, "PATCH"));
       toast(
         refitted > 0
-          ? `连接设置已保存；按 ${PROTOCOL_LABELS[protocol]} 调整了 ${refitted} 个模型的思考档位。`
-          : "连接设置已保存，下一次请求时生效。",
+          ? t("models.savedRefit", { protocol: PROTOCOL_LABELS[protocol], count: refitted })
+          : t("models.savedConnection"),
       );
     } catch (e) {
-      toast((e as ApiError).message, "error");
+      toast(errorText(e as ApiError), "error");
     } finally {
       setBusy(false);
     }
@@ -375,10 +386,17 @@ function ConnectionForm({
       }}
     >
       <label className="field">
-        <span>显示名称</span>
-        <input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
+        <span>{t("models.displayName")}</span>
+        <input
+          value={name}
+          maxLength={60}
+          placeholder={providerLabel(provider.id, "")}
+          onChange={(e) => setName(e.target.value)}
+        />
       </label>
-      {custom && <p className="settings-hint">Provider ID：{provider.id}（不能修改）</p>}
+      {custom && (
+        <p className="settings-hint">{t("models.providerIdFixed", { id: provider.id })}</p>
+      )}
       <KeyField
         masked={provider.credential.masked}
         env={env}
@@ -388,7 +406,7 @@ function ConnectionForm({
       />
       {custom && (
         <label className="field">
-          <span>环境变量名（可选）</span>
+          <span>{t("models.envName")}</span>
           <input
             value={apiKeyEnv}
             placeholder="MY_GATEWAY_API_KEY"
@@ -398,7 +416,7 @@ function ConnectionForm({
         </label>
       )}
       <label className="field">
-        <span>基础 URL</span>
+        <span>{t("models.baseUrl")}</span>
         <input
           value={baseUrl}
           inputMode="url"
@@ -409,14 +427,16 @@ function ConnectionForm({
       </label>
       {!custom && (
         <p className="settings-hint">
-          留空时使用默认地址{provider.defaultBaseUrl ? `（${provider.defaultBaseUrl}）` : ""}。
+          {provider.defaultBaseUrl
+            ? t("models.defaultUrlWith", { url: provider.defaultBaseUrl })
+            : t("models.defaultUrl")}
         </p>
       )}
       {custom && (
         <div className="field">
-          <span>API 协议</span>
+          <span>{t("models.protocol")}</span>
           <Select
-            label="API 协议"
+            label={t("models.protocol")}
             value={protocol}
             options={MODEL_PROTOCOLS.map((p) => ({ value: p, label: PROTOCOL_LABELS[p] }))}
             onChange={(v) => setProtocol(v as ModelProtocol)}
@@ -425,10 +445,10 @@ function ConnectionForm({
       )}
       <div className="settings-form-actions">
         <button type="button" className="secondary" onClick={onCancel}>
-          取消
+          {t("common.cancel")}
         </button>
         <button type="submit" className="primary" disabled={busy}>
-          {busy ? "请稍候…" : "保存"}
+          {busy ? t("common.pleaseWait") : t("common.save")}
         </button>
       </div>
     </form>

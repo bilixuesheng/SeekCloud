@@ -141,6 +141,20 @@
       "when": 1795477646146,
       "tag": "0019_device_names_english",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795478674273,
+      "tag": "0020_deepseek_provider_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795479096928,
+      "tag": "0021_catalog_provider_names",
+      "breakpoints": true
     }
   ]
 }

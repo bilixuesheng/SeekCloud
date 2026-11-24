@@ -4,22 +4,11 @@ import { parseSync } from "vite";
 import { describe, expect, it } from "vitest";
 
 /**
- * 界面文案只写在文案目录里（#135，规格 #134）：扫描 src/client 下的组件和代码，字符串、模板字符串、JSX 里的文字
- * 出现汉字就失败。注释不算；正则不算（比如匹配汉字的正则）；文案目录（zh.ts）和测试不算；
- * 给开发者看的话在那一行或上一行注明"不是界面文案"。
- *
- * 还没迁的文件先列在豁免清单里，#136 一页一页迁完，清单为空。清单里的文件已经没有汉字了，也会失败：提醒把它从清单里删掉。
+ * 界面文案只写在文案目录里（#135、#136，规格 #134）：扫描 src/client 下的组件和代码，字符串、模板字符串、
+ * JSX 里的文字出现汉字就失败。注释不算；正则不算（比如匹配汉字的正则）；文案目录（zh.ts）和测试不算；
+ * 给开发者看的话、规定照原文显示的话（开源声明页的署名），在那一行或上一行注明"不是界面文案"。
+ * #136 迁完了全部页面，不再有豁免的文件。
  */
-const PENDING = new Set([
-  "settings/ModelSettings.tsx",
-  "settings/models/AddProvider.tsx",
-  "settings/models/KeyField.tsx",
-  "settings/models/ModelEditor.tsx",
-  "settings/models/ModelFields.tsx",
-  "settings/models/ProviderCard.tsx",
-  "settings/models/tokens.ts",
-  "settings/models/url-check.ts",
-]);
 
 /** 本身就是文案的文件（目录、中文的问候语，和各种语言用自己的文字写的名字）。 */
 const CATALOGS = new Set(["i18n/zh.ts", "i18n/catalog.ts", "i18n/greetings-zh.ts"]);
@@ -75,16 +64,11 @@ function hardcoded(file: string): string[] {
   return found;
 }
 
-describe("组件里没有写死的中文（#135）", () => {
-  const files = sources(ROOT).filter((f) => !CATALOGS.has(f));
-
-  it("不在豁免清单里的文件：字符串、JSX 文字里没有汉字（要加文案就写进 i18n/zh.ts 和 en.ts）", () => {
-    const offenders = files.filter((f) => !PENDING.has(f)).flatMap(hardcoded);
+describe("组件里没有写死的中文（#135、#136）", () => {
+  it("字符串、JSX 文字里没有汉字（要加文案就写进 i18n/zh.ts 和 en.ts）", () => {
+    const offenders = sources(ROOT)
+      .filter((f) => !CATALOGS.has(f))
+      .flatMap(hardcoded);
     expect(offenders).toEqual([]);
-  });
-
-  it("豁免清单里的文件都还在、都还有汉字（迁完了就从清单里删掉）", () => {
-    const stale = [...PENDING].filter((f) => !files.includes(f) || hardcoded(f).length === 0);
-    expect(stale).toEqual([]);
   });
 });

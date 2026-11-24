@@ -3,6 +3,7 @@ import { type CSSProperties, Fragment, type RefObject, useEffect, useRef, useSta
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../Icons";
 import { type PlainKey, t, useLocale, useT } from "../i18n";
 import { Pages, reducedMotion, usePresence } from "../Motion";
+import { providerLabel } from "../settings/models/types";
 import { useClaimTouch } from "../touch";
 
 export interface ModelInfo {
@@ -225,7 +226,9 @@ function ModelEffortMenu({
             const group = several && models[i - 1]?.provider !== m.provider;
             return (
               <Fragment key={m.id}>
-                {group && <span className="model-group">{m.providerName}</span>}
+                {group && (
+                  <span className="model-group">{providerLabel(m.provider, m.providerName)}</span>
+                )}
                 <button
                   type="button"
                   className={`model-option${selected ? " selected" : ""}`}

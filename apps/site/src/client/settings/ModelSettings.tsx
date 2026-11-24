@@ -1,12 +1,14 @@
 import { type ApiError, api } from "../api";
 import { setCached, useCached } from "../cached";
+import { t, tRich, useT } from "../i18n";
+import { errorText } from "../i18n/errors";
 import { reloadModels } from "../session/useModels";
 import { Select, type SelectOption } from "../ui/select";
 import { toast, useErrorToast } from "../ui/toast";
 import { AddProvider } from "./models/AddProvider";
 import { ProviderCard } from "./models/ProviderCard";
 import { costText } from "./models/tokens";
-import { MODEL_PROVIDERS, type ProviderView } from "./models/types";
+import { MODEL_PROVIDERS, type ProviderView, providerLabel } from "./models/types";
 
 export { MODEL_PROVIDERS } from "./models/types";
 export const PLATFORM_MODEL = "/api/settings/platform-model";
@@ -16,6 +18,7 @@ export const PLATFORM_MODEL = "/api/settings/platform-model";
  * 下面是"添加模型提供商"；最后是平台调用的模型（#140）。改动下一次请求就生效，不用重启沙箱。
  */
 export function ModelSettings() {
+  const t = useT();
   const loaded = useCached<{ providers: ProviderView[] }>(MODEL_PROVIDERS);
   const providers = loaded.data?.providers;
   useErrorToast(loaded.error);
@@ -31,10 +34,8 @@ export function ModelSettings() {
   return (
     <>
       <section className="settings-section">
-        <h2>模型服务</h2>
-        <p className="settings-hint">
-          密钥只保存在主站，加密存放，不会进入沙箱，Agent 无法读取。修改在下一次请求时生效。
-        </p>
+        <h2>{t("models.service")}</h2>
+        <p className="settings-hint">{t("models.serviceHint")}</p>
         {providers?.map((p) => (
           <ProviderCard
             key={p.id}
@@ -69,8 +70,8 @@ interface PlatformState {
 
 /** 一次平台调用大约多少钱。 */
 function perCall(usd: number): string {
-  if (usd < 0.0001) return "每次不到 $0.0001";
-  return `每次约 $${Number(usd.toPrecision(2))}`;
+  if (usd < 0.0001) return t("models.perCallTiny");
+  return t("models.perCall", { amount: `$${Number(usd.toPrecision(2))}` });
 }
 
 /**
@@ -79,6 +80,7 @@ function perCall(usd: number): string {
  * "自动"写明现在用的是哪个、为什么；关不掉思考的模型标出来（平台调用不思考）。点了当场保存。
  */
 function PlatformModel() {
+  const t = useT();
   const loaded = useCached<PlatformState>(PLATFORM_MODEL);
   const state = loaded.data;
   useErrorToast(loaded.error);
@@ -90,29 +92,29 @@ function PlatformModel() {
       setCached(PLATFORM_MODEL, await api<PlatformState>(PLATFORM_MODEL, { model: next }, "PUT"));
     } catch (e) {
       setCached(PLATFORM_MODEL, state);
-      toast((e as ApiError).message, "error");
+      toast(errorText(e as ApiError), "error");
     }
   };
 
   const resolved = state?.candidates.find((c) => c.ref === state.resolved);
   const autoHint =
     state?.basis === "none"
-      ? "目前没有可用的模型"
+      ? t("models.noAvailable")
       : state?.model !== "auto" || !resolved
-        ? "按价格选最省的模型"
+        ? t("models.autoCheapest")
         : state.basis === "price"
-          ? `现在是 ${resolved.name}：按价格估算最省`
-          : `现在是 ${resolved.name}：都没有价格，按列表顺序选第一个`;
+          ? t("models.autoNowPrice", { name: resolved.name })
+          : t("models.autoNowOrder", { name: resolved.name });
   const options: SelectOption[] = [
-    { value: "auto", label: "自动", hint: autoHint },
+    { value: "auto", label: t("models.auto"), hint: autoHint },
     ...(state?.candidates ?? []).map((c) => ({
       value: c.ref,
       label: c.name,
-      group: c.providerName,
+      group: providerLabel(c.ref.split("/")[0] ?? "", c.providerName),
       hint: [
-        c.cost ? costText(c.cost) : "没有价格",
+        c.cost ? costText(c.cost) : t("models.noPrice"),
         c.callCost !== null ? perCall(c.callCost) : undefined,
-        c.canSkipThinking ? undefined : "无法关闭思考",
+        c.canSkipThinking ? undefined : t("models.alwaysThinks"),
       ]
         .filter(Boolean)
         .join(" · "),
@@ -120,9 +122,9 @@ function PlatformModel() {
   ];
   return (
     <section className="settings-section settings-group">
-      <h2>平台调用的模型</h2>
+      <h2>{t("models.platform")}</h2>
       <Select
-        label="平台调用的模型"
+        label={t("models.platform")}
         value={state?.model ?? "auto"}
         options={options}
         disabled={!state}
@@ -130,20 +132,17 @@ function PlatformModel() {
       />
       {state?.model === "auto" && resolved && (
         <p className="platform-resolved">
-          现在使用 <strong>{resolved.name}</strong>
+          {tRich("models.platformNow", { name: <strong>{resolved.name}</strong> })}
           {resolved.cost
-            ? `（${costText(resolved.cost)}，${perCall(resolved.callCost ?? 0)}）`
+            ? t("models.platformCost", {
+                cost: costText(resolved.cost),
+                perCall: perCall(resolved.callCost ?? 0),
+              })
             : ""}
         </p>
       )}
-      <p className="settings-group-hint">
-        回合结束后判断会话是否在等待你的输入、生成置顶消息的短标题时，会调用一次模型（不开启思考），用量照常记录。
-      </p>
-      <p className="settings-group-hint">
-        选“自动”时，在能关闭思考的模型中，按价格估算一次调用（约 2,000 个输入 token、20 个输出
-        token）的花费，选最省的。价格来自 dsh 内置的模型目录（美元 / 百万
-        token），可能与提供方的现行价格不同；自定义接口的模型填写价格后才参与比较。
-      </p>
+      <p className="settings-group-hint">{t("models.platformHint")}</p>
+      <p className="settings-group-hint">{t("models.platformAutoHint")}</p>
     </section>
   );
 }

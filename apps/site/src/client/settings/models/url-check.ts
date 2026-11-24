@@ -1,4 +1,5 @@
 import { api } from "../../api";
+import { t } from "../../i18n";
 import { MODEL_PROVIDERS } from "./types";
 
 /**
@@ -12,8 +13,8 @@ export async function urlWarnings(url: string): Promise<string[]> {
       { url },
     );
     return [
-      ...(res.plaintext ? ["该地址不是 HTTPS，请求和密钥将以明文发往该地址。"] : []),
-      ...(res.internal ? ["该地址在内网或本机。"] : []),
+      ...(res.plaintext ? [t("models.urlPlaintext")] : []),
+      ...(res.internal ? [t("models.urlInternal")] : []),
     ];
   } catch {
     return [];

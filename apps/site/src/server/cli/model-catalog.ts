@@ -42,18 +42,21 @@ const SKIP = new Set([
   "cloudflare-workers-ai",
 ]);
 
-/** 常见提供方的显示名称；其余的用 ID（和 dsh 一样）。 */
+/**
+ * 常见提供方的显示名称；其余的用 ID（和 dsh 一样）。写英文正式名称：中文界面由浏览器按语言换成中文名
+ * （client/settings/models/types.ts 的 providerLabel，#136：服务端不存现成的中文）。
+ */
 const NAMES: Record<string, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
   google: "Google Gemini",
-  moonshotai: "Kimi（Moonshot）",
-  "moonshotai-cn": "Kimi（Moonshot 中国）",
+  moonshotai: "Kimi (Moonshot)",
+  "moonshotai-cn": "Kimi (Moonshot China)",
   "kimi-coding": "Kimi Coding",
-  zai: "智谱 GLM（Z.ai）",
-  "zai-coding-cn": "智谱 GLM（中国）",
+  zai: "Zhipu GLM (Z.ai)",
+  "zai-coding-cn": "Zhipu GLM (China)",
   minimax: "MiniMax",
-  "minimax-cn": "MiniMax（中国）",
+  "minimax-cn": "MiniMax (China)",
   openrouter: "OpenRouter",
   groq: "Groq",
   xai: "xAI",
@@ -63,7 +66,7 @@ const NAMES: Record<string, string> = {
   nvidia: "NVIDIA",
   cerebras: "Cerebras",
   "vercel-ai-gateway": "Vercel AI Gateway",
-  xiaomi: "小米 MiMo",
+  xiaomi: "Xiaomi MiMo",
 };
 
 interface PiModel {

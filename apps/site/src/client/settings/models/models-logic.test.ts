@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { resetForTests } from "../../i18n";
 import { fitLevels, levelsFromKnown, protocolRules } from "./reasoning";
 import { costText, parseTokens, priceText, shortTokens, tokenInputText } from "./tokens";
+import { isDefaultName, providerLabel } from "./types";
 
 describe("token 数的写法", () => {
   it("读：K、M、万、千分位、纯数字；不对的是 NaN，空的是不填", () => {
@@ -90,5 +92,29 @@ describe("思考档位按协议", () => {
     expect(
       levelsFromKnown({ efforts: ["off", "low", "high", "xhigh", "max"] }, "anthropic-messages"),
     ).toEqual({ off: null, low: "low", high: "high" });
+  });
+});
+
+describe("提供方给人看的名字", () => {
+  afterEach(() => resetForTests("zh-CN"));
+
+  it("默认名字按界面语言写，管理员起的照写，都没有时用 ID", () => {
+    resetForTests("zh-CN");
+    expect(providerLabel("deepseek", "")).toBe("DeepSeek 官方");
+    expect(providerLabel("deepseek", "DeepSeek")).toBe("DeepSeek 官方");
+    expect(providerLabel("zai-coding-cn", "Zhipu GLM (China)")).toBe("智谱 GLM（中国）");
+    expect(providerLabel("zai-coding-cn", "公司的智谱")).toBe("公司的智谱");
+    expect(providerLabel("groq", "groq")).toBe("groq");
+    expect(providerLabel("my-gateway", "")).toBe("my-gateway");
+    resetForTests("en");
+    expect(providerLabel("deepseek", "")).toBe("DeepSeek");
+    expect(providerLabel("zai-coding-cn", "Zhipu GLM (China)")).toBe("Zhipu GLM (China)");
+  });
+
+  it("改名的输入框：默认名字不算改过", () => {
+    expect(isDefaultName("deepseek", "")).toBe(true);
+    expect(isDefaultName("xiaomi", "Xiaomi MiMo")).toBe(true);
+    expect(isDefaultName("xiaomi", "MiMo")).toBe(false);
+    expect(isDefaultName("my-gateway", "my-gateway")).toBe(false);
   });
 });
