@@ -6,7 +6,7 @@
     <!--
       令牌只放在 App 自己的加密存储里，不进系统的备份和换机迁移（#123 的安全要求）：
       allowBackup 关掉云备份；dataExtractionRules（安卓 12 以上）和 fullBackupContent（安卓 11 以下）再把备份和设备间迁移都排除掉。
-      networkSecurityConfig 默认只连 HTTPS、只认系统信任的证书。
+      networkSecurityConfig 只认系统信任的证书；明文 HTTP 由 App 的网络层按服务器、经管理员确认才放行（#204）。
     -->
     <application
         android:allowBackup="false"

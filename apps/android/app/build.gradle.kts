@@ -89,6 +89,7 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.okhttp.tls)
 }
 
 tasks.named("preBuild") { dependsOn("openApiGenerate") }
