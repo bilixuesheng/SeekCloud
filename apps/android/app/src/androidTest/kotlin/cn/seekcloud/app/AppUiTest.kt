@@ -8,6 +8,8 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
@@ -74,20 +76,30 @@ class AppUiTest {
 
     private fun s(id: Int, vararg args: Any): String = context.getString(id, *args)
 
-    private fun waitFor(text: String, timeoutMs: Long = 20_000) {
+    /**
+     * 出错时把当时整个界面的语义树写进失败信息：CI 的日志里只看得到失败信息，看不到截图。
+     */
+    private fun <T> explain(what: String, block: () -> T): T = try {
+        block()
+    } catch (e: Throwable) {
+        val tree = runCatching { rule.onAllNodes(isRoot()).printToString(maxDepth = 40) }.getOrElse { "(no tree: $it)" }
+        throw AssertionError("$what: ${e.message}\n--- UI tree ---\n$tree", e)
+    }
+
+    private fun waitFor(text: String, timeoutMs: Long = 20_000) = explain("waitFor \"$text\"") {
         rule.waitUntil(timeoutMs) { rule.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty() }
         rule.waitForIdle()
     }
 
     /** 页面上（不在弹窗里）的按钮：页面能滚动时先滚到它那里再点。 */
-    private fun tap(text: String) {
+    private fun tap(text: String) = explain("tap \"$text\"") {
         val node = rule.onNode(hasText(text) and hasClickAction() and !hasAnyAncestor(isDialog()))
         runCatching { node.performScrollTo() }
         node.performClick()
     }
 
     /** 底部弹层（会话菜单）里的一项：弹层是单独的窗口，不按"在不在弹窗里"区分。 */
-    private fun tapSheet(text: String) {
+    private fun tapSheet(text: String) = explain("tapSheet \"$text\"") {
         val node = rule.onNode(hasText(text) and hasClickAction())
         runCatching { node.performScrollTo() }
         node.performClick()
@@ -101,11 +113,12 @@ class AppUiTest {
     }
 
     /** 弹窗里的按钮。 */
-    private fun tapInDialog(text: String) =
+    private fun tapInDialog(text: String) = explain("tapInDialog \"$text\"") {
         rule.onNode(hasText(text) and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
+    }
 
     /** 往页面上唯一的输入框里填字：等它能输入了再填（正在连接、正在登录时输入框是禁用的）。 */
-    private fun type(text: String) {
+    private fun type(text: String) = explain("type") {
         rule.waitUntil(20_000) { rule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
         rule.onNode(hasSetTextAction()).performTextReplacement(text)
     }
@@ -127,7 +140,7 @@ class AppUiTest {
     }
 
     /** 登录以后进会话列表：等顶栏的"搜索会话"出来（别的测试可能已经在这台假主站上发起过会话，不看列表是不是空的）。 */
-    private fun waitForList() {
+    private fun waitForList() = explain("waitForList") {
         val search = s(R.string.sidebar_search)
         rule.waitUntil(20_000) { rule.onAllNodes(hasContentDescription(search)).fetchSemanticsNodes().isNotEmpty() }
         rule.waitForIdle()

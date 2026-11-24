@@ -152,7 +152,7 @@ jobs:
               for case in ET.parse(path).getroot().iter("testcase"):
                   for failure in list(case.findall("failure")) + list(case.findall("error")):
                       print(f"::group::{case.get('classname')}.{case.get('name')}")
-                      print((failure.text or failure.get("message") or "")[:6000])
+                      print((failure.text or failure.get("message") or "")[:30000])
                       print("::endgroup::")
           PY
           tail -n 50 "$RUNNER_TEMP/sites.log" || true
