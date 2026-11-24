@@ -82,6 +82,16 @@ class SessionViewModelTest {
         override fun stop(shortId: String) = Unit
         override fun withdraw(shortId: String, queueId: String) = withdrawn
         override fun sendNow(shortId: String, queueId: String) = Unit
+
+        var serverPins = listOf<MessagePin>()
+        var failPin: Exception? = null
+        override fun pins(shortId: String) = serverPins
+        override fun setPinned(shortId: String, seq: Int, pinned: Boolean): List<MessagePin> {
+            failPin?.let { throw it }
+            serverPins = if (pinned) serverPins + MessagePin(seq, "健康检查", "t") else serverPins.filterNot { it.seq == seq }
+            return serverPins
+        }
+        override fun diff(shortId: String) = listOf(RepoDiff("octo/app", "main", listOf(DiffFile("a.ts", additions = 1))))
     }
 
     private class FakeActions : SessionActions {
@@ -196,6 +206,39 @@ class SessionViewModelTest {
         vm.send("接着来")
         advanceUntilIdle()
         assertEquals(null to null, api.models.last())
+        vm.stop()
+    }
+
+    @Test
+    fun pinningShowsAPlaceholderThenTheTitleAndRollsBackOnFailure() = runTest(dispatcher) {
+        val vm = model()
+        advanceTimeBy(2000)
+        vm.togglePin(7, pinned = true)
+        // 先在本地加上，短标题还在生成
+        assertEquals(listOf(MessagePin(7, null, "2026-10-31T00:01:00Z")), vm.pins.value)
+        advanceUntilIdle()
+        assertEquals("健康检查", vm.pins.value.single().title)
+
+        api.failPin = ApiException(404, ApiError("message_not_found", "消息不存在"))
+        vm.togglePin(7, pinned = false)
+        assertTrue(vm.pins.value.isEmpty())
+        advanceUntilIdle()
+        // 没成功：换回主站上的样子，说明原因
+        assertEquals(listOf(7), vm.pins.value.map { it.seq })
+        assertTrue(vm.composer.value.failure is ApiException)
+        vm.stop()
+    }
+
+    @Test
+    fun changesPanelLoadsTheLatestDiff() = runTest(dispatcher) {
+        val vm = model()
+        advanceTimeBy(2000)
+        vm.openChanges("a.ts")
+        assertEquals(ChangesPanelUi("a.ts"), vm.changes.value)
+        advanceUntilIdle()
+        assertEquals("a.ts", vm.changes.value?.repos?.single()?.files?.single()?.path)
+        vm.closeChanges()
+        assertNull(vm.changes.value)
         vm.stop()
     }
 

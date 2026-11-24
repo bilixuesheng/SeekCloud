@@ -241,7 +241,15 @@ class AppUiTest {
             ]}""",
         )
         val title = "Conversation ${System.nanoTime()}"
-        startSession(siteA, title)
+        val shortId = startSession(siteA, title)
+        // 回合结束时宿主机报的、对比基础分支的改动（改动面板用）
+        diff(
+            siteA,
+            shortId,
+            """[{"fullName":"octo/app","baseBranch":"main","base":"b","head":"h","files":[
+              {"path":"README.md","additions":1,"deletions":1,"patch":"@@ -1,1 +1,1 @@\n-# Old title\n+# Health check"}
+            ]}]""",
+        )
         waitFor(title)
         tap(title)
         // 会话页：回复、两次工具调用合成一行、这一回合的改动卡片（列出三个，"查看全部"展开第四个）
@@ -251,8 +259,20 @@ class AppUiTest {
         waitFor(toolSummary)
         waitFor(res.getQuantityString(R.plurals.changes_changed_files, 4, 4))
         rule.onAllNodes(hasText("README.md")).assertCountEquals(0)
+        // "查看全部"打开改动面板：逐行的 diff
         tap(s(R.string.changes_view_all))
-        waitFor("README.md")
+        waitFor(s(R.string.changes_title))
+        waitFor("+# Health check")
+        waitFor("−# Old title")
+        rule.onNode(hasContentDescription(s(R.string.common_close)) and hasClickAction()).performClick()
+        rule.waitUntil(20_000) { rule.onAllNodes(hasText("+# Health check")).fetchSemanticsNodes().isEmpty() }
+
+        // 置顶这个回合的回复：上方出现短标题，顶栏出现置顶列表，从列表跳到会话开头
+        rule.onNode(hasContentDescription(s(R.string.session_pin)) and hasClickAction()).performScrollTo().performClick()
+        waitForDescription(s(R.string.session_unpin))
+        val pinned = res.getQuantityString(R.plurals.chat_pinned_messages, 1, 1)
+        rule.onNode(hasContentDescription(pinned) and hasClickAction()).performClick()
+        tapSheet(s(R.string.chat_session_start))
         // 点开工具调用：每一次的名字，再点开看输入
         tap(toolSummary, substring = true)
         waitFor("pnpm test")
@@ -525,12 +545,21 @@ class AppUiTest {
         OkHttpClient().newCall(request).execute().use { check(it.isSuccessful) { "next turn: HTTP ${it.code}" } }
     }
 
-    /** 不使用仓库发起一个会话（#191），标题就是这段话。 */
-    private fun startSession(site: String, text: String) {
+    /** 不使用仓库发起一个会话（#191），标题就是这段话。返回会话的短 ID。 */
+    private fun startSession(site: String, text: String): String {
         val token = appToken(site)
         val body = """{"text":"$text"}""".toRequestBody(JSON)
         val request = Request.Builder().url("$site/api/sessions").header("Authorization", "Bearer $token").post(body).build()
-        OkHttpClient().newCall(request).execute().use { check(it.isSuccessful) { "start session: HTTP ${it.code}" } }
+        return OkHttpClient().newCall(request).execute().use {
+            check(it.isSuccessful) { "start session: HTTP ${it.code}" }
+            Json.parseToJsonElement(it.body.string()).jsonObject.getValue("shortId").jsonPrimitive.content
+        }
+    }
+
+    /** 替假宿主机给会话报一份对比基础分支的改动（只有测试用的假主站有这个接口，见 app-test-server.ts）。 */
+    private fun diff(site: String, shortId: String, repos: String) {
+        val request = Request.Builder().url("$site/__test/diff").post("""{"shortId":"$shortId","repos":$repos}""".toRequestBody(JSON)).build()
+        OkHttpClient().newCall(request).execute().use { check(it.isSuccessful) { "diff: HTTP ${it.code}" } }
     }
 
     /** 以另一台设备登录，把别的 App 设备都退出（就是网页上设置 → 账户 → 登录设备里点"退出"）。 */

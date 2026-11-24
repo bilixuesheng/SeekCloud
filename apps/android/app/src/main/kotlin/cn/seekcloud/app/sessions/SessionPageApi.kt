@@ -2,6 +2,7 @@ package cn.seekcloud.app.sessions
 
 import cn.seekcloud.app.net.ServerClient
 import cn.seekcloud.app.net.toApiException
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -37,7 +38,22 @@ interface SessionPageApi {
 
     /** 排队的消息立即发送（插进当前回合）。 */
     fun sendNow(shortId: String, queueId: String)
+
+    /** 会话分支对比基础分支的改动（改动面板）。 */
+    fun diff(shortId: String): List<RepoDiff>
+
+    /** 置顶的回复。 */
+    fun pins(shortId: String): List<MessagePin>
+
+    /** 置顶或取消置顶一条回复（[seq] 是它的序号），返回新的列表。置顶时主站当场起短标题。 */
+    fun setPinned(shortId: String, seq: Int, pinned: Boolean): List<MessagePin>
 }
+
+@Serializable
+private data class Diffs(val repos: List<RepoDiff> = emptyList())
+
+@Serializable
+private data class Pins(val pins: List<MessagePin> = emptyList())
 
 class HttpSessionPageApi(private val client: ServerClient) : SessionPageApi {
     override fun session(shortId: String): SessionSummary =
@@ -54,6 +70,17 @@ class HttpSessionPageApi(private val client: ServerClient) : SessionPageApi {
     }
 
     override fun models(): ModelList = json.decodeFromString(ModelList.serializer(), get("/api/models"))
+
+    override fun diff(shortId: String): List<RepoDiff> =
+        json.decodeFromString(Diffs.serializer(), get("/api/sessions/$shortId/diff")).repos
+
+    override fun pins(shortId: String): List<MessagePin> =
+        json.decodeFromString(Pins.serializer(), get("/api/sessions/$shortId/pins")).pins
+
+    override fun setPinned(shortId: String, seq: Int, pinned: Boolean): List<MessagePin> {
+        val body = post("/api/sessions/$shortId/pins", "seq" to JsonPrimitive(seq), "pinned" to JsonPrimitive(pinned))
+        return json.decodeFromString(Pins.serializer(), body).pins
+    }
 
     override fun stop(shortId: String) {
         post("/api/sessions/$shortId/stop")

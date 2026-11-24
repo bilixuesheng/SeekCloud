@@ -42,6 +42,9 @@ data class SessionPage(
 /** 刚发出去、服务器还没回推的消息：先显示出来，不让人等一个来回。[after] 是发的时候已经有几条。 */
 data class PendingMessage(val text: String, val after: Int, val at: String)
 
+/** 改动面板：开着时有它。[repos] 还没取到时为 null；[focus] 是要先展开、滚到的文件。 */
+data class ChangesPanelUi(val focus: String? = null, val repos: List<RepoDiff>? = null, val failure: Throwable? = null)
+
 /** 排队的消息上正在做的操作。 */
 enum class QueueAction { Restore, Delete, SendNow }
 
@@ -94,6 +97,13 @@ class SessionViewModel(
     private val _choice = MutableStateFlow<Pair<String, String>?>(null)
     val choice: StateFlow<Pair<String, String>?> = _choice.asStateFlow()
 
+    /** 置顶的回复，按在会话里的先后排。 */
+    private val _pins = MutableStateFlow<List<MessagePin>>(emptyList())
+    val pins: StateFlow<List<MessagePin>> = _pins.asStateFlow()
+
+    private val _changes = MutableStateFlow<ChangesPanelUi?>(null)
+    val changes: StateFlow<ChangesPanelUi?> = _changes.asStateFlow()
+
     /** 打开时取一次的会话（会话列表里没有时用它的标题）。 */
     private val _session = MutableStateFlow<SessionSummary?>(null)
     val session: StateFlow<SessionSummary?> = _session.asStateFlow()
@@ -130,6 +140,56 @@ class SessionViewModel(
         viewModelScope.launch {
             _models.value = runCatching { withContext(io) { api.models() } }.getOrNull()
         }
+        reloadPins()
+    }
+
+    private fun reloadPins() {
+        viewModelScope.launch {
+            runCatching { withContext(io) { api.pins(shortId) } }.onSuccess { _pins.value = it }
+        }
+    }
+
+    /**
+     * 置顶或取消置顶一条回复（照网页）：先在本地改（置顶的短标题是 null，显示占位的闪烁条），主站回来换成正式的列表；
+     * 没成功就换回主站上的样子，说明原因。
+     */
+    fun togglePin(seq: Int, pinned: Boolean) {
+        _pins.update { list ->
+            if (pinned) (list.filterNot { it.seq == seq } + MessagePin(seq, null, now().toString())).sortedBy { it.seq }
+            else list.filterNot { it.seq == seq }
+        }
+        viewModelScope.launch {
+            try {
+                _pins.value = withContext(io) { api.setPinned(shortId, seq, pinned) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (e is ApiException && e.status == 401) onSignedOut()
+                _composer.update { it.copy(failure = e) }
+                reloadPins()
+            }
+        }
+    }
+
+    /** 打开改动面板：每次打开都从主站取最新的一份（每个回合结束时宿主机算的）。 */
+    fun openChanges(focus: String? = null) {
+        _changes.value = ChangesPanelUi(focus)
+        viewModelScope.launch {
+            val result = try {
+                ChangesPanelUi(focus, repos = withContext(io) { api.diff(shortId) })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (e is ApiException && e.status == 401) onSignedOut()
+                ChangesPanelUi(focus, failure = e)
+            }
+            // 关掉了就不再打开
+            _changes.update { if (it != null) result else null }
+        }
+    }
+
+    fun closeChanges() {
+        _changes.value = null
     }
 
     /** 换模型或思考强度：模型不支持这一档时换成最近的一档；没声明推理等级的模型只有"关闭"。 */

@@ -1,6 +1,8 @@
 import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
-import type { AgentEvent } from "@seekcloud/protocol";
+import type { AgentEvent, RepoDiff } from "@seekcloud/protocol";
+import { desc, eq } from "drizzle-orm";
+import { sessions, turns } from "../server/db/schema";
 import { createTemplateDatabase, dropTemplateDatabase } from "./database";
 import { createTestApp } from "./test-app";
 
@@ -13,6 +15,8 @@ import { createTestApp } from "./test-app";
  * （`{ "events": [...] }`，协议包的 AgentEvent），`{ "failSandbox": true }` 让下一次准备沙箱失败（会话变成"失败"），
  * `{ "hold": true }` 让假宿主机不再回复（新会话一直停在"正在准备沙箱"），`{ "hold": false }` 恢复。
  * 界面测试用它造出等你输入、失败、Agent 正在工作这些状态。
+ * `POST /__test/diff`（`{ "shortId": ..., "repos": [...] }`，协议包的 RepoDiff）替假宿主机给这个会话最近的回合
+ * 报一份对比基础分支的改动（改动面板用）。
  *
  * 用法（在 apps/site 里）：pnpm app-test-server [台数，默认 2]；要一个 PostgreSQL（同主站的测试）。
  */
@@ -37,6 +41,19 @@ for (let i = 0; i < count; i++) {
       if (body.failSandbox) t.host.failNextSandbox({ code: "sandbox_unavailable" });
       // hold：假宿主机不再回复（新会话一直停在"正在准备沙箱"，测 Agent 工作时的输入框）；false 恢复
       if (body.hold !== undefined) t.host.manual = body.hold;
+      return new Response(null, { status: 204 });
+    }
+    if (url.pathname === "/__test/diff" && req.method === "POST") {
+      const body = (await req.json()) as { shortId: string; repos: RepoDiff[] };
+      const [row] = await t.db
+        .select({ sessionId: sessions.id, turnId: turns.id })
+        .from(sessions)
+        .innerJoin(turns, eq(turns.sessionId, sessions.id))
+        .where(eq(sessions.shortId, body.shortId))
+        .orderBy(desc(turns.number))
+        .limit(1);
+      if (!row) return new Response(null, { status: 404 });
+      await t.host.emit({ type: "workspace.diff", ...row, repos: body.repos });
       return new Response(null, { status: 204 });
     }
     const body = ["GET", "HEAD"].includes(req.method) ? undefined : await req.arrayBuffer();
