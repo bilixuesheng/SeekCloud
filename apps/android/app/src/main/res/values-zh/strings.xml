@@ -190,6 +190,16 @@
     <string name="environment_default" tools:ignore="UnusedResources">默认环境</string>
     <string name="environment_deleted" tools:ignore="UnusedResources">已删除</string>
     <string name="repo_no_repo" tools:ignore="UnusedResources">无仓库</string>
+    <string name="composer_attach" tools:ignore="UnusedResources">添加附件</string>
+    <string name="composer_image" tools:ignore="UnusedResources">图片</string>
+    <string name="composer_image_soon" tools:ignore="UnusedResources">暂未开放</string>
+    <string name="composer_image_unsupported" tools:ignore="UnusedResources">当前模型无法识别图片，请换用支持识图的模型</string>
+    <string name="composer_file" tools:ignore="UnusedResources">文件</string>
+    <string name="composer_file_soon" tools:ignore="UnusedResources">接入沙箱后可用</string>
+    <string name="composer_stop" tools:ignore="UnusedResources">停止</string>
+    <string name="composer_send_now" tools:ignore="UnusedResources">发送（Agent 下一步读到）</string>
+    <string name="composer_more_send" tools:ignore="UnusedResources">更多发送方式</string>
+    <string name="composer_later" tools:ignore="UnusedResources">稍后排队</string>
     <string name="model_dialog" tools:ignore="UnusedResources">模型和思考强度</string>
     <string name="model_choose" tools:ignore="UnusedResources">选择模型，当前为 %1$s</string>
     <string name="model_reset_effort" tools:ignore="UnusedResources">恢复默认</string>
@@ -228,6 +238,133 @@
     <string name="pr_merged" tools:ignore="UnusedResources">已合并</string>
     <string name="pr_closed" tools:ignore="UnusedResources">已关闭</string>
     <string name="pr_text" tools:ignore="UnusedResources">PR #%1$s · %2$s</string>
+    <string name="chat_placeholder" tools:ignore="UnusedResources">输入 / 使用命令</string>
+    <string name="chat_placeholder_archived" tools:ignore="UnusedResources">会话已归档</string>
+    <string name="chat_placeholder_failed" tools:ignore="UnusedResources">会话出错，发送消息即可重试</string>
+    <string name="chat_not_found" tools:ignore="UnusedResources">未找到该会话</string>
+    <string name="chat_not_found_hint" tools:ignore="UnusedResources">该会话可能已被删除，或链接有误。</string>
+    <string name="chat_queued_waiting" tools:ignore="UnusedResources">排队中，等待空闲资源</string>
+    <string name="chat_seeking" tools:ignore="UnusedResources">深度求索中</string>
+    <string name="chat_ai_notice" tools:ignore="UnusedResources">DeepSeek 是 AI 并且可能会犯错。</string>
+    <string name="chat_disconnected" tools:ignore="UnusedResources">与服务器的连接已断开，请刷新页面。</string>
+    <string name="chat_send" tools:ignore="UnusedResources">发送</string>
+    <string name="chat_archived_note" tools:ignore="UnusedResources">会话已归档，无法发送消息。</string>
+    <string name="chat_withdraw" tools:ignore="UnusedResources">撤回并编辑</string>
+    <string name="chat_send_now" tools:ignore="UnusedResources">立即发送</string>
+    <string name="chat_to_bottom" tools:ignore="UnusedResources">回到底部</string>
+    <string name="chat_sending" tools:ignore="UnusedResources">正在发送</string>
+    <string name="chat_delivered" tools:ignore="UnusedResources">DeepSeek 已读取</string>
+    <string name="chat_retry" tools:ignore="UnusedResources">重试</string>
+    <string name="chat_resend" tools:ignore="UnusedResources">重新发送此消息</string>
+    <string name="chat_cannot_retry" tools:ignore="UnusedResources">DeepSeek 运行期间无法重试</string>
+    <string name="chat_thinking" tools:ignore="UnusedResources">思考过程</string>
+    <string name="chat_switched_model" tools:ignore="UnusedResources">已切换到 %1$s · 思考%2$s</string>
+    <string name="chat_generating_title" tools:ignore="UnusedResources">正在生成标题</string>
+    <plurals name="chat_pinned_messages" tools:ignore="UnusedResources">
+        <item quantity="other">置顶的消息（%1$d 条）</item>
+    </plurals>
+    <string name="chat_session_start" tools:ignore="UnusedResources">会话开头</string>
+    <string name="chat_pin_fallback" tools:ignore="UnusedResources">置顶的消息</string>
+    <string name="chat_tool_input" tools:ignore="UnusedResources">输入</string>
+    <string name="chat_tool_error" tools:ignore="UnusedResources">错误</string>
+    <string name="chat_tool_result" tools:ignore="UnusedResources">结果</string>
+    <string name="chat_no_output" tools:ignore="UnusedResources">（无输出）</string>
+    <string name="chat_plan" tools:ignore="UnusedResources">计划</string>
+    <string name="chat_plan_stale" tools:ignore="UnusedResources">你上一条消息之前的计划</string>
+    <string name="chat_turn_stopped" tools:ignore="UnusedResources">回合已停止</string>
+    <string name="chat_turn_failed" tools:ignore="UnusedResources">回合失败</string>
+    <string name="chat_turn_stopped_with" tools:ignore="UnusedResources">回合已停止：%1$s</string>
+    <string name="chat_turn_failed_with" tools:ignore="UnusedResources">回合失败：%1$s</string>
+    <string name="chat_session_failed" tools:ignore="UnusedResources">会话失败</string>
+    <string name="chat_session_failed_with" tools:ignore="UnusedResources">会话失败：%1$s</string>
+    <string name="chat_push_follow_up" tools:ignore="UnusedResources">推送会话分支失败，云上求索 已把错误交给 Agent 处理</string>
+    <plurals name="chat_push_gave_up" tools:ignore="UnusedResources">
+        <item quantity="other">推送失败，已自动跟进 %1$d 次仍未推送（%2$s）。请查看原因后再发消息。</item>
+    </plurals>
+    <string name="chat_image_blocked" tools:ignore="UnusedResources">%1$s（来自 %2$s，点击加载）</string>
+    <string name="chat_image_failed" tools:ignore="UnusedResources">%1$s（加载失败，点击查看）</string>
+    <string name="chat_image" tools:ignore="UnusedResources">图片</string>
+    <string name="tool_read" tools:ignore="UnusedResources">读取</string>
+    <string name="tool_write" tools:ignore="UnusedResources">写入</string>
+    <string name="tool_edit" tools:ignore="UnusedResources">编辑</string>
+    <string name="tool_bash" tools:ignore="UnusedResources">运行</string>
+    <string name="tool_grep" tools:ignore="UnusedResources">搜索</string>
+    <string name="tool_glob" tools:ignore="UnusedResources">查找文件</string>
+    <string name="tool_ls" tools:ignore="UnusedResources">列出目录</string>
+    <string name="tool_web_fetch" tools:ignore="UnusedResources">抓取网页</string>
+    <string name="tool_web_search" tools:ignore="UnusedResources">搜索网页</string>
+    <string name="tool_todo" tools:ignore="UnusedResources">更新待办</string>
+    <string name="tool_task" tools:ignore="UnusedResources">DeepSeek 子任务</string>
+    <string name="tool_read_active" tools:ignore="UnusedResources">正在读取</string>
+    <string name="tool_write_active" tools:ignore="UnusedResources">正在写入</string>
+    <string name="tool_edit_active" tools:ignore="UnusedResources">正在编辑</string>
+    <string name="tool_bash_active" tools:ignore="UnusedResources">正在运行</string>
+    <string name="tool_grep_active" tools:ignore="UnusedResources">正在搜索</string>
+    <string name="tool_glob_active" tools:ignore="UnusedResources">正在查找文件</string>
+    <string name="tool_ls_active" tools:ignore="UnusedResources">正在列出目录</string>
+    <string name="tool_web_fetch_active" tools:ignore="UnusedResources">正在抓取网页</string>
+    <string name="tool_web_search_active" tools:ignore="UnusedResources">正在搜索网页</string>
+    <string name="tool_todo_active" tools:ignore="UnusedResources">正在更新待办</string>
+    <string name="tool_task_active" tools:ignore="UnusedResources">正在运行 DeepSeek 子任务</string>
+    <string name="tool_other_active" tools:ignore="UnusedResources">正在使用 %1$s</string>
+    <string name="tool_activity" tools:ignore="UnusedResources">%1$s %2$s</string>
+    <plurals name="tools_read" tools:ignore="UnusedResources">
+        <item quantity="other">读取了 %1$d 个文件</item>
+    </plurals>
+    <plurals name="tools_edit" tools:ignore="UnusedResources">
+        <item quantity="other">修改了 %1$d 个文件</item>
+    </plurals>
+    <plurals name="tools_bash" tools:ignore="UnusedResources">
+        <item quantity="other">运行了 %1$d 条命令</item>
+    </plurals>
+    <plurals name="tools_search" tools:ignore="UnusedResources">
+        <item quantity="other">搜索了 %1$d 次</item>
+    </plurals>
+    <plurals name="tools_fetch" tools:ignore="UnusedResources">
+        <item quantity="other">抓取了 %1$d 个网页</item>
+    </plurals>
+    <plurals name="tools_other" tools:ignore="UnusedResources">
+        <item quantity="other">使用了 %1$d 个其他工具</item>
+    </plurals>
+    <string name="agent_error_model_unavailable" tools:ignore="UnusedResources">模型服务暂时不可用</string>
+    <string name="agent_error_model_rate_limited" tools:ignore="UnusedResources">模型服务繁忙，请稍后重试</string>
+    <string name="agent_error_model_rejected" tools:ignore="UnusedResources">模型服务拒绝了本次请求</string>
+    <string name="agent_error_context_too_long" tools:ignore="UnusedResources">对话长度超出模型上限</string>
+    <string name="agent_error_timeout" tools:ignore="UnusedResources">模型服务响应超时</string>
+    <string name="agent_error_sandbox_unavailable" tools:ignore="UnusedResources">沙箱暂时无法创建</string>
+    <string name="agent_error_repo_clone_failed" tools:ignore="UnusedResources">克隆仓库失败</string>
+    <string name="agent_error_internal" tools:ignore="UnusedResources">服务内部错误</string>
+    <string name="agent_error_ref" tools:ignore="UnusedResources">参考号 %1$s</string>
+    <string name="agent_error_with_detail" tools:ignore="UnusedResources">%1$s（%2$s）</string>
+    <string name="changes_label" tools:ignore="UnusedResources">本回合的改动</string>
+    <string name="changes_read_only" tools:ignore="UnusedResources">%1$s 是只读仓库，改动不会推送</string>
+    <string name="changes_push_failed" tools:ignore="UnusedResources">%1$s 推送失败</string>
+    <string name="changes_undo" tools:ignore="UnusedResources">撤销</string>
+    <string name="changes_undo_hint" tools:ignore="UnusedResources">撤销此文件在本回合的改动</string>
+    <string name="changes_cannot_undo" tools:ignore="UnusedResources">DeepSeek 运行期间无法撤销</string>
+    <string name="changes_undo_prompt" tools:ignore="UnusedResources">请撤销 `%1$s` 在上一回合的改动，恢复成那一回合开始前的样子。</string>
+    <string name="changes_collapse" tools:ignore="UnusedResources">收起</string>
+    <string name="changes_view_all" tools:ignore="UnusedResources">查看全部</string>
+    <plurals name="changes_changed_files" tools:ignore="UnusedResources">
+        <item quantity="other">已更改 %1$d 个文件</item>
+    </plurals>
+    <plurals name="changes_omitted" tools:ignore="UnusedResources">
+        <item quantity="other">另有 %1$d 个文件未列出</item>
+    </plurals>
+    <string name="changes_binary" tools:ignore="UnusedResources">二进制</string>
+    <string name="changes_title" tools:ignore="UnusedResources">改动</string>
+    <plurals name="changes_file_count" tools:ignore="UnusedResources">
+        <item quantity="other">%1$d 个文件</item>
+    </plurals>
+    <string name="changes_empty" tools:ignore="UnusedResources">会话分支与基础分支相比尚无改动。</string>
+    <string name="changes_compare_with" tools:ignore="UnusedResources">对比 %1$s</string>
+    <string name="changes_truncated" tools:ignore="UnusedResources">改动过多，其余文件未附带内容，请在 GitHub 上对比分支查看。</string>
+    <string name="changes_renamed_from" tools:ignore="UnusedResources">改名自 %1$s</string>
+    <string name="changes_binary_file" tools:ignore="UnusedResources">二进制文件，不显示内容。</string>
+    <string name="changes_too_large" tools:ignore="UnusedResources">改动过大，不显示内容。</string>
+    <string name="changes_no_patch" tools:ignore="UnusedResources">未附带内容。</string>
+    <string name="changes_mode_only" tools:ignore="UnusedResources">仅修改了文件权限或名称，内容未变。</string>
+    <string name="changes_no_newline" tools:ignore="UnusedResources">文件末尾无换行</string>
     <string name="github_unlink_title" tools:ignore="UnusedResources">解除关联 GitHub？</string>
     <string name="github_unlink_body" tools:ignore="UnusedResources">解除后 DeepSeek 将无法访问你的仓库，正在使用仓库的会话也无法推送。之后可以随时重新关联。</string>
     <string name="github_unlink" tools:ignore="UnusedResources">解除关联</string>
@@ -251,4 +388,8 @@
     <string name="effort_high" tools:ignore="UnusedResources">高</string>
     <string name="effort_xhigh" tools:ignore="UnusedResources">很高</string>
     <string name="effort_max" tools:ignore="UnusedResources">最高</string>
+    <string name="time_just_now" tools:ignore="UnusedResources">刚刚</string>
+    <string name="time_elapsed_seconds" tools:ignore="UnusedResources">%1$s 秒</string>
+    <string name="time_elapsed_minutes" tools:ignore="UnusedResources">%1$s 分 %2$s 秒</string>
+    <string name="time_elapsed_hours" tools:ignore="UnusedResources">%1$s 小时 %2$s 分</string>
 </resources>

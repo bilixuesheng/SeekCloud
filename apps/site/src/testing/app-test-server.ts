@@ -10,8 +10,9 @@ import { createTestApp } from "./test-app";
  * 每台起好以后打印一行 JSON：{ "port": 端口, "password": 管理员密码 }，全部起好以后打印 "ready"。
  *
  * 只在这里有的控制接口（真的主站上没有）：`POST /__test/next-turn` 让假宿主机的下一个回合按给的事件回放
- * （`{ "events": [...] }`，协议包的 AgentEvent），`{ "failSandbox": true }` 让下一次准备沙箱失败（会话变成"失败"）。
- * 界面测试用它造出等你输入、失败这些状态。
+ * （`{ "events": [...] }`，协议包的 AgentEvent），`{ "failSandbox": true }` 让下一次准备沙箱失败（会话变成"失败"），
+ * `{ "hold": true }` 让假宿主机不再回复（新会话一直停在"正在准备沙箱"），`{ "hold": false }` 恢复。
+ * 界面测试用它造出等你输入、失败、Agent 正在工作这些状态。
  *
  * 用法（在 apps/site 里）：pnpm app-test-server [台数，默认 2]；要一个 PostgreSQL（同主站的测试）。
  */
@@ -27,9 +28,15 @@ for (let i = 0; i < count; i++) {
   const fetch = async (req: Request) => {
     const url = new URL(req.url);
     if (url.pathname === "/__test/next-turn" && req.method === "POST") {
-      const body = (await req.json()) as { events?: AgentEvent[]; failSandbox?: boolean };
+      const body = (await req.json()) as {
+        events?: AgentEvent[];
+        failSandbox?: boolean;
+        hold?: boolean;
+      };
       if (body.events) t.host.script(...body.events);
       if (body.failSandbox) t.host.failNextSandbox({ code: "sandbox_unavailable" });
+      // hold：假宿主机不再回复（新会话一直停在"正在准备沙箱"，测 Agent 工作时的输入框）；false 恢复
+      if (body.hold !== undefined) t.host.manual = body.hold;
       return new Response(null, { status: 204 });
     }
     const body = ["GET", "HEAD"].includes(req.method) ? undefined : await req.arrayBuffer();

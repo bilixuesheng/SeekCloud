@@ -3,6 +3,8 @@ package cn.seekcloud.app
 import android.content.Context
 import android.content.pm.ActivityInfo
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -93,8 +95,8 @@ class AppUiTest {
     }
 
     /** 页面上（不在弹窗里）的按钮：页面能滚动时先滚到它那里再点。 */
-    private fun tap(text: String) = explain("tap \"$text\"") {
-        val node = rule.onNode(hasText(text) and hasClickAction() and !hasAnyAncestor(isDialog()))
+    private fun tap(text: String, substring: Boolean = false) = explain("tap \"$text\"") {
+        val node = rule.onNode(hasText(text, substring = substring) and hasClickAction() and !hasAnyAncestor(isDialog()))
         runCatching { node.performScrollTo() }
         node.performClick()
     }
@@ -211,9 +213,97 @@ class AppUiTest {
         val text = "New from the app ${System.nanoTime()}"
         type(text)
         tap(s(R.string.new_session_submit))
-        // 发起以后回到列表，新会话在列表里
+        // 发起以后直接进会话页：Agent 回复了（假主站默认回"收到。"）；返回列表，新会话在列表里
+        waitFor(REPLY)
+        rule.onNode(hasContentDescription(s(R.string.common_back)) and hasClickAction()).performClick()
         waitForList()
         waitFor(text)
+    }
+
+    @Test
+    fun conversationShowsRepliesToolsAndChanges() {
+        launch()
+        connect(siteA)
+        signIn()
+        val files = listOf("src/app.ts", "src/health.ts", "test/health.test.ts", "README.md")
+            .joinToString(",") { """{"path":"$it","additions":3,"deletions":1}""" }
+        nextTurn(
+            siteA,
+            """{"events":[
+              {"type":"message","text":"I will look at the project first."},
+              {"type":"tool.call","callId":"c1","name":"Read","input":{"file_path":"src/app.ts"}},
+              {"type":"tool.result","callId":"c1","output":"export {}","isError":false},
+              {"type":"tool.call","callId":"c2","name":"Bash","input":{"command":"pnpm test"}},
+              {"type":"tool.result","callId":"c2","output":"","isError":false},
+              {"type":"message","text":"The health check is in place."},
+              {"type":"workspace","repos":[{"fullName":"octo/app","head":"${"a".repeat(40)}","push":"pushed","files":[$files]}]}
+            ]}""",
+        )
+        val title = "Conversation ${System.nanoTime()}"
+        startSession(siteA, title)
+        waitFor(title)
+        tap(title)
+        // 会话页：回复、两次工具调用合成一行、这一回合的改动卡片（列出三个，"查看全部"展开第四个）
+        waitFor("The health check is in place.")
+        waitFor(res.getQuantityString(R.plurals.tools_read, 1, 1))
+        waitFor(res.getQuantityString(R.plurals.changes_changed_files, 4, 4))
+        rule.onAllNodes(hasText("README.md")).assertCountEquals(0)
+        tap(s(R.string.changes_view_all))
+        waitFor("README.md")
+        // 点开工具调用：每一次的名字，再点开看输入
+        tap(res.getQuantityString(R.plurals.tools_read, 1, 1), substring = true)
+        waitFor("pnpm test")
+
+        // 在会话页里接着发：Agent 回复
+        type("And the tests?")
+        rule.onNode(hasContentDescription(s(R.string.chat_send)) and hasClickAction()).performClick()
+        waitFor(REPLY)
+    }
+
+    @Test
+    fun workingTurnControls() {
+        launch()
+        connect(siteB)
+        signIn()
+        // 假宿主机不回复：新会话一直在准备沙箱，Agent 算在工作
+        nextTurn(siteB, """{"hold":true}""")
+        try {
+            val title = "Working ${System.nanoTime()}"
+            startSession(siteB, title)
+            waitFor(title)
+            tap(title)
+            waitFor(s(R.string.status_preparing_sandbox))
+            // 输入框空着是停止键
+            rule.onNode(hasContentDescription(s(R.string.composer_stop)) and hasClickAction()).assertExists()
+
+            // 有字时是 ↵：插进当前回合，当场算交给 Agent（✓✓）
+            type("Do not touch the database")
+            rule.onNode(hasContentDescription(s(R.string.composer_send_now)) and hasClickAction()).performClick()
+            waitForDescription(s(R.string.chat_delivered))
+
+            // ⌄ 里的"稍后排队"：排在对话末尾，最前面的一条有"立即发送"
+            type("Make it blue")
+            rule.onNode(hasContentDescription(s(R.string.composer_more_send)) and hasClickAction()).performClick()
+            tapSheet(s(R.string.composer_later))
+            waitFor(s(R.string.chat_send_now))
+
+            // 撤回并编辑：排队的消息没了，字回到输入框
+            rule.onNode(hasContentDescription(s(R.string.chat_withdraw)) and hasClickAction()).performClick()
+            rule.waitUntil(20_000) { rule.onAllNodes(hasText(s(R.string.chat_send_now))).fetchSemanticsNodes().isEmpty() }
+            rule.onNode(hasSetTextAction()).assert(hasText("Make it blue"))
+
+            // ⌄ 里的"停止"：回合停下，输入框里的字不动
+            rule.onNode(hasContentDescription(s(R.string.composer_more_send)) and hasClickAction()).performClick()
+            tapSheet(s(R.string.composer_stop))
+            waitFor(s(R.string.chat_turn_stopped))
+            rule.onNode(hasSetTextAction()).assert(hasText("Make it blue"))
+        } finally {
+            nextTurn(siteB, """{"hold":false}""")
+        }
+    }
+
+    private fun waitForDescription(description: String) = explain("waitForDescription \"$description\"") {
+        rule.waitUntil(20_000) { rule.onAllNodes(hasContentDescription(description)).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test
@@ -374,8 +464,13 @@ class AppUiTest {
         }
     }
 
+    private val res get() = context.resources
+
     private companion object {
         val JSON = "application/json".toMediaType()
+
+        /** 假主站的 Agent 默认的回复。 */
+        const val REPLY = "收到。"
     }
 }
 

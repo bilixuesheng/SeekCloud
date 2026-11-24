@@ -18,9 +18,13 @@ import cn.seekcloud.app.AppViewModel
 import cn.seekcloud.app.Screen
 import cn.seekcloud.app.connect.ConnectRoute
 import cn.seekcloud.app.net.PreferencesStore
+import cn.seekcloud.app.net.eventStream
+import cn.seekcloud.app.sessions.HttpSessionPageApi
 import cn.seekcloud.app.sessions.NewSessionApi
 import cn.seekcloud.app.sessions.NewSessionViewModel
 import cn.seekcloud.app.sessions.SessionListViewModel
+import cn.seekcloud.app.sessions.SessionViewModel
+import cn.seekcloud.app.sessions.SessionsApi
 
 /** 按 [AppViewModel]（[app]）现在的页面画出来，页面之间淡入淡出。 */
 @Composable
@@ -75,6 +79,20 @@ fun AppRoot(app: AppViewModel = viewModel()) {
                             source = NewSessionApi(app.client(current.server)),
                             store = PreferencesStore(context.applicationContext, "new-session"),
                             serverId = current.server.id,
+                            onSignedOut = { app.signedOut(current.server) },
+                        )
+                    }
+                },
+                sessionPage = { shortId ->
+                    viewModel(key = "session:${current.server.id}:${current.server.origin}:$shortId") {
+                        val client = app.client(current.server)
+                        SessionViewModel(
+                            shortId = shortId,
+                            api = HttpSessionPageApi(client),
+                            actions = SessionsApi(client),
+                            stream = { last, onConnected ->
+                                eventStream(client.http, client.address.url("/api/sessions/$shortId/events"), last, onConnected = onConnected)
+                            },
                             onSignedOut = { app.signedOut(current.server) },
                         )
                     }
