@@ -134,11 +134,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (_login.value.failure != null) _login.value = _login.value.copy(failure = null)
     }
 
-    /** 进了登录页：看看主站是不是还没设置密码。 */
+    /** 进了登录页：在后台看看主站是不是还没设置密码。不挡着输密码。 */
     fun checkSetup(server: SavedServer) {
         viewModelScope.launch {
-            _login.value = _login.value.copy(busy = true)
-            _login.value = _login.value.copy(busy = false, needsSetup = flow.needsSetup(server))
+            val needsSetup = flow.needsSetup(server)
+            _login.value = _login.value.copy(needsSetup = needsSetup)
         }
     }
 

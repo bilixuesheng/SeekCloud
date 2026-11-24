@@ -87,7 +87,11 @@ class AppUiTest {
     private fun tapInDialog(text: String) =
         rule.onNode(hasText(text) and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
 
-    private fun type(text: String) = rule.onNode(hasSetTextAction()).performTextReplacement(text)
+    /** 往页面上唯一的输入框里填字：等它能输入了再填（正在连接、正在登录时输入框是禁用的）。 */
+    private fun type(text: String) {
+        rule.waitUntil(20_000) { rule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNode(hasSetTextAction()).performTextReplacement(text)
+    }
 
     /** 在"连接服务器"页连一台 http 的假主站：要确认"连接未加密"。 */
     private fun connect(site: String) {
