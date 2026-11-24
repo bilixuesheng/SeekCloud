@@ -120,6 +120,7 @@ If images cannot be pulled, configure a registry mirror for Docker in `/etc/dock
 | `apps/site` | Main site: Hono API and React PWA |
 | `apps/host` | Sandbox host daemon: Git proxy, commit signing, GitHub tools service |
 | `apps/host/sandbox` | Git configuration, hooks and signing helper installed in the sandbox |
+| `apps/android` | Android app (Kotlin, Jetpack Compose), a separate Gradle project outside the pnpm workspace. Run `./gradlew testDebugUnitTest lintDebug assembleDebug` in it; requires JDK 17 or later and the Android SDK |
 | `packages/protocol` | Protocol definitions shared by the main site and the sandbox host |
 | `docs/adr` | Architecture decision records (in Chinese) |
 | `docs/brand` | Logo, colors and interface copy guidelines (in Chinese) |
