@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 默认只连 HTTPS、只认系统信任的证书。内网的 HTTP 和自签证书要管理员连接时明确确认（#123），在 App 的网络层里放行。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

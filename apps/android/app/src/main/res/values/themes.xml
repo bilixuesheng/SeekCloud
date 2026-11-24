@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 界面都是 Compose 画的，这里只管启动时窗口的底色 -->
+<resources>
+    <style name="Theme.SeekCloud" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+</resources>
