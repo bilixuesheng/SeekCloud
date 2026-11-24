@@ -19,7 +19,8 @@
     "host:create": "tsx src/server/cli/host.ts create",
     "host:revoke": "tsx src/server/cli/host.ts revoke",
     "model-catalog": "tsx src/server/cli/model-catalog.ts",
-    "openapi:export": "UPDATE_ANDROID_API=1 vitest run src/server/android-api.test.ts"
+    "openapi:export": "UPDATE_ANDROID_API=1 vitest run src/server/android-api.test.ts",
+    "android:strings": "UPDATE_ANDROID_STRINGS=1 vitest run src/client/i18n/android.test.ts"
   },
   "dependencies": {
     "@fontsource/noto-serif-sc": "^5.3.1",

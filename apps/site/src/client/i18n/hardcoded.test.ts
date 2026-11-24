@@ -11,7 +11,12 @@ import { describe, expect, it } from "vitest";
  */
 
 /** 本身就是文案的文件（目录、中文的问候语，和各种语言用自己的文字写的名字）。 */
-const CATALOGS = new Set(["i18n/zh.ts", "i18n/catalog.ts", "i18n/greetings-zh.ts"]);
+const CATALOGS = new Set([
+  "i18n/zh.ts",
+  "i18n/app-zh.ts",
+  "i18n/catalog.ts",
+  "i18n/greetings-zh.ts",
+]);
 
 /** 给开发者看的话（控制台提示、程序用错时抛的错）不是界面文案：那一行或上一行写上这个注释就不算。 */
 const NOT_UI = "不是界面文案";

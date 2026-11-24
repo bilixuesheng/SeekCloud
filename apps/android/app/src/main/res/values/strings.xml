@@ -1,4 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 由 apps/site/src/client/i18n/app-zh.ts、app-en.ts 生成，不要手改；重新生成的命令是 apps/site/package.json 里的 android:strings -->
 <resources>
     <string name="app_name">SeekCloud</string>
+    <string name="cancel">Cancel</string>
+    <string name="connect_title">Connect to server</string>
+    <string name="connect_hint">Enter the address of your SeekCloud site, for example seekcloud.example.com.</string>
+    <string name="connect_address">Server address</string>
+    <string name="connect_button">Connect</string>
+    <string name="connect_connecting">Connecting…</string>
+    <string name="connect_connected">Connected to %1$s</string>
+    <string name="connect_invalid">Invalid address. Enter a domain name or an IP address, optionally with a port.</string>
+    <string name="connect_unreachable">Unable to connect to this address. Check the address and your network, then try again.</string>
+    <string name="connect_not_seekcloud">There is no SeekCloud site at this address. Check that the address is correct.</string>
+    <string name="connect_unavailable">The SeekCloud site is temporarily unavailable. Try again later.</string>
+    <string name="connect_tls_failure">Unable to establish a secure connection to this server.</string>
+    <string name="connect_app_too_old">This site requires app version %1$s or later. Update the app first.</string>
+    <string name="connect_cleartext_title">Unencrypted connection</string>
+    <string name="connect_cleartext_body">This address uses HTTP. The connection is not encrypted, so people on the same network can see your password and code. Only connect this way on a trusted private network.</string>
+    <string name="connect_cleartext_confirm">Connect anyway</string>
+    <string name="connect_cert_title">Untrusted certificate</string>
+    <string name="connect_cert_body">This server\'s certificate is not trusted by the system and may be self-signed. Make sure the fingerprint below matches the certificate on the server before you continue.</string>
+    <string name="connect_cert_changed_title">Certificate changed</string>
+    <string name="connect_cert_changed_body">This server\'s certificate is different from the one you confirmed before. If the server\'s certificate was not replaced, the connection may have been intercepted. Confirm the new certificate\'s fingerprint before you continue.</string>
+    <string name="connect_cert_fingerprint">SHA-256 fingerprint</string>
+    <string name="connect_cert_trust">Trust this certificate</string>
 </resources>

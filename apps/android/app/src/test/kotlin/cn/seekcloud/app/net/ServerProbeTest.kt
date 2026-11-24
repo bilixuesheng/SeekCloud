@@ -121,4 +121,24 @@ class ServerProbeTest {
         assertTrue(isAppTooOld("1.0.0-rc.1", "1.0.1"))
         assertFalse(isAppTooOld("1.0.0", "weird"))
     }
+
+    private fun redirect(location: String) =
+        server.enqueue(MockResponse.Builder().code(301).addHeader("Location", location).body("moved").build())
+
+    @Test
+    fun httpRedirectToHttpsOnTheSameHostSwitchesToHttps() {
+        redirect("https://${server.hostName}/api/health")
+        assertEquals(ProbeResult.UseHttps(ServerAddress(true, server.hostName, null)), probe(http()))
+        redirect("https://${server.hostName}:8443/api/health")
+        assertEquals(ProbeResult.UseHttps(ServerAddress(true, server.hostName, 8443)), probe(http()))
+    }
+
+    @Test
+    fun otherRedirectsAreNotFollowed() {
+        redirect("https://elsewhere.example.com/api/health")
+        assertEquals(ProbeResult.NotSeekCloud, probe(http()))
+        redirect("http://${server.hostName}:1/api/health")
+        assertEquals(ProbeResult.NotSeekCloud, probe(http()))
+        assertEquals(2, server.requestCount)
+    }
 }

@@ -1,0 +1,47 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { ANDROID_LOCALES, androidStrings, androidText } from "./android";
+
+/**
+ * 安卓 App 的 strings.xml 从文案目录生成（#204）。改了 app-zh.ts、app-en.ts 而没重新生成时失败。
+ * 重新生成：在仓库根目录运行 pnpm --filter @seekcloud/site android:strings
+ */
+const RES = new URL("../../../../android/app/src/main/res/", import.meta.url);
+const COMMAND = "pnpm --filter @seekcloud/site android:strings";
+
+describe("安卓 App 的文案", () => {
+  for (const { locale, dir } of ANDROID_LOCALES) {
+    it(`${dir}/strings.xml 是最新的`, () => {
+      const file = new URL(`${dir}/strings.xml`, RES);
+      const text = androidStrings(locale);
+      if (process.env.UPDATE_ANDROID_STRINGS) writeFileSync(file, text);
+      expect(
+        readFileSync(file, "utf8") === text,
+        `App 的文案改了而 strings.xml 没有重新生成：在仓库根目录运行 ${COMMAND}`,
+      ).toBe(true);
+    });
+  }
+
+  it("插值按中文里第一次出现的顺序编号，两种语言一样", () => {
+    expect(androidText("{a} 和 {b}", "X", ["a", "b"])).toBe("%1$s 和 %2$s");
+    expect(androidText("{b} then {a}", "X", ["a", "b"])).toBe("%2$s then %1$s");
+    expect(androidText("{count} items", "X", ["count"])).toBe("%1$d items");
+    expect(() => androidText("{c}", "X", ["a"])).toThrow();
+  });
+
+  it("品牌名直接写进去", () => {
+    expect(androidText("Welcome to {brand}", "SeekCloud", [])).toBe("Welcome to SeekCloud");
+  });
+
+  it("照安卓资源的规矩转义", () => {
+    expect(androidText(`It's "ok" \\ <b> & more`, "X", [])).toBe(
+      `It\\'s \\"ok\\" \\\\ &lt;b&gt; &amp; more`,
+    );
+    expect(androidText("@home", "X", [])).toBe("\\@home");
+    expect(androidText("?why", "X", [])).toBe("\\?why");
+    expect(androidText("100% of {a}", "X", ["a"])).toBe("100%% of %1$s");
+    expect(androidText("100%", "X", [])).toBe("100%");
+    expect(() => androidText(" padded", "X", [])).toThrow();
+    expect(() => androidText("two  spaces", "X", [])).toThrow();
+  });
+});

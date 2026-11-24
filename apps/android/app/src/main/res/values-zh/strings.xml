@@ -1,4 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 由 apps/site/src/client/i18n/app-zh.ts、app-en.ts 生成，不要手改；重新生成的命令是 apps/site/package.json 里的 android:strings -->
 <resources>
     <string name="app_name">云上求索</string>
+    <string name="cancel">取消</string>
+    <string name="connect_title">连接服务器</string>
+    <string name="connect_hint">输入云上求索主站的地址，例如 seekcloud.example.com。</string>
+    <string name="connect_address">服务器地址</string>
+    <string name="connect_button">连接</string>
+    <string name="connect_connecting">正在连接…</string>
+    <string name="connect_connected">已连接至 %1$s</string>
+    <string name="connect_invalid">地址格式无效。请输入域名或 IP 地址，可以带端口。</string>
+    <string name="connect_unreachable">无法连接到该地址。请检查地址和网络后重试。</string>
+    <string name="connect_not_seekcloud">该地址上没有云上求索主站。请检查地址是否正确。</string>
+    <string name="connect_unavailable">云上求索主站暂时不可用，请稍后重试。</string>
+    <string name="connect_tls_failure">无法与该服务器建立安全连接。</string>
+    <string name="connect_app_too_old">该主站要求 App 版本不低于 %1$s，请先更新 App。</string>
+    <string name="connect_cleartext_title">连接未加密</string>
+    <string name="connect_cleartext_body">该地址使用 HTTP，连接未加密，同一网络中的人能看到你的密码和代码。请只在可信的内网中这样连接。</string>
+    <string name="connect_cleartext_confirm">仍然连接</string>
+    <string name="connect_cert_title">证书不受信任</string>
+    <string name="connect_cert_body">该服务器的证书不受系统信任，可能是自签证书。请确认下面的指纹与服务器上的证书一致后再继续。</string>
+    <string name="connect_cert_changed_title">证书已更改</string>
+    <string name="connect_cert_changed_body">该服务器的证书与上次确认的不同。如果服务器没有更换证书，连接可能已被拦截。请确认新证书的指纹后再继续。</string>
+    <string name="connect_cert_fingerprint">SHA-256 指纹</string>
+    <string name="connect_cert_trust">信任此证书</string>
 </resources>
