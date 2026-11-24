@@ -51,9 +51,12 @@ export interface Identity {
   routes: Hono<Env>;
 }
 
-/** 在读写设置的人。 */
+/**
+ * 在读写设置的人。userId 为 null 时是站点自己在读，还没有确定是谁：比如登录之前按来源限速，要先读
+ * "主站前面有几层反向代理"（proxy_hops）才知道来源是哪个地址。这样读的设置只用默认值和库里存的值，没有"这个人"。
+ */
 export interface SettingsActor {
-  userId: string;
+  userId: string | null;
 }
 
 /**

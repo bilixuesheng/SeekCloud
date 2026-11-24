@@ -116,7 +116,7 @@ export async function createTestApp(options: TestAppOptions = {}) {
   });
   const deps: AppDeps = {
     ...base,
-    identity: (options.identity ?? adminIdentity)(base),
+    identity: (options.identity ?? adminIdentity)({ ...base, settingsPolicy }),
     settingsPolicy,
     modelAdmission: options.modelAdmission ?? usageAdmission(base),
     providerRouting:

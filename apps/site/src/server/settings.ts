@@ -30,6 +30,9 @@ export const HostOfflineGraceValue = z
     error: "不支持这个时长",
   });
 
+/** 主站前面有几层反向代理（#94）。 */
+export const ProxyHopsValue = z.number().int().min(0).max(5);
+
 /** 界面语言：跟随浏览器、简体中文、英文（和浏览器端 i18n/catalog.ts 的 LANGUAGE_SETTINGS 一致）。 */
 export const LanguageValue = z.enum(["auto", "zh-CN", "en"]);
 
@@ -59,6 +62,13 @@ export const SETTINGS = {
    */
   language: { shape: LanguageValue, fallback: "auto" as z.infer<typeof LanguageValue> },
   /**
+   * 主站前面有几层反向代理（#94），决定客户端的地址怎么取（rate-limit.ts 的 clientAddress）：0 层用连接的来源地址，
+   * 不看 X-Forwarded-For；N 层取它的倒数第 N 个。按来源限速、登录设备、访问记录都靠它。默认 1 层（Compose 部署里的
+   * Caddy）；安装脚本用环境变量 SEEKCLOUD_PROXY_HOPS 写初始值（adminSettingsFrom），库里存了就以库里的为准。
+   * 站点自己读（actor 的 userId 为 null）：登录之前就要用。
+   */
+  proxy_hops: { shape: ProxyHopsValue, fallback: 1 as number },
+  /**
    * 模型提供方（设置的"模型"：提供方、key、模型列表，#113）。内容存在 model_providers、provider_models 两张表里，
    * 不在这一项；这一项只用来问规则能不能改（SettingsPolicy.canWrite），下游可以不让普通用户改。
    */
@@ -73,6 +83,26 @@ export const adminSettings: SettingsPolicy = {
   defaultValue: <K extends SettingKey>(key: K) => SETTINGS[key].fallback as SettingValue<K>,
   canWrite: () => true,
 };
+
+/**
+ * 主干的规则，加上部署时用环境变量给的初始值（main.ts 用它）：现在只有 SEEKCLOUD_PROXY_HOPS（安装脚本按装没装
+ * Caddy 写好）。库里存了值就以库里的为准，所以之后在设置里改得了。值不对时启动就报错，免得悄悄按默认的算。
+ */
+export function adminSettingsFrom(env: Record<string, string | undefined>): SettingsPolicy {
+  const raw = env.SEEKCLOUD_PROXY_HOPS?.trim();
+  if (!raw) return adminSettings;
+  const hops = ProxyHopsValue.safeParse(Number(raw));
+  if (!/^\d+$/.test(raw) || !hops.success) {
+    throw new Error(`环境变量 SEEKCLOUD_PROXY_HOPS 应该是 0 到 5 的整数，现在是 ${raw}`);
+  }
+  return {
+    defaultValue: <K extends SettingKey>(key: K, actor: SettingsActor) =>
+      key === "proxy_hops"
+        ? (hops.data as SettingValue<K>)
+        : adminSettings.defaultValue(key, actor),
+    canWrite: adminSettings.canWrite,
+  };
+}
 
 type ReadDeps = Pick<AppDeps, "db" | "settingsPolicy">;
 type WriteDeps = Pick<AppDeps, "db" | "clock" | "settingsPolicy">;

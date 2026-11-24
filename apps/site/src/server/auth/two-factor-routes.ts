@@ -124,7 +124,7 @@ export async function reauthenticate(
   password: string,
   code: string | undefined,
 ) {
-  const checked = await limited(limiter, c, async () =>
+  const checked = await limited(deps, limiter, c, async () =>
     (await checkPassword(deps.db, password)) === userId ? true : undefined,
   );
   if (checked.wait > 0) return tooFrequent(c, checked.wait);
@@ -133,7 +133,7 @@ export async function reauthenticate(
   if (!code?.trim()) {
     return c.json(apiError("code_required", "请输入两步验证的验证码"), 400);
   }
-  const verified = await limited(limiter, c, async () =>
+  const verified = await limited(deps, limiter, c, async () =>
     (await verifySecondFactor(deps, userId, code)) ? true : undefined,
   );
   if (verified.wait > 0) return tooFrequent(c, verified.wait);

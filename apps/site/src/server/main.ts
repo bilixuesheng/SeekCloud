@@ -12,7 +12,7 @@ import { startMaintenance } from "./maintenance";
 import { createModelCatalog } from "./models/providers";
 import { systemClock } from "./ports";
 import { SecretBox } from "./secrets";
-import { adminSettings } from "./settings";
+import { adminSettingsFrom } from "./settings";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -26,6 +26,8 @@ const secrets = new SecretBox(Buffer.from(required("SEEKCLOUD_SECRET_KEY"), "bas
 
 const { db } = connectDatabase(databaseUrl);
 await runMigrations(db);
+// 设置的读写规则：主干的规则，加上安装脚本用环境变量写的初始值（比如前面有几层反向代理）。
+const settingsPolicy = adminSettingsFrom(process.env);
 
 const base = {
   version: process.env.SEEKCLOUD_VERSION ?? "dev",
@@ -43,18 +45,19 @@ const base = {
         callbackUrl: `${required("PUBLIC_URL")}/api/auth/github/callback`,
       })
     : unconfiguredGitHub,
-  secureCookies: process.env.NODE_ENV === "production",
+  // 主站对外的地址是 HTTPS 时 Cookie 总是带 Secure；没配时按每个请求是不是经 HTTPS 来的定（装好后先用 http 打开）
+  secureCookies: process.env.PUBLIC_URL?.startsWith("https://") ?? false,
   publicUrl: process.env.PUBLIC_URL,
+  settingsPolicy,
 };
 // 提供方和模型：路由和主站共用一个（DeepSeek 发布的模型列表缓存在里面）。
-const models = createModelCatalog({ ...base, settingsPolicy: adminSettings });
+const models = createModelCatalog(base);
 // 扩展点（ADR 0010）：主干用单管理员的实现。
 const deps: AppDeps = {
   ...base,
   identity: adminIdentity(base),
-  settingsPolicy: adminSettings,
   modelAdmission: usageAdmission(base),
-  providerRouting: configuredRouting({ ...base, settingsPolicy: adminSettings }, models),
+  providerRouting: configuredRouting(base, models),
   errorPresentation: transparentErrors,
   models,
 };

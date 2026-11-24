@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AppDeps } from "../app";
+import { secureCookie } from "../https";
 import type { GitHubTokens, GitHubUser } from "./port";
 import { connectGitHub } from "./tokens";
 
@@ -20,7 +21,7 @@ export function startGitHubLink(deps: AppDeps, c: Context): string {
   setCookie(c, STATE_COOKIE, `${state}|${next}`, {
     httpOnly: true,
     sameSite: "Lax",
-    secure: deps.secureCookies,
+    secure: secureCookie(c, deps),
     path: COOKIE_PATH,
     maxAge: TEN_MINUTES,
   });

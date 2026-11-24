@@ -39,9 +39,14 @@ describe("设置的读写规则", () => {
       text: "看看",
     });
     expect((await res.json()).effort).toBe("low");
-    expect(asked.filter((a) => a.kind === "default").every((a) => a.actor.userId === me)).toBe(
+    // 按某个人读的都是这个管理员；"前面有几层反向代理"是站点自己读的（登录之前就要用），没有人
+    const defaults = asked.filter((a) => a.kind === "default");
+    expect(defaults.filter((a) => a.key !== "proxy_hops").every((a) => a.actor.userId === me)).toBe(
       true,
     );
+    expect(
+      defaults.filter((a) => a.key === "proxy_hops").every((a) => a.actor.userId === null),
+    ).toBe(true);
   });
 
   it("规则不让改的设置，修改回 403 setting_locked，值不变", async () => {

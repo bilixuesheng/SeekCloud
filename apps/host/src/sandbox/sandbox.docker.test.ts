@@ -48,14 +48,15 @@ describe.skipIf(!enabled)("沙箱（真的 Docker）", { timeout: 120_000 }, () 
     await docker.ensureImage(IMAGE);
     net = await ensureSandboxNetwork({ name: spec.network, bridge: `sc${pool}` }, docker);
     sandboxes = new Sandboxes(spec, docker, root);
-  });
+  }, 120_000);
+  // 删沙箱要等容器停下、数据删完：测试机上和别的沙箱测试一起跑时会超过默认的 10 秒
   afterAll(async () => {
     for (const s of servers) s.close();
     if (!sandboxes) return;
     for (const s of await sandboxes.list()) await sandboxes.remove(s.sessionId);
     await removeFirewall({ bridge: net.bridge, chain }, root);
     await removeSandboxNetwork(spec.network, docker);
-  });
+  }, 120_000);
 
   const sh = async (sessionId: string, script: string, ...args: string[]) => {
     const r = await sandboxes.exec(sessionId, ["sh", "-c", script, "sh", ...args]);

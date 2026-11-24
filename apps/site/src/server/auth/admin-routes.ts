@@ -183,7 +183,7 @@ export async function checkLimited(
   c: Context,
   password: string,
 ): Promise<{ wait: number; userId?: string }> {
-  const { wait, value } = await limited(limiter, c, () => checkPassword(deps.db, password));
+  const { wait, value } = await limited(deps, limiter, c, () => checkPassword(deps.db, password));
   return { wait, userId: value };
 }
 
@@ -226,7 +226,7 @@ export function authRoutes(deps: LoginDeps, limiter: RateLimiter) {
       if (!pending) {
         return c.json(apiError("login_expired", "登录已超时，请重新输入密码"), 400);
       }
-      const { wait, value } = await limited(limiter, c, () =>
+      const { wait, value } = await limited(deps, limiter, c, () =>
         verifySecondFactor(deps, pending.userId, code),
       );
       if (wait > 0) return tooFrequent(c, wait);

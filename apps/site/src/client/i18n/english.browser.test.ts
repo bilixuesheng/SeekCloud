@@ -122,9 +122,10 @@ describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
 
     it("首页：<html lang> 是英文，问候语、提示、输入框、环境和仓库都是英文", async () => {
       expect(await page.evaluate(() => document.documentElement.lang)).toBe("en");
-      expect(await page.locator(".awaiting-hint-text").textContent()).toBe(
-        "Upgrade packages is waiting for your input",
-      );
+      // 会话列表是页面画出来以后才到的：之前提示收着，里面是"0 sessions…"，要等到列表到了再看
+      const hint = page.locator(".awaiting-hint-text", { hasText: "Upgrade packages" });
+      await hint.waitFor();
+      expect(await hint.textContent()).toBe("Upgrade packages is waiting for your input");
       expect(await page.locator(".composer-below-options").textContent()).toContain("Default");
       expect(await han()).toBe("");
     });

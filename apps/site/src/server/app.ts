@@ -37,7 +37,10 @@ export interface AppDeps {
   version: string;
   db: Database;
   clock: Clock;
-  /** 生产环境里登录 Cookie 只走 HTTPS。 */
+  /**
+   * Cookie 总是带 Secure（只走 HTTPS）：主站对外的地址（PUBLIC_URL）是 HTTPS 时开。不开时按每个请求是不是经 HTTPS
+   * 来的定（https.ts 的 secureCookie）。
+   */
   secureCookies: boolean;
   github: GitHub;
   /** 加密存放令牌等敏感内容。 */

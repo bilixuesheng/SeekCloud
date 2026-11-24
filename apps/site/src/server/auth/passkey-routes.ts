@@ -220,7 +220,7 @@ export function passkeyRoutes(deps: LoginDeps, limiter: RateLimiter) {
     .openapi(loginRoute, async (c) => {
       if (!rp) return c.json(unavailable(), 409);
       const { credential, client, deviceName } = c.req.valid("json");
-      const { wait, value: userId } = await limited(limiter, c, () =>
+      const { wait, value: userId } = await limited(deps, limiter, c, () =>
         finishAuthentication(
           deps,
           challenges,

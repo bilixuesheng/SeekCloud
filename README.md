@@ -12,7 +12,7 @@ SeekCloud 是一个可以自己部署的云端编程 Agent，支持 DeepSeek 模
 
 **早期开发中，目前不能用于实际部署。**
 
-Agent 执行尚未实现：沙箱宿主机已经可以连接主站，但还不能创建沙箱。没有宿主机连接时，新会话一直处于排队状态；有宿主机连接时，新会话会以"无法创建沙箱"失败。界面目前只有中文。
+Agent 已经能在沙箱中完整地执行一个回合：克隆仓库、修改代码、提交并推送到会话分支。这一流程已在测试机上验证，验证时使用的是模拟的 GitHub 和模型，尚未用真实的 GitHub 仓库和 DeepSeek 验收。主站可以用安装脚本部署（见下文"部署"），沙箱宿主机目前需要手动安装。界面有中文和英文两种。
 
 已完成的部分：
 
@@ -29,7 +29,80 @@ Agent 执行尚未实现：沙箱宿主机已经可以连接主站，但还不�
 - 检查更新和一键更新：在设置中检查新版本，一键更新到本仓库发布的版本，正在运行的会话不中断
 - 更多 Agent 功能：开放沙箱中的 Agent（dsh）目前未开放的插件市场、几种模式（如创造模式）、轨迹视图等
 - GitHub 上的 AI 标识：issue、PR 和评论末尾的署名以及提交尾注默认注明由 AI 生成，可以在设置中关闭
-- 英文界面
+
+## 部署
+
+主站（网页和接口）、PostgreSQL 和反向代理 Caddy 用 Docker Compose 运行，安装脚本一条命令装好。支持 Ubuntu 22.04、24.04 和 Debian 12（amd64 或 arm64）。
+
+在服务器上用 root 运行：
+
+```sh
+curl -fsSLO https://github.com/bilixuesheng/SeekCloud/releases/latest/download/install.sh
+curl -fsSLO https://github.com/bilixuesheng/SeekCloud/releases/latest/download/SHA256SUMS
+sha256sum --check --ignore-missing SHA256SUMS && sudo bash install.sh
+```
+
+本仓库发布第一个版本之后才有这两个文件。在那之前，可以克隆本仓库，自己构建主站的镜像再安装：
+
+```sh
+docker build -f apps/site/Dockerfile -t seekcloud-site:dev .
+sudo bash scripts/install.sh --image seekcloud-site:dev
+```
+
+安装脚本会：
+
+1. 检查系统、内存和磁盘；内存不到 1 GB 时提示可能不够。机器是 LXC、OpenVZ 这类容器时，主站照样能装，但这台机器不能当沙箱宿主机。
+2. 没有 Docker 时，从 Docker 的软件源安装 Docker Engine（核对 Docker 官方签名密钥的指纹）。
+3. 生成 `SEEKCLOUD_SECRET_KEY` 和数据库密码，写进只有 root 能读的文件，不在终端显示。
+4. 测试几个公开的镜像站和默认的镜像仓库，从拉得最快的拉取镜像。
+5. 启动，等主站的健康检查通过，打印网页地址。
+
+装好以后，**请立即打开网页设置管理员密码**：设置之前，任何打开这个地址的人都能成为管理员。然后在"设置 → 模型"中填写 DeepSeek API key。
+
+安装脚本可以重复运行：已有的密钥和数据不变，只补缺的部分。
+
+| 参数 | 说明 |
+|---|---|
+| `--data-dir 目录` | 数据、密钥和 Compose 文件的位置，默认 `/var/lib/seekcloud` |
+| `--no-caddy` | 不安装 Caddy，供已经有反向代理的服务器使用。主站只监听 `127.0.0.1:端口`，由你的反向代理转发过来 |
+| `--port 端口` | 使用 `--no-caddy` 时主站监听的端口，默认 3000 |
+| `--proxy-hops 层数` | 主站前面有几层反向代理，默认 1 |
+| `--registry 地址` | 所有镜像都从这个镜像仓库或镜像站拉取，不再测试公开的镜像站 |
+| `--image 镜像` | 主站使用的镜像，默认是与安装脚本同一版本的发布镜像 |
+| `--lang zh\|en` | 提示的语言 |
+
+数据目录里的内容：
+
+| 位置 | 内容 |
+|---|---|
+| `compose.yml`、`Caddyfile` | 安装脚本生成，重新运行时会覆盖 |
+| `site.env`、`postgres.env` | 密钥和数据库密码，只有 root 能读。**`SEEKCLOUD_SECRET_KEY` 不在备份中，请另外保存 `site.env`**：密钥丢失后，库中加密的令牌和 key 都无法使用 |
+| `postgres/` | 数据库 |
+| `site/` | 主站的数据目录（导出的压缩包、Agent 的会话文件） |
+| `caddy/` | Caddy 的证书和配置 |
+
+数据库只在 Compose 的内部网络中，不对外开放；主站以非 root 用户运行。刚装好时用 `http://服务器地址/` 访问；域名和 HTTPS 将在部署向导中配置。
+
+常用操作（`<数据目录>` 默认是 `/var/lib/seekcloud`）：
+
+```sh
+# 查看日志
+docker compose -f <数据目录>/compose.yml logs -f site
+# 忘记管理员密码：打印一个随机的新密码，所有设备退出登录
+docker compose -f <数据目录>/compose.yml exec site node dist/server/reset-password.js
+# 添加沙箱宿主机：打印宿主机密钥（见"连接沙箱宿主机"）
+docker compose -f <数据目录>/compose.yml exec site node dist/server/host.js create <名字>
+```
+
+使用 `--no-caddy` 时，你的反向代理需要：
+
+- 把客户端地址追加到 `X-Forwarded-For`，并设置 `X-Forwarded-Proto`；
+- 转发 WebSocket（沙箱宿主机通过 `/api/hosts/connect` 连接主站）；
+- 不缓冲 `text/event-stream` 的响应（会话页的实时更新）。
+
+前面不止一层反向代理时（比如 CDN 加上你自己的反向代理），用 `--proxy-hops` 设置层数。层数设多了，客户端可以伪造地址绕过按来源的频率限制；设少了，所有人都会被当成同一个地址。
+
+拉不动镜像时，可以在 `/etc/docker/daemon.json` 中给 Docker 配置镜像加速（`registry-mirrors`），运行 `systemctl restart docker` 后再运行安装脚本；也可以用 `--registry` 指定一个镜像站。
 
 ## 开发
 
@@ -95,9 +168,11 @@ pnpm dev
 | `PORT` | 监听端口，默认 3000 |
 | `SEEKCLOUD_DATA_DIR` | 数据目录，存放导出的压缩包，默认 `./data` |
 | `SEEKCLOUD_VERSION` | 版本号，由健康检查接口 `/api/health` 返回，默认 `dev` |
-| `NODE_ENV` | 设为 `production` 时，登录 Cookie 只通过 HTTPS 发送 |
-| `PUBLIC_URL` | 主站对外的地址，GitHub 回调使用 |
+| `PUBLIC_URL` | 主站对外的地址，GitHub 回调、通行密钥使用。以 `https://` 开头时，登录 Cookie 只通过 HTTPS 发送；未配置时，按每个请求是否经 HTTPS 到达决定 |
+| `SEEKCLOUD_PROXY_HOPS` | 主站前面有几层反向代理（0 到 5），默认 1。0 表示主站直接对外，按连接的来源地址识别客户端；N 表示取 `X-Forwarded-For` 的倒数第 N 个。只是初始值，之后可以在设置里修改。填错会让按来源的频率限制失效或误伤所有人 |
 | `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GITHUB_APP_SLUG`、`GITHUB_WEBHOOK_SECRET` | GitHub App 的配置。未配置时，GitHub 相关功能不可用 |
+
+`pnpm build` 构建前端（`apps/site/dist/client`）和服务端（`apps/site/dist/server`），之后在 `apps/site` 中用 `pnpm start` 运行构建好的主站。
 
 忘记管理员密码时，在 `apps/site` 中运行 `DATABASE_URL=... pnpm admin:reset-password`。它会打印一个随机的新密码，并让所有设备退出登录。
 
