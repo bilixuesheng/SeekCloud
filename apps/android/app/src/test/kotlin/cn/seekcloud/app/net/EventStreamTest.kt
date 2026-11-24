@@ -20,7 +20,8 @@ import org.junit.Test
 class EventStreamTest {
     private val server = MockWebServer()
     private val http = OkHttpClient()
-    private val waits = mutableListOf<Long>()
+    // 等待是在读事件流的线程上记的
+    private val waits = java.util.concurrent.CopyOnWriteArrayList<Long>()
 
     @Before
     fun start() = server.start()
@@ -71,8 +72,8 @@ class EventStreamTest {
         // 逐字输出没有序号，不改"最后一个序号"
         assertEquals("2", server.takeRequest().headers["Last-Event-ID"])
         assertEquals("2", server.takeRequest().headers["Last-Event-ID"])
-        // 503 不算连上：第二次等得更久
-        assertEquals(listOf(1_000L, 2_000L), waits)
+        // 503 不算连上：第二次等得更久。收够 4 条、流取消之前，第三次连接读完可能已经又等了一次，不看它
+        assertEquals(listOf(1_000L, 2_000L), waits.take(2))
     }
 
     @Test
