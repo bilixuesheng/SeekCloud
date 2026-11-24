@@ -60,9 +60,12 @@ export const appZh = {
   login_verifying: "正在验证…",
   switch_server: "更换服务器",
 
-  // 登录以后的首页：会话列表做好以前，先放登录状态（#124）
-  home_signed_in: "已登录至 {host}",
-  home_greeting: "{name}，你好",
+  // 会话列表（#124）：分类的名字、空白页、状态的说法用网页目录里的（sidebar_*、session_list_*、status_*）
+  sessions_offline: "连接已断开，正在重连…",
+  sessions_more: "更多选项",
+  sessions_clear_search: "清除搜索",
+  sessions_expand: "展开",
+  sessions_collapse: "收起",
   sign_out: "退出登录",
   sign_out_title: "退出登录",
   sign_out_body: "此设备将退出 {host} 的登录。",

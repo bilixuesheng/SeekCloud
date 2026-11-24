@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -76,11 +77,18 @@ class AppUiTest {
         rule.waitForIdle()
     }
 
-    /** 页面上（不在弹窗里）的按钮：页面能滚动，先滚到它那里再点。 */
+    /** 页面上（不在弹窗里）的按钮：页面能滚动时先滚到它那里再点。 */
     private fun tap(text: String) {
-        rule.onNode(hasText(text) and hasClickAction() and !hasAnyAncestor(isDialog()))
-            .performScrollTo()
-            .performClick()
+        val node = rule.onNode(hasText(text) and hasClickAction() and !hasAnyAncestor(isDialog()))
+        runCatching { node.performScrollTo() }
+        node.performClick()
+    }
+
+    /** 会话列表右上角的"更多选项"里的一项。 */
+    private fun menu(text: String) {
+        rule.onNode(hasContentDescription(s(R.string.sessions_more))).performClick()
+        waitFor(text)
+        tap(text)
     }
 
     /** 弹窗里的按钮。 */
@@ -106,7 +114,14 @@ class AppUiTest {
     private fun signIn() {
         type(password)
         tap(s(R.string.login_button))
-        waitFor(s(R.string.home_signed_in, HOST))
+        waitForList()
+    }
+
+    /** 登录以后进会话列表：等顶栏的"搜索会话"出来（别的测试可能已经在这台假主站上发起过会话，不看列表是不是空的）。 */
+    private fun waitForList() {
+        val search = s(R.string.sidebar_search)
+        rule.waitUntil(20_000) { rule.onAllNodes(hasContentDescription(search)).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitForIdle()
     }
 
     @Test
@@ -116,8 +131,8 @@ class AppUiTest {
         signIn()
         // 重新打开 App 还是登录着的
         launch()
-        waitFor(s(R.string.home_signed_in, HOST))
-        tap(s(R.string.sign_out))
+        waitForList()
+        menu(s(R.string.sign_out))
         tapInDialog(s(R.string.sign_out))
         waitFor(s(R.string.login_password))
     }
@@ -136,7 +151,7 @@ class AppUiTest {
         launch()
         connect(siteA)
         signIn()
-        tap(s(R.string.switch_server))
+        menu(s(R.string.switch_server))
         waitFor(s(R.string.servers_add))
         tap(s(R.string.servers_add))
         connect(siteB)
@@ -144,11 +159,22 @@ class AppUiTest {
         tap(s(R.string.switch_server))
         waitFor(s(R.string.servers_add))
         rule.onNode(hasText("$siteA · ", substring = true) and hasClickAction()).performScrollTo().performClick()
-        waitFor(s(R.string.home_signed_in, HOST))
-        tap(s(R.string.switch_server))
+        waitForList()
+        menu(s(R.string.switch_server))
         waitFor(s(R.string.servers_add))
         rule.onNode(hasText("$siteB · ${s(R.string.servers_signed_out)}", substring = true)).assertExists()
         rule.onNode(hasText("$siteA · ${s(R.string.servers_current)}", substring = true)).assertExists()
+    }
+
+    @Test
+    fun newSessionsShowUpLive() {
+        launch()
+        connect(siteA)
+        signIn()
+        // 别处（网页上）发起一个会话：列表里马上出现，不用刷新
+        val title = "Live session ${System.nanoTime()}"
+        startSession(siteA, title)
+        waitFor(title)
     }
 
     @Test
@@ -164,14 +190,26 @@ class AppUiTest {
         waitFor(s(R.string.login_signed_out))
     }
 
+    /** 以另一台设备登录，拿到设备令牌。 */
+    private fun appToken(site: String): String {
+        val login = """{"password":"$password","client":"app","deviceName":"UI test"}""".toRequestBody(JSON)
+        return OkHttpClient().newCall(Request.Builder().url("$site/api/auth/login").post(login).build()).execute().use {
+            Json.parseToJsonElement(it.body.string()).jsonObject.getValue("token").jsonPrimitive.content
+        }
+    }
+
+    /** 不使用仓库发起一个会话（#191），标题就是这段话。 */
+    private fun startSession(site: String, text: String) {
+        val token = appToken(site)
+        val body = """{"text":"$text"}""".toRequestBody(JSON)
+        val request = Request.Builder().url("$site/api/sessions").header("Authorization", "Bearer $token").post(body).build()
+        OkHttpClient().newCall(request).execute().use { check(it.isSuccessful) { "start session: HTTP ${it.code}" } }
+    }
+
     /** 以另一台设备登录，把别的 App 设备都退出（就是网页上设置 → 账户 → 登录设备里点"退出"）。 */
     private fun revokeOtherAppDevices(site: String) {
         val http = OkHttpClient()
-        val json = "application/json".toMediaType()
-        val login = """{"password":"$password","client":"app","deviceName":"UI test"}""".toRequestBody(json)
-        val token = http.newCall(Request.Builder().url("$site/api/auth/login").post(login).build()).execute().use {
-            Json.parseToJsonElement(it.body.string()).jsonObject.getValue("token").jsonPrimitive.content
-        }
+        val token = appToken(site)
         val auth = { b: Request.Builder -> b.header("Authorization", "Bearer $token") }
         val devices = http.newCall(auth(Request.Builder().url("$site/api/auth/devices")).build()).execute().use {
             Json.parseToJsonElement(it.body.string()).jsonObject.getValue("devices").jsonArray
@@ -185,8 +223,7 @@ class AppUiTest {
     }
 
     private companion object {
-        /** 模拟器里看到的跑测试的机器。 */
-        const val HOST = "10.0.2.2"
+        val JSON = "application/json".toMediaType()
     }
 }
 

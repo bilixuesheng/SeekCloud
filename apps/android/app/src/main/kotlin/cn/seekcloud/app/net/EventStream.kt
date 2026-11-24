@@ -78,17 +78,19 @@ private const val STREAM_READ_TIMEOUT_SECONDS = 75L
  *
  * - 401（登录失效）、403、404（会话不在了）时不再重连，流以 [EventStreamClosed] 结束；
  * - 连不上、5xx、读超时都等一会儿再连（[reconnectDelay]）；
- * - 不再收集时马上断开连接。
+ * - 不再收集时马上断开连接；
+ * - [onConnected] 在连上时收到 true、断了（要等着重连）时收到 false，界面拿它显示"连接已断开，正在重连"。
  */
 fun eventStream(
     http: OkHttpClient,
     url: HttpUrl,
     lastEventId: String? = null,
     wait: suspend (Long) -> Unit = { delay(it) },
+    onConnected: (Boolean) -> Unit = {},
 ): Flow<SseEvent> = channelFlow {
     val current = AtomicReference<Call?>()
     val client = http.newBuilder().readTimeout(STREAM_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS).build()
-    launch(Dispatchers.IO) { readLoop(client, url, lastEventId, current, wait) }
+    launch(Dispatchers.IO) { readLoop(client, url, lastEventId, current, wait, onConnected) }
     try {
         awaitCancellation()
     } finally {
@@ -103,6 +105,7 @@ private suspend fun ProducerScope<SseEvent>.readLoop(
     start: String?,
     current: AtomicReference<Call?>,
     wait: suspend (Long) -> Unit,
+    onConnected: (Boolean) -> Unit,
 ) {
     var last = start
     var attempt = 0
@@ -121,6 +124,7 @@ private suspend fun ProducerScope<SseEvent>.readLoop(
                 }
                 if (!response.isSuccessful) throw response.toApiException()
                 attempt = 0
+                onConnected(true)
                 val parser = SseParser()
                 val source = response.body.source()
                 while (true) {
@@ -134,6 +138,7 @@ private suspend fun ProducerScope<SseEvent>.readLoop(
             // 断了、读超时、5xx：下面等一会儿重连
         }
         currentCoroutineContext().ensureActive()
+        onConnected(false)
         wait(reconnectDelay(attempt++))
     }
 }

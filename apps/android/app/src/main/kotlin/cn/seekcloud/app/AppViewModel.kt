@@ -10,6 +10,7 @@ import cn.seekcloud.app.auth.TokenStore
 import cn.seekcloud.app.connect.ConnectState
 import cn.seekcloud.app.net.PreferencesStore
 import cn.seekcloud.app.net.SavedServer
+import cn.seekcloud.app.net.ServerClient
 import cn.seekcloud.app.net.ServerAddress
 import cn.seekcloud.app.net.ServerStore
 import cn.seekcloud.app.net.ServerTrust
@@ -81,6 +82,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun hasToken(server: SavedServer) = flow.hasToken(server)
+
+    /** 登录以后和这台主站说话用的客户端：每个请求带上这台的设备令牌。 */
+    fun client(server: SavedServer): ServerClient =
+        serverClient(requireNotNull(server.address), server.trust, agent, token = { tokens.get(server.id) })
 
     fun showServers() {
         back = _screen.value.takeIf { it !is Screen.Servers }

@@ -5,8 +5,8 @@ import { en } from "./en";
 import { zh } from "./zh";
 
 /**
- * 从文案目录生成安卓 App 的 strings.xml（#204）：App 的文案写在 app-zh.ts、app-en.ts；品牌名和接口的报错
- * （error.<code>，App 里是 error_<code>）用网页目录里的，两边说法一样。
+ * 从文案目录生成安卓 App 的 strings.xml（#204）：App 的文案写在 app-zh.ts、app-en.ts；品牌名和 [SHARED] 那几组
+ * （接口的报错、会话的状态这些）用网页目录里的，两边说法一样。
  * 生成的文件是 apps/android/app/src/main/res/values/strings.xml、values-zh/strings.xml 和报错码对应文案的表
  * （ANDROID_ERRORS_FILE），进仓库；主站的测试（android.test.ts）核对它们是最新的。
  *
@@ -21,17 +21,29 @@ export type AppKey = keyof typeof appZh;
 /** App 的一种语言的目录：键和中文那份完全一样。 */
 export type AppCatalog = { readonly [K in AppKey]: Message };
 
-/** 网页目录里 App 也用的：接口的报错，error.<code> 在 App 里叫 error_<code>。 */
-const SHARED = "error.";
+/**
+ * 网页目录里 App 也用的几组，两边说法一样：接口的报错、会话的状态、侧栏和会话列表。
+ * 键改成安卓的资源名：点换成下划线，驼峰换成下划线（error.rate_limited → error_rate_limited，
+ * sessionList.empty → session_list_empty，status.awaitingInput → status_awaiting_input）。
+ */
+const SHARED = ["error.", "status.", "sidebar.", "sessionList."];
+
+const snake = (key: string) =>
+  key
+    .replace(/\./g, "_")
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase();
+const RESERVED = SHARED.map((prefix) => snake(prefix));
 
 function resources(app: AppCatalog, web: Catalog): Record<string, Message> {
   const out: Record<string, Message> = {};
   for (const [key, message] of Object.entries(app)) {
-    if (key.startsWith("error_")) throw new Error(`${key}: error_ is reserved for the web catalog`);
+    const reserved = RESERVED.find((prefix) => key.startsWith(prefix));
+    if (reserved) throw new Error(`${key}: ${reserved} is reserved for the web catalog`);
     out[key] = message;
   }
   for (const [key, message] of Object.entries(web)) {
-    if (key.startsWith(SHARED)) out[`error_${key.slice(SHARED.length)}`] = message;
+    if (SHARED.some((prefix) => key.startsWith(prefix))) out[snake(key)] = message;
   }
   return out;
 }
@@ -115,11 +127,19 @@ export function androidText(text: string, brand: string, order: string[], key = 
 const GENERATED =
   "由 apps/site/src/client/i18n/android.ts 从文案目录生成，不要手改；重新生成的命令是 apps/site/package.json 里的 android:strings"; // 不是界面文案
 
+/** 网页目录共用来的整组文案，App 不一定每条都用：lint 不报"没用到"。App 自己的文案照常检查。 */
+const ignore = (key: string) =>
+  RESERVED.some((prefix) => key.startsWith(prefix)) ? ' tools:ignore="UnusedResources"' : "";
+
 /** 一种语言的 strings.xml 的内容。 */
 export function androidStrings(locale: Locale): string {
   const target = ANDROID_LOCALES.find((l) => l.locale === locale);
   if (!target) throw new Error(`no Android resources for ${locale}`);
-  const lines = ['<?xml version="1.0" encoding="utf-8"?>', `<!-- ${GENERATED} -->`, "<resources>"];
+  const lines = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    `<!-- ${GENERATED} -->`,
+    '<resources xmlns:tools="http://schemas.android.com/tools">',
+  ];
   for (const [key, base] of Object.entries(BASE)) {
     if (!KEY.test(key)) throw new Error(`${key}: not a valid Android resource name`);
     const message = target.messages[key];
@@ -131,10 +151,10 @@ export function androidStrings(locale: Locale): string {
     }
     const text = (t: string) => androidText(t, target.brand, order, key);
     if (ANDROID_LOCALES.every((l) => typeof l.messages[key] === "string")) {
-      lines.push(`    <string name="${key}">${text(message as string)}</string>`);
+      lines.push(`    <string name="${key}"${ignore(key)}>${text(message as string)}</string>`);
       continue;
     }
-    lines.push(`    <plurals name="${key}">`);
+    lines.push(`    <plurals name="${key}"${ignore(key)}>`);
     const forms = typeof message === "string" ? { other: message } : message;
     for (const [quantity, form] of Object.entries(forms)) {
       lines.push(`        <item quantity="${quantity}">${text(form as string)}</item>`);

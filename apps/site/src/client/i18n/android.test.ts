@@ -39,11 +39,16 @@ describe("安卓 App 的文案", () => {
     ).toBe(true);
   });
 
-  it("App 用网页目录里的报错文案", () => {
+  it("App 用网页目录里的报错、状态和会话列表的文案，键换成安卓的写法", () => {
     expect(androidStrings("zh-CN")).toContain(
-      '<string name="error_unauthorized">请先登录。</string>',
+      '<string name="status_awaiting_input" tools:ignore="UnusedResources">等你输入</string>',
     );
-    expect(androidStrings("en")).toContain('<plurals name="error_rate_limited">');
+    expect(androidStrings("zh-CN")).toContain('<string name="session_list_empty"');
+    expect(androidStrings("en")).toContain('<string name="sidebar_pinned"');
+    expect(androidStrings("zh-CN")).toContain(
+      '<string name="error_unauthorized" tools:ignore="UnusedResources">请先登录。</string>',
+    );
+    expect(androidStrings("en")).toContain('<plurals name="error_rate_limited"');
     expect(androidErrorMessages()).toContain(
       '"session_not_found" to R.string.error_session_not_found,',
     );

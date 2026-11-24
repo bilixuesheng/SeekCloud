@@ -16,13 +16,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.seekcloud.app.AppViewModel
 import cn.seekcloud.app.Screen
 import cn.seekcloud.app.connect.ConnectRoute
+import cn.seekcloud.app.sessions.SessionListViewModel
 
-/** 按 [AppViewModel] 现在的页面画出来，页面之间淡入淡出。 */
+/** 按 [AppViewModel]（[app]）现在的页面画出来，页面之间淡入淡出。 */
 @Composable
-fun AppRoot(viewModel: AppViewModel = viewModel()) {
-    val screen by viewModel.screen.collectAsStateWithLifecycle()
-    val login by viewModel.login.collectAsStateWithLifecycle()
-    val retrying by viewModel.retrying.collectAsStateWithLifecycle()
+fun AppRoot(app: AppViewModel = viewModel()) {
+    val screen by app.screen.collectAsStateWithLifecycle()
+    val login by app.login.collectAsStateWithLifecycle()
+    val retrying by app.retrying.collectAsStateWithLifecycle()
 
     AnimatedContent(
         targetState = screen,
@@ -37,11 +38,11 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
             is Screen.Connect -> ConnectRoute(
                 editing = current.editing,
                 autoConnect = current.autoConnect,
-                signedIn = current.editing?.let(viewModel::hasToken) ?: false,
-                onConnected = viewModel::connected,
+                signedIn = current.editing?.let(app::hasToken) ?: false,
+                onConnected = app::connected,
                 onBack = when {
-                    viewModel.canGoBack -> viewModel::goBack
-                    viewModel.servers.servers().isNotEmpty() -> viewModel::showServers
+                    app.canGoBack -> app::goBack
+                    app.servers.servers().isNotEmpty() -> app::showServers
                     else -> null
                 },
             )
@@ -49,42 +50,45 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 server = current.server,
                 signedOut = current.signedOut,
                 ui = login,
-                onCheckSetup = { viewModel.checkSetup(current.server) },
-                onSignIn = { viewModel.signIn(current.server, it) },
-                onVerify = { viewModel.verify(current.server, it) },
-                onCancelSecondFactor = viewModel::cancelSecondFactor,
-                onEdited = viewModel::clearLoginError,
-                onSwitchServer = viewModel::showServers,
+                onCheckSetup = { app.checkSetup(current.server) },
+                onSignIn = { app.signIn(current.server, it) },
+                onVerify = { app.verify(current.server, it) },
+                onCancelSecondFactor = app::cancelSecondFactor,
+                onEdited = app::clearLoginError,
+                onSwitchServer = app::showServers,
             )
-            is Screen.Home -> HomeScreen(
+            is Screen.Home -> SessionListRoute(
                 server = current.server,
-                nickname = current.nickname,
-                onSwitchServer = viewModel::showServers,
-                onSignOut = { viewModel.logout(current.server) },
+                // 每台主站一个，换服务器、改地址以后是新的
+                viewModel = viewModel(key = "sessions:${current.server.id}:${current.server.origin}") {
+                    SessionListViewModel(app.client(current.server)) { app.signedOut(current.server) }
+                },
+                onSwitchServer = app::showServers,
+                onSignOut = { app.logout(current.server) },
             )
             is Screen.Offline -> OfflineScreen(
                 server = current.server,
                 problem = current.problem,
                 retrying = retrying,
-                onRetry = { viewModel.retry(current.server) },
-                onEditAddress = { viewModel.editAddress(current.server) },
-                onSwitchServer = viewModel::showServers,
+                onRetry = { app.retry(current.server) },
+                onEditAddress = { app.editAddress(current.server) },
+                onSwitchServer = app::showServers,
             )
             is Screen.UpdateRequired -> UpdateRequiredScreen(
                 server = current.server,
                 required = current.required,
                 retrying = retrying,
-                onRetry = { viewModel.retry(current.server) },
-                onSwitchServer = viewModel::showServers,
+                onRetry = { app.retry(current.server) },
+                onSwitchServer = app::showServers,
             )
             Screen.Servers -> ServersScreen(
-                servers = viewModel.servers.servers(),
-                currentId = viewModel.servers.current()?.id,
-                signedIn = viewModel::hasToken,
-                onSelect = viewModel::switchTo,
-                onAdd = viewModel::addServer,
-                onRemove = viewModel::remove,
-                onBack = if (viewModel.canGoBack) viewModel::goBack else null,
+                servers = app.servers.servers(),
+                currentId = app.servers.current()?.id,
+                signedIn = app::hasToken,
+                onSelect = app::switchTo,
+                onAdd = app::addServer,
+                onRemove = app::remove,
+                onBack = if (app.canGoBack) app::goBack else null,
             )
         }
     }

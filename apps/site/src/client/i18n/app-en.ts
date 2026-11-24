@@ -55,8 +55,11 @@ export const appEn: AppCatalog = {
   login_verifying: "Verifying…",
   switch_server: "Switch server",
 
-  home_signed_in: "Signed in to {host}",
-  home_greeting: "Hello, {name}",
+  sessions_offline: "Disconnected. Reconnecting…",
+  sessions_more: "More options",
+  sessions_clear_search: "Clear search",
+  sessions_expand: "Expand",
+  sessions_collapse: "Collapse",
   sign_out: "Sign out",
   sign_out_title: "Sign out",
   sign_out_body: "This device will be signed out of {host}.",
