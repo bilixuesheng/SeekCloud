@@ -2,7 +2,7 @@ import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
 import type { AgentEvent, RepoDiff } from "@seekcloud/protocol";
 import { desc, eq } from "drizzle-orm";
-import { sessions, turns } from "../server/db/schema";
+import { sessionRepos, sessions, turns } from "../server/db/schema";
 import { createTemplateDatabase, dropTemplateDatabase } from "./database";
 import { createTestApp } from "./test-app";
 
@@ -16,7 +16,7 @@ import { createTestApp } from "./test-app";
  * `{ "hold": true }` 让假宿主机不再回复（新会话一直停在"正在准备沙箱"），`{ "hold": false }` 恢复。
  * 界面测试用它造出等你输入、失败、Agent 正在工作这些状态。
  * `POST /__test/diff`（`{ "shortId": ..., "repos": [...] }`，协议包的 RepoDiff）替假宿主机给这个会话最近的回合
- * 报一份对比基础分支的改动（改动面板用）。
+ * 报一份对比基础分支的改动（改动面板用）；会话还没有这些仓库时一起挂上（假主站没关联 GitHub，发起的会话不带仓库）。
  *
  * 用法（在 apps/site 里）：pnpm app-test-server [台数，默认 2]；要一个 PostgreSQL（同主站的测试）。
  */
@@ -53,6 +53,23 @@ for (let i = 0; i < count; i++) {
         .orderBy(desc(turns.number))
         .limit(1);
       if (!row) return new Response(null, { status: 404 });
+      // 改动面板只列会话自己的仓库
+      const attached = await t.db
+        .select({ fullName: sessionRepos.fullName })
+        .from(sessionRepos)
+        .where(eq(sessionRepos.sessionId, row.sessionId));
+      for (const repo of body.repos) {
+        if (attached.some((a) => a.fullName === repo.fullName)) continue;
+        await t.db.insert(sessionRepos).values({
+          sessionId: row.sessionId,
+          position: attached.length,
+          fullName: repo.fullName,
+          baseBranch: repo.baseBranch,
+          branch: `seekcloud/${body.shortId}`,
+          access: "push",
+        });
+        attached.push({ fullName: repo.fullName });
+      }
       await t.host.emit({ type: "workspace.diff", ...row, repos: body.repos });
       return new Response(null, { status: 204 });
     }
