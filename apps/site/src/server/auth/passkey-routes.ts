@@ -233,7 +233,7 @@ export function passkeyRoutes(deps: LoginDeps, limiter: RateLimiter) {
       if (client === "app") {
         const token = await startLoginSession(deps, c, userId, {
           kind: "app",
-          deviceName: deviceName ?? "安卓设备",
+          deviceName: deviceName ?? null,
         });
         return c.json({ token }, 200);
       }

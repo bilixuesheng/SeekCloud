@@ -10,6 +10,7 @@
 export const appZh = {
   app_name: "{brand}",
   cancel: "取消",
+  back: "返回",
 
   // "连接服务器"页（#204）
   connect_title: "连接服务器",
@@ -17,7 +18,6 @@ export const appZh = {
   connect_address: "服务器地址",
   connect_button: "连接",
   connect_connecting: "正在连接…",
-  connect_connected: "已连接至 {host}",
   connect_invalid: "地址格式无效。请输入域名或 IP 地址，可以带端口。",
   connect_unreachable: "无法连接到该地址。请检查地址和网络后重试。",
   connect_not_seekcloud: "该地址上没有{brand}主站。请检查地址是否正确。",
@@ -36,4 +36,55 @@ export const appZh = {
     "该服务器的证书与上次确认的不同。如果服务器没有更换证书，连接可能已被拦截。请确认新证书的指纹后再继续。",
   connect_cert_fingerprint: "SHA-256 指纹",
   connect_cert_trust: "信任此证书",
+  connect_edit_title: "修改服务器地址",
+  connect_edit_hint: "输入{brand}主站的新地址。此设备的登录状态会保留。",
+  connect_move_title: "沿用登录状态",
+  connect_move_body:
+    "新地址 {host} 将沿用此设备在原地址的登录状态。请确认新地址是同一台{brand}主站；如果不是，请取消，并在原地址退出登录。",
+  connect_move_confirm: "继续",
+
+  // 登录（#205）
+  login_title: "登录",
+  login_server: "登录到 {host}",
+  login_password: "管理员密码",
+  login_button: "登录",
+  login_signing_in: "正在登录…",
+  login_signed_out: "此设备已退出登录，请重新登录。",
+  login_setup_required: "该主站尚未设置管理员密码。请先在浏览器中打开主站，完成首次设置后再登录。",
+  login_open_browser: "在浏览器中打开",
+  login_check_again: "重新检查",
+  login_code_title: "两步验证",
+  login_code_hint: "输入身份验证器中的 6 位验证码，或一个恢复码。",
+  login_code: "验证码",
+  login_verify: "验证",
+  login_verifying: "正在验证…",
+  switch_server: "更换服务器",
+
+  // 登录以后的首页：会话列表做好以前，先放登录状态（#124）
+  home_signed_in: "已登录至 {host}",
+  home_greeting: "{name}，你好",
+  sign_out: "退出登录",
+  sign_out_title: "退出登录",
+  sign_out_body: "此设备将退出 {host} 的登录。",
+
+  // 服务器列表（#205）
+  servers_title: "服务器",
+  servers_add: "添加服务器",
+  servers_current: "当前使用",
+  servers_signed_in: "已登录",
+  servers_signed_out: "未登录",
+  servers_remove: "删除",
+  servers_remove_title: "删除服务器",
+  servers_remove_body: "将从此设备删除 {host}，并退出该服务器的登录。",
+
+  // 主站连不上（#205）
+  offline_title: "无法连接到主站",
+  offline_retry: "重试",
+  offline_retrying: "正在重试…",
+  offline_edit_address: "修改地址",
+
+  // 主站要求更高的 App 版本（#205）
+  update_title: "需要更新 App",
+  update_body: "{host} 要求 App 版本不低于 {version}，当前版本为 {current}。请下载新版本后再连接。",
+  update_download: "下载新版本",
 } as const satisfies Record<string, string>;

@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** "连接服务器"页的状态：旋转屏幕、分屏时正在连的不会断（#204）。 */
+/** "连接服务器"页的状态：旋转屏幕、分屏时正在连的不会断（#204）。保存的主站和 App 别处读写的是同一份。 */
 class ConnectViewModel(application: Application) : AndroidViewModel(application) {
     private val store = ServerStore(PreferencesStore(application))
     private val connector = Connector(store) { address, trust ->
@@ -29,10 +29,8 @@ class ConnectViewModel(application: Application) : AndroidViewModel(application)
     private val _state = MutableStateFlow<ConnectState>(ConnectState.Idle)
     val state: StateFlow<ConnectState> = _state.asStateFlow()
 
-    /** 上次连上的主站，地址框里先填好它。 */
-    val savedOrigin: String? = store.current()?.origin
-
-    fun connect(input: String) = run { connector.connect(input) }
+    /** [editing] 是在给已经存着的一台改地址（#205）。 */
+    fun connect(input: String, editing: String? = null) = run { connector.connect(input, editing) }
 
     fun allowCleartext() {
         val ask = _state.value as? ConnectState.AskCleartext ?: return
@@ -44,9 +42,9 @@ class ConnectViewModel(application: Application) : AndroidViewModel(application)
         run { connector.trustCertificate(ask) }
     }
 
-    /** 关掉确认的弹窗，或者改了地址：回到还没连的样子。 */
-    fun reset() {
-        if (_state.value != ConnectState.Connecting) _state.value = ConnectState.Idle
+    /** 关掉确认的弹窗，或者改了地址：回到还没连的样子。[force] 是连上以后交出去了，清掉结果。 */
+    fun reset(force: Boolean = false) {
+        if (force || _state.value != ConnectState.Connecting) _state.value = ConnectState.Idle
     }
 
     private fun run(block: suspend () -> ConnectState) {

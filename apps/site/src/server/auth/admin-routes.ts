@@ -203,7 +203,7 @@ export function authRoutes(deps: LoginDeps, limiter: RateLimiter) {
       if (wait > 0) return tooFrequent(c, wait);
       if (!userId) return c.json(apiError("wrong_password", "密码错误"), 400);
       const { client, deviceName } = c.req.valid("json");
-      const app = client === "app" ? { client, deviceName: deviceName ?? "安卓设备" } : {};
+      const app = client === "app" ? { client, deviceName: deviceName ?? null } : {};
       // 开了两步验证：先不发登录状态，给一个 5 分钟的中间令牌，只能拿去输验证码（#100）
       if (await twoFactorEnabled(deps, userId)) {
         const expiresAt = new Date(deps.clock.now().getTime() + PENDING_TTL_MS).toISOString();
@@ -234,7 +234,7 @@ export function authRoutes(deps: LoginDeps, limiter: RateLimiter) {
       if (pending.client === "app") {
         const token = await startLoginSession(deps, c, pending.userId, {
           kind: "app",
-          deviceName: pending.deviceName ?? "安卓设备",
+          deviceName: pending.deviceName ?? null,
         });
         return c.json({ token }, 200);
       }

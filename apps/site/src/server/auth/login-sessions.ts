@@ -25,7 +25,7 @@ export type LoginDeps = Pick<
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 /** 浏览器还是安卓 App（#177）。App 的登录状态是放在 Authorization 里的设备令牌，不设 Cookie。 */
-export type LoginClient = { kind: "browser" } | { kind: "app"; deviceName: string };
+export type LoginClient = { kind: "browser" } | { kind: "app"; deviceName: string | null };
 
 /**
  * 登录（首次设置密码也算登录一次），同时记下这次的 IP。浏览器设 Cookie；App 不设 Cookie，
@@ -43,10 +43,11 @@ export async function startLoginSession(
     tokenHash: hashToken(token),
     userId,
     client: client.kind,
-    // 浏览器记下是什么浏览器、什么系统，设备列表上好分辨
+    // 浏览器记下是什么浏览器、什么系统，设备列表上好分辨。App 没给设备名时存空的，
+    // 界面按语言显示"安卓设备"（服务端不存给人看的现成句子）
     deviceName:
       client.kind === "app"
-        ? client.deviceName.slice(0, MAX_DEVICE_NAME)
+        ? (client.deviceName?.slice(0, MAX_DEVICE_NAME) ?? null)
         : describeUserAgent(c.req.header("user-agent")),
     lastUsedAt: now,
     lastIp: await clientIp(c, deps),
