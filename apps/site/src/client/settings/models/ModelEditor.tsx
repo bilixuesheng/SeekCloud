@@ -2,6 +2,9 @@ import { type ModelProtocol, THINKING_EFFORTS, type ThinkingEffort } from "@seek
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type ApiError, api } from "../../api";
 import { CloseIcon, MenuIcon, PencilIcon, PlusIcon, SearchIcon } from "../../Icons";
+import { t, tRich, useT } from "../../i18n";
+import { errorText } from "../../i18n/errors";
+import { joinNames } from "../../i18n/format";
 import { effortLabels } from "../../session/ModelPicker";
 import { Modal } from "../../ui/modal";
 import { toast } from "../../ui/toast";
@@ -18,6 +21,7 @@ import {
   type ModelSpec,
   type ModelSpecView,
   type ProbedModel,
+  providerLabel,
   specOf,
 } from "./types";
 
@@ -144,24 +148,30 @@ export function modelFacts(
   const facts: Array<{ text: string; warn?: boolean }> = [];
   const context = m.contextWindow ?? m.listed?.contextWindow;
   facts.push(
-    context ? { text: `上下文 ${shortTokens(context)}` } : { text: "未填上下文窗口", warn: true },
+    context
+      ? { text: t("models.factContext", { size: shortTokens(context) }) }
+      : { text: t("models.factNoContext"), warn: true },
   );
   const output = m.maxTokens ?? m.listed?.maxTokens;
-  if (output) facts.push({ text: `输出 ${shortTokens(output)}` });
-  if (m.input.includes("image")) facts.push({ text: "图片" });
+  if (output) facts.push({ text: t("models.factOutput", { size: shortTokens(output) }) });
+  if (m.input.includes("image")) facts.push({ text: t("models.factImage") });
   const levels =
     kind === "custom"
       ? // 按从低到高排（库里存的 JSON 不保证键的顺序）
         THINKING_EFFORTS.filter((l) => l in (m.reasoningEfforts ?? {}))
       : (m.listed?.efforts ?? []);
   const thinking = levels.filter((l) => l !== "off");
-  if (thinking.length === 0) facts.push({ text: "不思考" });
+  if (thinking.length === 0) facts.push({ text: t("models.factNoThinking") });
   else {
     const range =
       thinking.length === 1
         ? effortLabels[thinking[0] as ThinkingEffort]
         : `${effortLabels[thinking[0] as ThinkingEffort]}–${effortLabels[thinking.at(-1) as ThinkingEffort]}`;
-    facts.push({ text: `思考 ${range}${levels.includes("off") ? "" : "（不可关闭）"}` });
+    facts.push({
+      text: levels.includes("off")
+        ? t("models.factThinking", { range })
+        : t("models.factThinkingForced", { range }),
+    });
   }
   const cost = m.cost ?? m.listed?.cost;
   if (cost) facts.push({ text: pricePair(cost).join(" / ") });
@@ -180,6 +190,7 @@ export function ModelEditor({
   onChange: (models: DraftModel[]) => void;
   context: EditorContext;
 }) {
+  const t = useT();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<{
     draft: DraftModel;
@@ -221,8 +232,8 @@ export function ModelEditor({
         <span className="probe-search">
           <SearchIcon />
           <input
-            aria-label="在列表中搜索模型"
-            placeholder={`在 ${models.length} 个模型中搜索`}
+            aria-label={t("models.searchList")}
+            placeholder={t("models.searchListPlaceholder", { count: models.length })}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -238,7 +249,7 @@ export function ModelEditor({
                   <button
                     type="button"
                     className="model-row-handle"
-                    aria-label={`调整 ${m.id} 的顺序（上下方向键）`}
+                    aria-label={t("models.reorder", { id: m.id })}
                     onKeyDown={(e) => {
                       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                         e.preventDefault();
@@ -294,7 +305,7 @@ export function ModelEditor({
                 <button
                   type="button"
                   className="icon-button small"
-                  aria-label={`移除 ${m.id}`}
+                  aria-label={t("models.remove", { id: m.id })}
                   onClick={() => onChange(models.filter((x) => x.key !== m.key))}
                 >
                   <CloseIcon size={14} />
@@ -304,16 +315,12 @@ export function ModelEditor({
           })}
         </ul>
       )}
-      {models.length === 0 && (
-        <p className="settings-hint model-empty">
-          还没有模型。添加以后，它们会出现在模型选择器里。
-        </p>
-      )}
+      {models.length === 0 && <p className="settings-hint model-empty">{t("models.empty")}</p>}
       {filtering && shown.length === 0 && models.length > 0 && (
-        <p className="settings-hint model-empty">列表中没有匹配的模型。</p>
+        <p className="settings-hint model-empty">{t("models.noMatch")}</p>
       )}
       <button type="button" className="add-model-button" onClick={() => setAdding(true)}>
-        <PlusIcon size={14} /> 添加模型
+        <PlusIcon size={14} /> {t("models.addModel")}
       </button>
 
       <AddModels
@@ -343,7 +350,9 @@ export function ModelEditor({
         onApply={(draft) => {
           apply(draft);
           setEditing(undefined);
-          if (editing?.isNew) toast(`已添加 ${draft.name || draft.listed?.name || draft.id}。`);
+          if (editing?.isNew) {
+            toast(t("models.added", { name: draft.name || draft.listed?.name || draft.id }));
+          }
         }}
       />
     </div>
@@ -374,6 +383,7 @@ function AddModels({
   onRemove: (id: string) => void;
   onCustom: (id: string, known?: KnownModel) => void;
 }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [catalog, setCatalog] = useState<KnownModel[]>();
   const [probed, setProbed] = useState<ProbedModel[]>();
@@ -389,7 +399,7 @@ function AddModels({
       `${KNOWN_MODELS}?provider=${encodeURIComponent(context.providerId)}&limit=500`,
     ).then(
       (res) => setCatalog(res.models),
-      (e) => toast((e as ApiError).message, "error"),
+      (e) => toast(errorText(e as ApiError), "error"),
     );
   }, [open, context.kind, context.providerId, catalog]);
 
@@ -419,9 +429,9 @@ function AddModels({
     try {
       const res = await api<{ models: ProbedModel[] }>(`${MODEL_PROVIDERS}/probe`, context.probe);
       setProbed(res.models);
-      if (res.models.length === 0) toast("接口没有列出模型，请直接输入模型 ID 添加。", "info");
+      if (res.models.length === 0) toast(t("models.probeEmpty"), "info");
     } catch (e) {
-      toast((e as ApiError).message, "error");
+      toast(errorText(e as ApiError), "error");
     } finally {
       setProbing(false);
     }
@@ -446,9 +456,9 @@ function AddModels({
     <Modal
       open={open}
       wide
-      title="添加模型"
+      title={t("models.addModel")}
       subtitle={
-        context.kind === "catalog" ? "点击模型加入或移出列表" : "可以从接口获取，也可以输入模型 ID"
+        context.kind === "catalog" ? t("models.addSubtitleCatalog") : t("models.addSubtitle")
       }
       onClose={onClose}
     >
@@ -457,8 +467,12 @@ function AddModels({
           <span className="probe-search">
             <SearchIcon />
             <input
-              aria-label="搜索或输入模型 ID"
-              placeholder={context.kind === "catalog" ? "搜索模型" : "搜索，或输入模型 ID"}
+              aria-label={t("models.searchOrId")}
+              placeholder={
+                context.kind === "catalog"
+                  ? t("models.searchModels")
+                  : t("models.searchOrIdPlaceholder")
+              }
               value={query}
               autoComplete="off"
               spellCheck={false}
@@ -480,10 +494,10 @@ function AddModels({
               type="button"
               className="pill-button"
               disabled={!context.probe || probing}
-              title={context.probe ? undefined : "请先填写基础 URL"}
+              title={context.probe ? undefined : t("models.needBaseUrl")}
               onClick={() => void probe()}
             >
-              {probing ? "正在获取…" : probed ? "重新获取" : "从接口获取"}
+              {probing ? t("models.probing") : probed ? t("models.reprobe") : t("models.probe")}
             </button>
           )}
         </div>
@@ -500,15 +514,17 @@ function AddModels({
             }
           >
             <PlusIcon size={14} />
-            <span>
-              以 <code>{q}</code> 为模型 ID 添加
-            </span>
+            <span>{tRich("models.addById", { id: <code>{q}</code> })}</span>
           </button>
         )}
 
         {context.kind === "catalog" && (
           <CandidateList
-            title={catalog ? `目录中的模型（${catalogShown.length}）` : "正在读取目录…"}
+            title={
+              catalog
+                ? t("models.catalogModels", { count: catalogShown.length })
+                : t("models.readingCatalog")
+            }
             items={catalogShown.map((k) => ({
               id: k.id,
               name: k.name,
@@ -520,15 +536,15 @@ function AddModels({
         )}
         {probed && (probedShown.length > 0 || !q) && (
           <CandidateList
-            title={`接口列出的模型（${probedShown.length}）`}
+            title={t("models.probedModels", { count: probedShown.length })}
             items={probedShown.map((p) => ({
               id: p.id,
               name: p.name ?? p.known?.name,
               facts: p.known
                 ? knownFacts(p.known, p)
                 : p.contextWindow
-                  ? [{ text: `上下文 ${shortTokens(p.contextWindow)}` }]
-                  : [{ text: "资料未知，添加后请填写上下文窗口", warn: true }],
+                  ? [{ text: t("models.factContext", { size: shortTokens(p.contextWindow) }) }]
+                  : [{ text: t("models.unknownSpecs"), warn: true }],
               chosen: has(p.id),
               onClick: () => toggle(p.id, () => draftFromKnown(p.id, p.known, context, p)),
             }))}
@@ -536,12 +552,12 @@ function AddModels({
         )}
         {context.kind === "custom" && found.length > 0 && (
           <CandidateList
-            title="dsh 内置目录中的模型"
-            note="网关上的模型 ID 可能与目录不同，选择后请核对。"
+            title={t("models.dshCatalog")}
+            note={t("models.dshCatalogNote")}
             items={found.map((k) => ({
               id: k.id,
               name: k.name,
-              facts: [...knownFacts(k), { text: k.providerName }],
+              facts: [...knownFacts(k), { text: providerLabel(k.provider, k.providerName) }],
               chosen: has(k.id),
               onClick: () => (has(k.id) ? onRemove(k.id) : onCustom(k.id, k)),
             }))}
@@ -549,15 +565,13 @@ function AddModels({
         )}
         {context.kind !== "catalog" && !probed && !q && (
           <p className="settings-hint">
-            {context.probe
-              ? "点击“从接口获取”列出接口上的模型；也可以直接输入模型 ID，常见模型会按 dsh 内置目录填好上下文窗口、思考档位和价格。"
-              : "填写基础 URL 后可以从接口获取模型；也可以直接输入模型 ID。"}
+            {context.probe ? t("models.probeHint") : t("models.probeHintNoUrl")}
           </p>
         )}
       </div>
       <div className="settings-form-actions">
         <button type="button" className="primary" onClick={onClose}>
-          完成
+          {t("models.done")}
         </button>
       </div>
     </Modal>
@@ -580,12 +594,16 @@ function sameModel(a: string, b: string): boolean {
 function knownFacts(k: KnownModel, probed?: ProbedModel): Array<{ text: string; warn?: boolean }> {
   const facts: Array<{ text: string; warn?: boolean }> = [];
   const context = probed?.contextWindow ?? k.contextWindow;
-  if (context) facts.push({ text: `上下文 ${shortTokens(context)}` });
-  if (k.input.includes("image")) facts.push({ text: "图片" });
+  if (context) facts.push({ text: t("models.factContext", { size: shortTokens(context) }) });
+  if (k.input.includes("image")) facts.push({ text: t("models.factImage") });
   const thinking = k.efforts.filter((l) => l !== "off");
   facts.push({
     text:
-      thinking.length === 0 ? "不思考" : `思考${k.efforts.includes("off") ? "" : "（不可关闭）"}`,
+      thinking.length === 0
+        ? t("models.factNoThinking")
+        : k.efforts.includes("off")
+          ? t("models.factThinks")
+          : t("models.factThinksForced"),
   });
   if (k.cost) facts.push({ text: costText(k.cost) });
   return facts;
@@ -671,6 +689,7 @@ function ModelDialog({
   onClose: () => void;
   onApply: (draft: DraftModel) => void;
 }) {
+  const t = useT();
   const [m, setDraft] = useState<DraftModel | undefined>(initial);
   const custom = context.kind === "custom";
   const listed = m?.listed;
@@ -680,14 +699,14 @@ function ModelDialog({
     const contextWindow = m.contextWindow ?? listed?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
     const output = m.maxTokens ?? listed?.maxTokens;
     return {
-      id: !id ? "请填写模型 ID。" : takenIds.includes(id) ? "列表中已有这个模型 ID。" : undefined,
-      output: output && output > contextWindow ? "最大输出不能超过上下文窗口。" : undefined,
+      id: !id ? t("models.idRequired") : takenIds.includes(id) ? t("models.idTaken") : undefined,
+      output: output && output > contextWindow ? t("models.outputTooLarge") : undefined,
     };
-  }, [m, listed, takenIds]);
+  }, [m, listed, takenIds, t]);
   if (!m) return null;
   const set = (patch: Partial<DraftModel>) => setDraft({ ...m, ...patch });
   const ok = !problems.id && !problems.output;
-  const title = isNew ? "添加模型" : m.name || listed?.name || m.id;
+  const title = isNew ? t("models.addModel") : m.name || listed?.name || m.id;
 
   return (
     <Modal open={open} wide title={title} subtitle={isNew ? undefined : m.id} onClose={onClose}>
@@ -700,12 +719,17 @@ function ModelDialog({
       >
         {custom && known && (
           <p className="model-known">
-            已按 dsh 内置目录中 {known.providerName} 的资料填写{known.cost ? "（含官方价格）" : ""}
-            。如果网关上的规格或价格不同，请在下面修改。
+            {known.cost
+              ? t("models.knownFilledPrice", {
+                  provider: providerLabel(known.provider, known.providerName),
+                })
+              : t("models.knownFilled", {
+                  provider: providerLabel(known.provider, known.providerName),
+                })}
           </p>
         )}
         <label className="field">
-          <span>模型 ID</span>
+          <span>{t("models.modelId")}</span>
           <input
             value={m.id}
             maxLength={200}
@@ -718,33 +742,29 @@ function ModelDialog({
           {problems.id ? (
             <span className="field-hint warn">{problems.id}</span>
           ) : custom ? (
-            <span className="field-hint">发给接口的模型名称，以网关文档为准。</span>
+            <span className="field-hint">{t("models.modelIdHint")}</span>
           ) : null}
         </label>
         <label className="field">
-          <span>显示名称</span>
+          <span>{t("models.displayName")}</span>
           <input
             value={m.name ?? ""}
             maxLength={100}
-            placeholder={listed?.name || m.id || "不填时显示模型 ID"}
+            placeholder={listed?.name || m.id || t("models.nameFallback")}
             onChange={(e) => set({ name: e.target.value || null })}
           />
         </label>
         <div className="model-options-pair">
           <TokenField
-            label="上下文窗口"
+            label={t("models.contextWindow")}
             value={m.contextWindow}
             presets={CONTEXT_PRESETS}
             placeholder={shortTokens(listed?.contextWindow ?? DEFAULT_CONTEXT_WINDOW)}
-            problem={
-              custom && !m.contextWindow
-                ? "未填写时按 1M 计算；实际窗口更小时，对话变长后会超出上限而报错。"
-                : undefined
-            }
+            problem={custom && !m.contextWindow ? t("models.contextDefault") : undefined}
             onChange={(contextWindow) => set({ contextWindow })}
           />
           <TokenField
-            label="最大输出"
+            label={t("models.maxOutput")}
             value={m.maxTokens}
             presets={OUTPUT_PRESETS}
             placeholder={shortTokens(listed?.maxTokens ?? DEFAULT_MAX_TOKENS)}
@@ -754,14 +774,14 @@ function ModelDialog({
         </div>
         <div className="reasoning-head">
           <span>
-            支持图片输入
-            <span className="reasoning-sub">关闭时，图片不会发给这个模型。</span>
+            {t("models.images")}
+            <span className="reasoning-sub">{t("models.imagesHint")}</span>
           </span>
           <button
             type="button"
             role="switch"
             aria-checked={m.input.includes("image")}
-            aria-label="支持图片输入"
+            aria-label={t("models.images")}
             className="switch"
             onClick={() => set({ input: m.input.includes("image") ? ["text"] : ["text", "image"] })}
           >
@@ -774,36 +794,34 @@ function ModelDialog({
             <PriceField
               value={m.cost}
               onChange={(cost) => set({ cost })}
-              note={
-                known?.cost ? "默认是官方价格；平台调用的模型选“自动”时按它挑最省的。" : undefined
-              }
+              note={known?.cost ? t("models.officialPriceNote") : undefined}
             />
           </>
         ) : (
           <dl className="model-listed">
-            <dt>思考档位</dt>
+            <dt>{t("models.levels")}</dt>
             <dd>
               {(listed?.efforts ?? []).filter((l) => l !== "off").length === 0
-                ? "不思考"
-                : (listed?.efforts ?? []).map((l) => effortLabels[l]).join("、")}
+                ? t("models.factNoThinking")
+                : joinNames((listed?.efforts ?? []).map((l) => effortLabels[l]))}
             </dd>
-            <dt>价格</dt>
+            <dt>{t("models.price")}</dt>
             <dd>
-              {listed?.cost ? `${costText(listed.cost)}（美元 / 百万 token）` : "目录中没有价格"}
+              {listed?.cost
+                ? t("models.priceWithUnit", { cost: costText(listed.cost) })
+                : t("models.noCatalogPrice")}
             </dd>
             <dd className="model-listed-note">
-              {context.kind === "deepseek"
-                ? "由 DeepSeek 决定，不能修改。"
-                : "来自 dsh 内置目录，不能修改。"}
+              {context.kind === "deepseek" ? t("models.fixedDeepseek") : t("models.fixedCatalog")}
             </dd>
           </dl>
         )}
         <div className="settings-form-actions">
           <button type="button" className="secondary" onClick={onClose}>
-            取消
+            {t("common.cancel")}
           </button>
           <button type="submit" className="primary" disabled={!ok}>
-            {isNew ? "添加" : "确定"}
+            {isNew ? t("models.add") : t("common.ok")}
           </button>
         </div>
       </form>

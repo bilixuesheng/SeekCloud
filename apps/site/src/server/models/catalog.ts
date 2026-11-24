@@ -42,10 +42,14 @@ export const CATALOG = JSON.parse(
 
 export const catalogProvider = (id: string) => CATALOG.providers.find((p) => p.id === id);
 
-/** DeepSeek 官方的地址：Messages 走 Anthropic 格式的接口，发布的模型列表在域名根下的 /models。 */
+/**
+ * DeepSeek 官方的地址：Messages 走 Anthropic 格式的接口，发布的模型列表在域名根下的 /models。
+ * 表里存的名字是空的，界面按语言写（中文"DeepSeek 官方"，#136：服务端不存现成的中文）；这里的 name 是
+ * 发给沙箱里的 dsh 用的。
+ */
 export const DEEPSEEK = {
   slug: DEEPSEEK_PROVIDER,
-  name: "DeepSeek 官方",
+  name: "DeepSeek",
   baseUrl: "https://api.deepseek.com/anthropic",
   env: "DEEPSEEK_API_KEY",
 } as const;

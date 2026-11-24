@@ -216,8 +216,8 @@ describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
       expect(await han()).toBe("");
     });
 
-    it("设置：通用、会话、GitHub、账户、数据每一类都是英文", async () => {
-      for (const section of ["general", "sessions", "github", "account", "data"]) {
+    it("设置：通用、模型、会话、GitHub、账户、数据每一类都是英文", async () => {
+      for (const section of ["general", "model", "sessions", "github", "account", "data"]) {
         await page.goto(`${preview.url}/settings/${section}`);
         await page.locator(".settings-content").waitFor();
         await page.waitForTimeout(600);
@@ -236,6 +236,34 @@ describe.skipIf(!process.env.SEEKCLOUD_BROWSER_TESTS)(
       await page.keyboard.press("Escape");
       await pause();
       await page.getByRole("button", { name: "Sign out everywhere" }).click();
+      await pause();
+      expect(await han()).toBe("");
+      await page.keyboard.press("Escape");
+      await pause();
+    });
+
+    it("设置的模型：内置的 DeepSeek 按界面语言写名字；管理模型、编辑一个模型、添加模型提供商的弹窗都是英文", async () => {
+      await page.goto(`${preview.url}/settings/model`);
+      await page.locator(".provider-card").first().waitFor();
+      await page.waitForTimeout(600);
+      expect(await page.locator(".provider-card").first().textContent()).toContain("DeepSeek");
+      await page.getByRole("button", { name: "Manage models" }).first().click();
+      await pause();
+      expect(await page.locator(".modal-title").last().textContent()).toBe("DeepSeek models");
+      expect(await han()).toBe("");
+      // 打开一个模型的编辑弹窗（叠在上面）
+      await page.locator(".model-row-main").first().click();
+      await pause();
+      expect(await han()).toBe("");
+      await page.keyboard.press("Escape");
+      await pause();
+      await page.keyboard.press("Escape");
+      await pause();
+      await page.getByRole("button", { name: "Add model provider" }).click();
+      await pause();
+      expect(await han()).toBe("");
+      // 自定义模型 API 那一页
+      await page.getByText("Custom model API", { exact: true }).click();
       await pause();
       expect(await han()).toBe("");
       await page.keyboard.press("Escape");

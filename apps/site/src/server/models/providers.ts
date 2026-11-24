@@ -240,7 +240,8 @@ export class ModelCatalog {
       out.push({
         id: row.slug,
         kind: row.kind,
-        name: row.name,
+        // 内置的 DeepSeek 存的名字是空的（界面按语言写），dsh 那边用英文名
+        name: row.name || (row.kind === "deepseek" ? DEEPSEEK.name : row.slug),
         ...(custom && row.api ? { api: row.api } : {}),
         ...(withModels ? { models: await this.#sandboxModels(row, models, custom) } : {}),
       });
@@ -700,7 +701,18 @@ export async function updateProvider(
     const [next] = await tx
       .update(modelProviders)
       .set({
-        ...(patch.name !== undefined ? { name: patch.name.trim() || row.slug } : {}),
+        // 名字清空：回到默认。内置的 DeepSeek 存空的（界面按语言写），目录里的用目录的名字，自定义的用 Provider ID
+        ...(patch.name !== undefined
+          ? {
+              name:
+                patch.name.trim() ||
+                (row.kind === "deepseek"
+                  ? ""
+                  : row.kind === "catalog"
+                    ? (catalogProvider(row.slug)?.name ?? row.slug)
+                    : row.slug),
+            }
+          : {}),
         ...(patch.api !== undefined && row.kind === "custom" ? { api: patch.api } : {}),
         ...(patch.baseUrl !== undefined ? { baseUrl: patch.baseUrl?.trim() || null } : {}),
         ...(patch.apiKey !== undefined

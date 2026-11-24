@@ -112,6 +112,14 @@ describe("模型提供方的设置", () => {
     expect(listed.models.filter((m) => m.provider === "moonshotai")).toHaveLength(
       catalogModels.length,
     );
+    // 名字存英文正式名称（中文界面由浏览器换成中文名）；改了名再清空，回到目录的名字
+    expect(view.name).toBe("Kimi (Moonshot)");
+    const rename = (name: string) =>
+      send(browser, "PATCH", `${PROVIDERS}/moonshotai`, { name }).then(
+        async (r) => ((await r.json()) as View).name,
+      );
+    expect(await rename("我的 Kimi")).toBe("我的 Kimi");
+    expect(await rename("")).toBe("Kimi (Moonshot)");
     // 再加一次：已经有了
     expect((await browser.post(PROVIDERS, { kind: "catalog", id: "moonshotai" })).status).toBe(409);
     expect((await browser.post(PROVIDERS, { kind: "catalog", id: "no-such" })).status).toBe(404);
@@ -582,7 +590,7 @@ describe("沙箱里的 dsh 用设置里的提供方（#188）", () => {
         {
           id: "deepseek",
           kind: "deepseek",
-          name: "DeepSeek 官方",
+          name: "DeepSeek",
           models: [
             expect.objectContaining({ id: "deepseek-flash", input: ["text", "image"] }),
             expect.objectContaining({ id: "deepseek-v4-pro" }),
