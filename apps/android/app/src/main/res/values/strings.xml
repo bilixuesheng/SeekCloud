@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 由 apps/site/src/client/i18n/android.ts 从文案目录生成，不要手改；重新生成的命令是 apps/site/package.json 里的 android:strings -->
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">SeekCloud</string>
     <string name="cancel">Cancel</string>
     <string name="back">Back</string>
@@ -44,8 +44,11 @@
     <string name="login_verify">Verify</string>
     <string name="login_verifying">Verifying…</string>
     <string name="switch_server">Switch server</string>
-    <string name="home_signed_in">Signed in to %1$s</string>
-    <string name="home_greeting">Hello, %1$s</string>
+    <string name="sessions_offline">Disconnected. Reconnecting…</string>
+    <string name="sessions_more">More options</string>
+    <string name="sessions_clear_search">Clear search</string>
+    <string name="sessions_expand">Expand</string>
+    <string name="sessions_collapse">Collapse</string>
     <string name="sign_out">Sign out</string>
     <string name="sign_out_title">Sign out</string>
     <string name="sign_out_body">This device will be signed out of %1$s.</string>
@@ -64,55 +67,81 @@
     <string name="update_title">App update required</string>
     <string name="update_body">%1$s requires app version %2$s or later. This is version %3$s. Download the new version, then connect again.</string>
     <string name="update_download">Download new version</string>
-    <string name="error_network">Network error. Try again later.</string>
-    <string name="error_wrong_password">Incorrect password.</string>
-    <string name="error_wrong_code">Incorrect code.</string>
-    <string name="error_login_expired">Sign-in timed out. Enter your password again.</string>
-    <plurals name="error_rate_limited">
+    <string name="error_network" tools:ignore="UnusedResources">Network error. Try again later.</string>
+    <string name="error_wrong_password" tools:ignore="UnusedResources">Incorrect password.</string>
+    <string name="error_wrong_code" tools:ignore="UnusedResources">Incorrect code.</string>
+    <string name="error_login_expired" tools:ignore="UnusedResources">Sign-in timed out. Enter your password again.</string>
+    <plurals name="error_rate_limited" tools:ignore="UnusedResources">
         <item quantity="one">Too many attempts. Try again in %1$d second.</item>
         <item quantity="other">Too many attempts. Try again in %1$d seconds.</item>
     </plurals>
-    <string name="error_already_set_up">The administrator password is already set. Sign in instead.</string>
-    <string name="error_passkey_invalid">Passkey verification failed. Try again.</string>
-    <string name="error_already_enabled">Two-step verification is already on.</string>
-    <string name="error_body_too_large">The request is too large.</string>
-    <string name="error_code_required">Enter the two-step verification code.</string>
-    <string name="error_device_not_found">The device does not exist.</string>
-    <string name="error_export_not_found">The export does not exist or has expired.</string>
-    <string name="error_forbidden">Requests from other sites are not allowed.</string>
-    <string name="error_github_unavailable">GitHub is unavailable right now. Try again later.</string>
-    <string name="error_internal_error">Server error. Try again later.</string>
-    <string name="error_invalid_request">The request is malformed.</string>
-    <string name="error_model_error_not_found">This reference does not exist or has expired.</string>
-    <string name="error_not_enabled">Two-step verification is not on.</string>
-    <string name="error_not_found">The endpoint does not exist.</string>
-    <string name="error_not_linked">GitHub is not connected.</string>
-    <string name="error_passkey_not_found">The passkey does not exist.</string>
-    <string name="error_request_failed">The request failed.</string>
-    <string name="error_setting_locked">This setting cannot be changed.</string>
-    <string name="error_setup_expired">Setup timed out. Start again.</string>
-    <string name="error_setup_required">Set the admin password first.</string>
-    <string name="error_catalog_not_found">The catalog has no such provider.</string>
-    <string name="error_provider_builtin">The built-in DeepSeek provider cannot be deleted, but it can be disabled.</string>
-    <string name="error_provider_exists">This Provider ID is already in use.</string>
-    <string name="error_provider_not_found">The model provider does not exist.</string>
-    <string name="error_invalid_models">The model list is invalid. Check each model\'s settings.</string>
-    <string name="error_probe_failed">Fetching the model list failed. Check the base URL, protocol and key.</string>
-    <string name="error_unauthorized">Sign in first.</string>
-    <string name="error_github_not_connected">GitHub is not connected, or the authorization has expired. Connect it again.</string>
-    <string name="error_repo_not_found">The repository does not exist, or SeekCloud cannot access it.</string>
-    <string name="error_branch_not_found">The branch does not exist in the repository.</string>
-    <string name="error_environment_not_found">The environment does not exist.</string>
-    <string name="error_model_not_found">The model does not exist or has been retired.</string>
-    <string name="error_model_gone">The model this session uses is no longer available. Choose another model and send again.</string>
-    <string name="error_model_not_configured">No model is available. Enter a DeepSeek API key or add a model provider in Settings → Models.</string>
-    <string name="error_session_not_found">The session does not exist.</string>
-    <string name="error_session_closed">This session is archived. Unarchive it before sending messages.</string>
-    <string name="error_queued_not_found">The message has already been sent or withdrawn.</string>
-    <string name="error_nothing_running">No turn is running.</string>
-    <string name="error_session_archived">Archived sessions cannot be pinned or grouped. Unarchive the session first.</string>
-    <string name="error_message_not_found">The message does not exist, or it is not an Agent reply.</string>
-    <string name="error_group_not_found">The group does not exist.</string>
-    <string name="error_too_many_groups">You have reached the maximum number of groups.</string>
-    <string name="error_invalid_group_name">Enter a group name within the length limit.</string>
+    <string name="error_already_set_up" tools:ignore="UnusedResources">The administrator password is already set. Sign in instead.</string>
+    <string name="error_passkey_invalid" tools:ignore="UnusedResources">Passkey verification failed. Try again.</string>
+    <string name="error_already_enabled" tools:ignore="UnusedResources">Two-step verification is already on.</string>
+    <string name="error_body_too_large" tools:ignore="UnusedResources">The request is too large.</string>
+    <string name="error_code_required" tools:ignore="UnusedResources">Enter the two-step verification code.</string>
+    <string name="error_device_not_found" tools:ignore="UnusedResources">The device does not exist.</string>
+    <string name="error_export_not_found" tools:ignore="UnusedResources">The export does not exist or has expired.</string>
+    <string name="error_forbidden" tools:ignore="UnusedResources">Requests from other sites are not allowed.</string>
+    <string name="error_github_unavailable" tools:ignore="UnusedResources">GitHub is unavailable right now. Try again later.</string>
+    <string name="error_internal_error" tools:ignore="UnusedResources">Server error. Try again later.</string>
+    <string name="error_invalid_request" tools:ignore="UnusedResources">The request is malformed.</string>
+    <string name="error_model_error_not_found" tools:ignore="UnusedResources">This reference does not exist or has expired.</string>
+    <string name="error_not_enabled" tools:ignore="UnusedResources">Two-step verification is not on.</string>
+    <string name="error_not_found" tools:ignore="UnusedResources">The endpoint does not exist.</string>
+    <string name="error_not_linked" tools:ignore="UnusedResources">GitHub is not connected.</string>
+    <string name="error_passkey_not_found" tools:ignore="UnusedResources">The passkey does not exist.</string>
+    <string name="error_request_failed" tools:ignore="UnusedResources">The request failed.</string>
+    <string name="error_setting_locked" tools:ignore="UnusedResources">This setting cannot be changed.</string>
+    <string name="error_setup_expired" tools:ignore="UnusedResources">Setup timed out. Start again.</string>
+    <string name="error_setup_required" tools:ignore="UnusedResources">Set the admin password first.</string>
+    <string name="error_catalog_not_found" tools:ignore="UnusedResources">The catalog has no such provider.</string>
+    <string name="error_provider_builtin" tools:ignore="UnusedResources">The built-in DeepSeek provider cannot be deleted, but it can be disabled.</string>
+    <string name="error_provider_exists" tools:ignore="UnusedResources">This Provider ID is already in use.</string>
+    <string name="error_provider_not_found" tools:ignore="UnusedResources">The model provider does not exist.</string>
+    <string name="error_invalid_models" tools:ignore="UnusedResources">The model list is invalid. Check each model\'s settings.</string>
+    <string name="error_probe_failed" tools:ignore="UnusedResources">Fetching the model list failed. Check the base URL, protocol and key.</string>
+    <string name="error_unauthorized" tools:ignore="UnusedResources">Sign in first.</string>
+    <string name="error_github_not_connected" tools:ignore="UnusedResources">GitHub is not connected, or the authorization has expired. Connect it again.</string>
+    <string name="error_repo_not_found" tools:ignore="UnusedResources">The repository does not exist, or SeekCloud cannot access it.</string>
+    <string name="error_branch_not_found" tools:ignore="UnusedResources">The branch does not exist in the repository.</string>
+    <string name="error_environment_not_found" tools:ignore="UnusedResources">The environment does not exist.</string>
+    <string name="error_model_not_found" tools:ignore="UnusedResources">The model does not exist or has been retired.</string>
+    <string name="error_model_gone" tools:ignore="UnusedResources">The model this session uses is no longer available. Choose another model and send again.</string>
+    <string name="error_model_not_configured" tools:ignore="UnusedResources">No model is available. Enter a DeepSeek API key or add a model provider in Settings → Models.</string>
+    <string name="error_session_not_found" tools:ignore="UnusedResources">The session does not exist.</string>
+    <string name="error_session_closed" tools:ignore="UnusedResources">This session is archived. Unarchive it before sending messages.</string>
+    <string name="error_queued_not_found" tools:ignore="UnusedResources">The message has already been sent or withdrawn.</string>
+    <string name="error_nothing_running" tools:ignore="UnusedResources">No turn is running.</string>
+    <string name="error_session_archived" tools:ignore="UnusedResources">Archived sessions cannot be pinned or grouped. Unarchive the session first.</string>
+    <string name="error_message_not_found" tools:ignore="UnusedResources">The message does not exist, or it is not an Agent reply.</string>
+    <string name="error_group_not_found" tools:ignore="UnusedResources">The group does not exist.</string>
+    <string name="error_too_many_groups" tools:ignore="UnusedResources">You have reached the maximum number of groups.</string>
+    <string name="error_invalid_group_name" tools:ignore="UnusedResources">Enter a group name within the length limit.</string>
+    <string name="sidebar_label" tools:ignore="UnusedResources">Sessions</string>
+    <string name="sidebar_close" tools:ignore="UnusedResources">Close session list</string>
+    <string name="sidebar_new_session" tools:ignore="UnusedResources">New session</string>
+    <string name="sidebar_search" tools:ignore="UnusedResources">Search sessions</string>
+    <string name="sidebar_pinned" tools:ignore="UnusedResources">Pinned</string>
+    <string name="sidebar_recent" tools:ignore="UnusedResources">Recent</string>
+    <string name="sidebar_archived" tools:ignore="UnusedResources">Archived</string>
+    <string name="sidebar_drop_to_pin" tools:ignore="UnusedResources">Drop here to pin</string>
+    <string name="sidebar_release_to_unpin" tools:ignore="UnusedResources">Release to unpin</string>
+    <string name="sidebar_new_group" tools:ignore="UnusedResources">New group</string>
+    <string name="sidebar_group_empty" tools:ignore="UnusedResources">No sessions in this group.</string>
+    <string name="sidebar_group_options" tools:ignore="UnusedResources">Group options: %1$s</string>
+    <string name="session_list_empty" tools:ignore="UnusedResources">No sessions yet. Describe a task to start one.</string>
+    <string name="session_list_no_match" tools:ignore="UnusedResources">No matching sessions.</string>
+    <string name="session_list_options" tools:ignore="UnusedResources">Session options: %1$s</string>
+    <string name="status_queued" tools:ignore="UnusedResources">Queued</string>
+    <string name="status_running" tools:ignore="UnusedResources">Running</string>
+    <string name="status_waiting" tools:ignore="UnusedResources">Waiting</string>
+    <string name="status_dormant" tools:ignore="UnusedResources">Dormant</string>
+    <string name="status_archived" tools:ignore="UnusedResources">Archived</string>
+    <string name="status_failed" tools:ignore="UnusedResources">Failed</string>
+    <string name="status_preparing_sandbox" tools:ignore="UnusedResources">Preparing sandbox</string>
+    <string name="status_awaiting_input" tools:ignore="UnusedResources">Awaiting input</string>
+    <string name="status_done" tools:ignore="UnusedResources">Done</string>
+    <string name="status_unread" tools:ignore="UnusedResources">Unread</string>
+    <string name="status_with_detail" tools:ignore="UnusedResources">%1$s · %2$s</string>
 </resources>

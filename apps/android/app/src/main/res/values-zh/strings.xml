@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 由 apps/site/src/client/i18n/android.ts 从文案目录生成，不要手改；重新生成的命令是 apps/site/package.json 里的 android:strings -->
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">云上求索</string>
     <string name="cancel">取消</string>
     <string name="back">返回</string>
@@ -44,8 +44,11 @@
     <string name="login_verify">验证</string>
     <string name="login_verifying">正在验证…</string>
     <string name="switch_server">更换服务器</string>
-    <string name="home_signed_in">已登录至 %1$s</string>
-    <string name="home_greeting">%1$s，你好</string>
+    <string name="sessions_offline">连接已断开，正在重连…</string>
+    <string name="sessions_more">更多选项</string>
+    <string name="sessions_clear_search">清除搜索</string>
+    <string name="sessions_expand">展开</string>
+    <string name="sessions_collapse">收起</string>
     <string name="sign_out">退出登录</string>
     <string name="sign_out_title">退出登录</string>
     <string name="sign_out_body">此设备将退出 %1$s 的登录。</string>
@@ -64,54 +67,80 @@
     <string name="update_title">需要更新 App</string>
     <string name="update_body">%1$s 要求 App 版本不低于 %2$s，当前版本为 %3$s。请下载新版本后再连接。</string>
     <string name="update_download">下载新版本</string>
-    <string name="error_network">网络异常，请稍后重试。</string>
-    <string name="error_wrong_password">密码错误。</string>
-    <string name="error_wrong_code">验证码错误。</string>
-    <string name="error_login_expired">登录已超时，请重新输入密码。</string>
-    <plurals name="error_rate_limited">
+    <string name="error_network" tools:ignore="UnusedResources">网络异常，请稍后重试。</string>
+    <string name="error_wrong_password" tools:ignore="UnusedResources">密码错误。</string>
+    <string name="error_wrong_code" tools:ignore="UnusedResources">验证码错误。</string>
+    <string name="error_login_expired" tools:ignore="UnusedResources">登录已超时，请重新输入密码。</string>
+    <plurals name="error_rate_limited" tools:ignore="UnusedResources">
         <item quantity="other">操作过于频繁，请 %1$d 秒后重试。</item>
     </plurals>
-    <string name="error_already_set_up">已设置管理员密码，请直接登录。</string>
-    <string name="error_passkey_invalid">通行密钥验证失败，请重试。</string>
-    <string name="error_already_enabled">两步验证已开启。</string>
-    <string name="error_body_too_large">请求内容过大。</string>
-    <string name="error_code_required">请输入两步验证的验证码。</string>
-    <string name="error_device_not_found">该设备不存在。</string>
-    <string name="error_export_not_found">导出不存在或已过期。</string>
-    <string name="error_forbidden">拒绝来自其他站点的请求。</string>
-    <string name="error_github_unavailable">GitHub 暂时无法访问，请稍后重试。</string>
-    <string name="error_internal_error">服务器错误，请稍后重试。</string>
-    <string name="error_invalid_request"></string>
-    <string name="error_model_error_not_found">该参考号不存在，或已超过保存期限。</string>
-    <string name="error_not_enabled">两步验证未开启。</string>
-    <string name="error_not_found">接口不存在。</string>
-    <string name="error_not_linked">尚未关联 GitHub。</string>
-    <string name="error_passkey_not_found">该通行密钥不存在。</string>
-    <string name="error_request_failed">请求失败。</string>
-    <string name="error_setting_locked">此项设置不可修改。</string>
-    <string name="error_setup_expired">设置已超时，请重新开始。</string>
-    <string name="error_setup_required">请先设置管理员密码。</string>
-    <string name="error_catalog_not_found">目录中没有该提供方。</string>
-    <string name="error_provider_builtin">内置的 DeepSeek 不能删除，可以停用。</string>
-    <string name="error_provider_exists">该 Provider ID 已被使用。</string>
-    <string name="error_provider_not_found">该模型提供方不存在。</string>
-    <string name="error_invalid_models"></string>
-    <string name="error_probe_failed"></string>
-    <string name="error_unauthorized">请先登录。</string>
-    <string name="error_github_not_connected">尚未关联 GitHub 或授权已失效，请重新关联。</string>
-    <string name="error_repo_not_found">仓库不存在，或云上求索无权访问。</string>
-    <string name="error_branch_not_found">仓库中不存在该分支。</string>
-    <string name="error_environment_not_found">环境不存在。</string>
-    <string name="error_model_not_found">模型不存在或已下线。</string>
-    <string name="error_model_gone">该会话使用的模型已不可用，请换一个模型后再发送。</string>
-    <string name="error_model_not_configured">尚无可用的模型，请在“设置 → 模型”中填写 DeepSeek API key 或添加模型提供商。</string>
-    <string name="error_session_not_found">会话不存在。</string>
-    <string name="error_session_closed">会话已归档，请先取消归档再发送消息。</string>
-    <string name="error_queued_not_found">该消息已发送或已撤回。</string>
-    <string name="error_nothing_running">当前没有正在运行的回合。</string>
-    <string name="error_session_archived">已归档的会话不能置顶或放进分组，请先取消归档。</string>
-    <string name="error_message_not_found">该消息不存在，或不是 Agent 的回复。</string>
-    <string name="error_group_not_found">分组不存在。</string>
-    <string name="error_too_many_groups">分组数量已达上限。</string>
-    <string name="error_invalid_group_name">分组名不能为空，且不能超过长度上限。</string>
+    <string name="error_already_set_up" tools:ignore="UnusedResources">已设置管理员密码，请直接登录。</string>
+    <string name="error_passkey_invalid" tools:ignore="UnusedResources">通行密钥验证失败，请重试。</string>
+    <string name="error_already_enabled" tools:ignore="UnusedResources">两步验证已开启。</string>
+    <string name="error_body_too_large" tools:ignore="UnusedResources">请求内容过大。</string>
+    <string name="error_code_required" tools:ignore="UnusedResources">请输入两步验证的验证码。</string>
+    <string name="error_device_not_found" tools:ignore="UnusedResources">该设备不存在。</string>
+    <string name="error_export_not_found" tools:ignore="UnusedResources">导出不存在或已过期。</string>
+    <string name="error_forbidden" tools:ignore="UnusedResources">拒绝来自其他站点的请求。</string>
+    <string name="error_github_unavailable" tools:ignore="UnusedResources">GitHub 暂时无法访问，请稍后重试。</string>
+    <string name="error_internal_error" tools:ignore="UnusedResources">服务器错误，请稍后重试。</string>
+    <string name="error_invalid_request" tools:ignore="UnusedResources"></string>
+    <string name="error_model_error_not_found" tools:ignore="UnusedResources">该参考号不存在，或已超过保存期限。</string>
+    <string name="error_not_enabled" tools:ignore="UnusedResources">两步验证未开启。</string>
+    <string name="error_not_found" tools:ignore="UnusedResources">接口不存在。</string>
+    <string name="error_not_linked" tools:ignore="UnusedResources">尚未关联 GitHub。</string>
+    <string name="error_passkey_not_found" tools:ignore="UnusedResources">该通行密钥不存在。</string>
+    <string name="error_request_failed" tools:ignore="UnusedResources">请求失败。</string>
+    <string name="error_setting_locked" tools:ignore="UnusedResources">此项设置不可修改。</string>
+    <string name="error_setup_expired" tools:ignore="UnusedResources">设置已超时，请重新开始。</string>
+    <string name="error_setup_required" tools:ignore="UnusedResources">请先设置管理员密码。</string>
+    <string name="error_catalog_not_found" tools:ignore="UnusedResources">目录中没有该提供方。</string>
+    <string name="error_provider_builtin" tools:ignore="UnusedResources">内置的 DeepSeek 不能删除，可以停用。</string>
+    <string name="error_provider_exists" tools:ignore="UnusedResources">该 Provider ID 已被使用。</string>
+    <string name="error_provider_not_found" tools:ignore="UnusedResources">该模型提供方不存在。</string>
+    <string name="error_invalid_models" tools:ignore="UnusedResources"></string>
+    <string name="error_probe_failed" tools:ignore="UnusedResources"></string>
+    <string name="error_unauthorized" tools:ignore="UnusedResources">请先登录。</string>
+    <string name="error_github_not_connected" tools:ignore="UnusedResources">尚未关联 GitHub 或授权已失效，请重新关联。</string>
+    <string name="error_repo_not_found" tools:ignore="UnusedResources">仓库不存在，或云上求索无权访问。</string>
+    <string name="error_branch_not_found" tools:ignore="UnusedResources">仓库中不存在该分支。</string>
+    <string name="error_environment_not_found" tools:ignore="UnusedResources">环境不存在。</string>
+    <string name="error_model_not_found" tools:ignore="UnusedResources">模型不存在或已下线。</string>
+    <string name="error_model_gone" tools:ignore="UnusedResources">该会话使用的模型已不可用，请换一个模型后再发送。</string>
+    <string name="error_model_not_configured" tools:ignore="UnusedResources">尚无可用的模型，请在“设置 → 模型”中填写 DeepSeek API key 或添加模型提供商。</string>
+    <string name="error_session_not_found" tools:ignore="UnusedResources">会话不存在。</string>
+    <string name="error_session_closed" tools:ignore="UnusedResources">会话已归档，请先取消归档再发送消息。</string>
+    <string name="error_queued_not_found" tools:ignore="UnusedResources">该消息已发送或已撤回。</string>
+    <string name="error_nothing_running" tools:ignore="UnusedResources">当前没有正在运行的回合。</string>
+    <string name="error_session_archived" tools:ignore="UnusedResources">已归档的会话不能置顶或放进分组，请先取消归档。</string>
+    <string name="error_message_not_found" tools:ignore="UnusedResources">该消息不存在，或不是 Agent 的回复。</string>
+    <string name="error_group_not_found" tools:ignore="UnusedResources">分组不存在。</string>
+    <string name="error_too_many_groups" tools:ignore="UnusedResources">分组数量已达上限。</string>
+    <string name="error_invalid_group_name" tools:ignore="UnusedResources">分组名不能为空，且不能超过长度上限。</string>
+    <string name="sidebar_label" tools:ignore="UnusedResources">会话列表</string>
+    <string name="sidebar_close" tools:ignore="UnusedResources">收起会话列表</string>
+    <string name="sidebar_new_session" tools:ignore="UnusedResources">新会话</string>
+    <string name="sidebar_search" tools:ignore="UnusedResources">搜索会话</string>
+    <string name="sidebar_pinned" tools:ignore="UnusedResources">已置顶</string>
+    <string name="sidebar_recent" tools:ignore="UnusedResources">最近</string>
+    <string name="sidebar_archived" tools:ignore="UnusedResources">已归档</string>
+    <string name="sidebar_drop_to_pin" tools:ignore="UnusedResources">拖到这里置顶</string>
+    <string name="sidebar_release_to_unpin" tools:ignore="UnusedResources">松手取消置顶</string>
+    <string name="sidebar_new_group" tools:ignore="UnusedResources">新分组</string>
+    <string name="sidebar_group_empty" tools:ignore="UnusedResources">分组中暂无会话。</string>
+    <string name="sidebar_group_options" tools:ignore="UnusedResources">分组菜单：%1$s</string>
+    <string name="session_list_empty" tools:ignore="UnusedResources">暂无会话，输入任务即可开始。</string>
+    <string name="session_list_no_match" tools:ignore="UnusedResources">未找到匹配的会话。</string>
+    <string name="session_list_options" tools:ignore="UnusedResources">会话菜单：%1$s</string>
+    <string name="status_queued" tools:ignore="UnusedResources">排队中</string>
+    <string name="status_running" tools:ignore="UnusedResources">运行中</string>
+    <string name="status_waiting" tools:ignore="UnusedResources">等待回复</string>
+    <string name="status_dormant" tools:ignore="UnusedResources">休眠</string>
+    <string name="status_archived" tools:ignore="UnusedResources">已归档</string>
+    <string name="status_failed" tools:ignore="UnusedResources">失败</string>
+    <string name="status_preparing_sandbox" tools:ignore="UnusedResources">正在准备沙箱</string>
+    <string name="status_awaiting_input" tools:ignore="UnusedResources">等你输入</string>
+    <string name="status_done" tools:ignore="UnusedResources">已完成</string>
+    <string name="status_unread" tools:ignore="UnusedResources">有新内容</string>
+    <string name="status_with_detail" tools:ignore="UnusedResources">%1$s · %2$s</string>
 </resources>
