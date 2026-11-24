@@ -1,0 +1,9 @@
+# 主站镜像（apps/site/Dockerfile）的构建上下文是仓库根目录：依赖和构建产物在镜像里重新装、重新构建
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+.git
+.env
+.env.*
+apps/site/data

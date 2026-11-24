@@ -1,0 +1,99 @@
+name: Install
+
+# 安装脚本（scripts/install.sh，#94）：在 GitHub 的 Ubuntu 机器上构建主站镜像，再跑安装脚本两遍。
+# - 第一遍在一个干净的 ubuntu:24.04 容器里（没有 Docker 的命令行，脚本要从 Docker 的软件源装上；用宿主的 Docker）；
+# - 第二遍直接在机器上：已有的密钥和数据不变，管理员还在。
+# 日志是公开的：脚本不打印密钥，这里也不打印环境文件的内容。
+on:
+  pull_request:
+    paths:
+      - "apps/site/**"
+      - "packages/protocol/**"
+      - "scripts/install.sh"
+      - "pnpm-lock.yaml"
+      - ".dockerignore"
+      - ".github/workflows/install.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/site/**"
+      - "packages/protocol/**"
+      - "scripts/install.sh"
+      - "pnpm-lock.yaml"
+      - ".dockerignore"
+      - ".github/workflows/install.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DATA: /var/lib/seekcloud
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检查脚本
+        run: |
+          bash -n scripts/install.sh
+          shellcheck -x scripts/install.sh
+
+      - name: 构建主站镜像
+        run: docker build -f apps/site/Dockerfile --build-arg VERSION=ci -t seekcloud-site:ci .
+
+      - name: 第一遍：在干净的 Ubuntu 容器里安装
+        run: |
+          docker run --rm --network host \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$DATA:$DATA" \
+            -v "$PWD/scripts/install.sh:/install.sh:ro" \
+            ubuntu:24.04 bash /install.sh --image seekcloud-site:ci --lang en
+
+      - name: 主站经 Caddy 可用，数据库和主站都不对外，主站不是 root
+        run: |
+          set -euo pipefail
+          curl -fsS http://127.0.0.1/api/health | grep -q '"database":"ok"'
+          test -z "$(docker port seekcloud-postgres-1)"
+          test -z "$(docker port seekcloud-site-1)"
+          test "$(docker exec seekcloud-site-1 id -u)" != "0"
+          test "$(sudo stat -c %a "$DATA/site.env")" = "600"
+          test "$(sudo stat -c %a "$DATA/postgres.env")" = "600"
+
+      - name: 用 http 设置管理员密码并登录（Cookie 不带 Secure）
+        run: |
+          set -euo pipefail
+          curl -fsS -c cookies.txt -H 'content-type: application/json' \
+            -d '{"password":"install-check-password","nickname":"CI"}' http://127.0.0.1/api/auth/setup
+          curl -fsS -b cookies.txt http://127.0.0.1/api/me >/dev/null
+          # 经 Caddy 来的请求：伪造的 X-Forwarded-For 不起作用
+          real=$(curl -fsS -b cookies.txt http://127.0.0.1/api/settings/proxy-hops | jq -r .yourAddress)
+          forged=$(curl -fsS -b cookies.txt -H 'x-forwarded-for: 198.51.100.9' http://127.0.0.1/api/settings/proxy-hops | jq -r .yourAddress)
+          test "$real" = "$forged"
+          test "$real" != "198.51.100.9"
+
+      - name: 第二遍：直接在机器上重新运行，密钥和数据不变
+        run: |
+          set -euo pipefail
+          sudo sha256sum "$DATA/site.env" "$DATA/postgres.env" > before.sums
+          sudo bash scripts/install.sh --image seekcloud-site:ci --lang zh
+          sudo sha256sum -c before.sums
+          curl -fsS -b cookies.txt http://127.0.0.1/api/me >/dev/null
+
+      - name: 改成不装 Caddy：主站只听本机的端口
+        run: |
+          set -euo pipefail
+          sudo bash scripts/install.sh --image seekcloud-site:ci --no-caddy --port 3100 --lang en
+          curl -fsS http://127.0.0.1:3100/api/health >/dev/null
+          test -z "$(docker ps -q --filter name=seekcloud-caddy-1)"
+          if curl -fsS -m 3 http://127.0.0.1/api/health >/dev/null 2>&1; then exit 1; fi
+
+      - name: 失败时的日志
+        if: failure()
+        run: sudo docker compose -f "$DATA/compose.yml" --project-directory "$DATA" logs --tail 100 || true
