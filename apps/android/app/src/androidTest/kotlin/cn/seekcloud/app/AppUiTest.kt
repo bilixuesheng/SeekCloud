@@ -187,6 +187,22 @@ class AppUiTest {
     }
 
     @Test
+    fun startANewSession() {
+        launch()
+        connect(siteA)
+        signIn()
+        tap(s(R.string.sidebar_new_session))
+        // 假主站没关联 GitHub：有关联的说明，只能不使用仓库
+        waitFor(s(R.string.github_connect_title))
+        val text = "New from the app ${System.nanoTime()}"
+        type(text)
+        tap(s(R.string.new_session_submit))
+        // 发起以后回到列表，新会话在列表里
+        waitForList()
+        waitFor(text)
+    }
+
+    @Test
     fun sessionMenuActions() {
         launch()
         connect(siteA)

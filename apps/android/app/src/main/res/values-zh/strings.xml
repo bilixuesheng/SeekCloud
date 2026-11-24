@@ -131,6 +131,11 @@
     <string name="error_group_not_found" tools:ignore="UnusedResources">分组不存在。</string>
     <string name="error_too_many_groups" tools:ignore="UnusedResources">分组数量已达上限。</string>
     <string name="error_invalid_group_name" tools:ignore="UnusedResources">分组名不能为空，且不能超过长度上限。</string>
+    <string name="github_auth_failed" tools:ignore="UnusedResources">GitHub 授权失败，请重试。</string>
+    <string name="github_connect_title" tools:ignore="UnusedResources">关联 GitHub</string>
+    <string name="github_connect_hint" tools:ignore="UnusedResources">授权 GitHub，并在需要使用的仓库上安装 GitHub App，DeepSeek 即可读写这些仓库。不使用仓库的会话无需关联。</string>
+    <string name="github_authorize" tools:ignore="UnusedResources">授权 GitHub</string>
+    <string name="github_install" tools:ignore="UnusedResources">安装 GitHub App</string>
     <string name="sidebar_label" tools:ignore="UnusedResources">会话列表</string>
     <string name="sidebar_close" tools:ignore="UnusedResources">收起会话列表</string>
     <string name="sidebar_new_session" tools:ignore="UnusedResources">新会话</string>
@@ -161,6 +166,35 @@
     <string name="status_done" tools:ignore="UnusedResources">已完成</string>
     <string name="status_unread" tools:ignore="UnusedResources">有新内容</string>
     <string name="status_with_detail" tools:ignore="UnusedResources">%1$s · %2$s</string>
+    <string name="new_session_placeholder" tools:ignore="UnusedResources">描述任务或提出问题</string>
+    <string name="new_session_submit" tools:ignore="UnusedResources">发起会话</string>
+    <string name="environment_label" tools:ignore="UnusedResources">环境</string>
+    <string name="environment_search" tools:ignore="UnusedResources">搜索环境</string>
+    <string name="new_session_no_repo" tools:ignore="UnusedResources">不使用仓库</string>
+    <string name="repo_read_only" tools:ignore="UnusedResources">只读</string>
+    <string name="new_session_base_branch" tools:ignore="UnusedResources">基础分支</string>
+    <string name="new_session_search_branches" tools:ignore="UnusedResources">搜索分支</string>
+    <string name="new_session_no_branch_match" tools:ignore="UnusedResources">未找到匹配的分支。</string>
+    <string name="new_session_choose_model" tools:ignore="UnusedResources">选择模型</string>
+    <string name="repo_picker_title" tools:ignore="UnusedResources">选择仓库</string>
+    <string name="repo_picker_search" tools:ignore="UnusedResources">搜索仓库（含公开仓库）</string>
+    <string name="repo_picker_search_label" tools:ignore="UnusedResources">搜索仓库</string>
+    <string name="repo_picker_no_match" tools:ignore="UnusedResources">未找到匹配的仓库。</string>
+    <string name="repo_picker_empty" tools:ignore="UnusedResources">暂无已安装 GitHub App 的仓库。</string>
+    <string name="repo_private" tools:ignore="UnusedResources">私有</string>
+    <string name="repo_picker_manage" tools:ignore="UnusedResources">管理仓库权限</string>
+    <string name="environment_default" tools:ignore="UnusedResources">默认环境</string>
+    <string name="environment_deleted" tools:ignore="UnusedResources">已删除</string>
+    <string name="repo_no_repo" tools:ignore="UnusedResources">无仓库</string>
+    <string name="model_dialog" tools:ignore="UnusedResources">模型和思考强度</string>
+    <string name="model_choose" tools:ignore="UnusedResources">选择模型，当前为 %1$s</string>
+    <string name="model_reset_effort" tools:ignore="UnusedResources">恢复默认</string>
+    <string name="model_max_hint" tools:ignore="UnusedResources">思考时间更长，用量更多。</string>
+    <string name="model_no_efforts" tools:ignore="UnusedResources">%1$s 未声明推理等级，由接口自行决定是否思考。</string>
+    <string name="model_list" tools:ignore="UnusedResources">模型</string>
+    <string name="model_desc_flash" tools:ignore="UnusedResources">速度快、用量省，适合日常改动</string>
+    <string name="model_desc_pro" tools:ignore="UnusedResources">更强，适合复杂的任务</string>
+    <string name="model_effort" tools:ignore="UnusedResources">思考强度</string>
     <string name="session_info" tools:ignore="UnusedResources">会话信息</string>
     <string name="session_status" tools:ignore="UnusedResources">状态</string>
     <string name="session_repo" tools:ignore="UnusedResources">仓库</string>
@@ -190,7 +224,27 @@
     <string name="pr_merged" tools:ignore="UnusedResources">已合并</string>
     <string name="pr_closed" tools:ignore="UnusedResources">已关闭</string>
     <string name="pr_text" tools:ignore="UnusedResources">PR #%1$s · %2$s</string>
+    <string name="github_unlink_title" tools:ignore="UnusedResources">解除关联 GitHub？</string>
+    <string name="github_unlink_body" tools:ignore="UnusedResources">解除后 DeepSeek 将无法访问你的仓库，正在使用仓库的会话也无法推送。之后可以随时重新关联。</string>
+    <string name="github_unlink" tools:ignore="UnusedResources">解除关联</string>
+    <string name="github_unlinked" tools:ignore="UnusedResources">已解除关联 GitHub。</string>
+    <string name="github_not_connected" tools:ignore="UnusedResources">未关联</string>
+    <string name="github_connect" tools:ignore="UnusedResources">关联</string>
     <string name="common_change" tools:ignore="UnusedResources">修改</string>
     <string name="common_set" tools:ignore="UnusedResources">设置</string>
     <string name="common_continue" tools:ignore="UnusedResources">继续</string>
+    <string name="models_deepseek_name" tools:ignore="UnusedResources">DeepSeek 官方</string>
+    <string name="models_provider_name_moonshotai" tools:ignore="UnusedResources">Kimi（Moonshot）</string>
+    <string name="models_provider_name_moonshotai_cn" tools:ignore="UnusedResources">Kimi（Moonshot 中国）</string>
+    <string name="models_provider_name_zai" tools:ignore="UnusedResources">智谱 GLM（Z.ai）</string>
+    <string name="models_provider_name_zai_coding_cn" tools:ignore="UnusedResources">智谱 GLM（中国）</string>
+    <string name="models_provider_name_minimax_cn" tools:ignore="UnusedResources">MiniMax（中国）</string>
+    <string name="models_provider_name_xiaomi" tools:ignore="UnusedResources">小米 MiMo</string>
+    <string name="effort_off" tools:ignore="UnusedResources">关闭</string>
+    <string name="effort_minimal" tools:ignore="UnusedResources">极低</string>
+    <string name="effort_low" tools:ignore="UnusedResources">低</string>
+    <string name="effort_medium" tools:ignore="UnusedResources">中</string>
+    <string name="effort_high" tools:ignore="UnusedResources">高</string>
+    <string name="effort_xhigh" tools:ignore="UnusedResources">很高</string>
+    <string name="effort_max" tools:ignore="UnusedResources">最高</string>
 </resources>

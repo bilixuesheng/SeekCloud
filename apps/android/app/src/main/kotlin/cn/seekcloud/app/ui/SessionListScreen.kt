@@ -40,6 +40,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -77,6 +78,7 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.seekcloud.app.R
 import cn.seekcloud.app.net.SavedServer
+import cn.seekcloud.app.sessions.NewSessionViewModel
 import cn.seekcloud.app.sessions.SessionGroup
 import cn.seekcloud.app.sessions.SessionListState
 import cn.seekcloud.app.sessions.SessionListViewModel
@@ -92,9 +94,12 @@ import java.time.Instant
 fun SessionListRoute(
     server: SavedServer,
     viewModel: SessionListViewModel,
+    newSession: @Composable () -> NewSessionViewModel,
     onSwitchServer: () -> Unit,
     onSignOut: () -> Unit,
 ) {
+    // 新会话页盖在列表上面，按返回回到列表（转屏不丢）
+    var composing by rememberSaveable { mutableStateOf(false) }
     LifecycleStartEffect(viewModel) {
         viewModel.start()
         onStopOrDispose { viewModel.stop() }
@@ -107,14 +112,26 @@ fun SessionListRoute(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val copied = stringResource(R.string.session_link_copied)
+    // 会话页（#182）做好以前，先在浏览器里打开网页上的会话页
+    val openSession = { s: SessionSummary -> context.startActivity(Intent(Intent.ACTION_VIEW, "${server.origin}/s/${s.shortId}".toUri())) }
+    if (composing) {
+        NewSessionRoute(
+            origin = server.origin,
+            viewModel = newSession(),
+            // 发起以后回到列表，新会话实时出现在最上面；会话页（#182）做好以后改成直接进会话页
+            onCreated = { composing = false },
+            onBack = { composing = false },
+        )
+        return
+    }
     SessionListScreen(
         server = server,
         state = state,
         connected = connected,
         refreshing = refreshing,
         onRefresh = viewModel::refresh,
-        // 会话页（#182）做好以前，先在浏览器里打开网页上的会话页
-        onOpen = { context.startActivity(Intent(Intent.ACTION_VIEW, "${server.origin}/s/${it.shortId}".toUri())) },
+        onOpen = openSession,
+        onNewSession = { composing = true },
         onMenu = { viewModel.openMenu(it.shortId) },
         onSwitchServer = onSwitchServer,
         onSignOut = onSignOut,
@@ -150,6 +167,7 @@ fun SessionListScreen(
     onRefresh: () -> Unit,
     onOpen: (SessionSummary) -> Unit,
     onMenu: (SessionSummary) -> Unit,
+    onNewSession: () -> Unit,
     onSwitchServer: () -> Unit,
     onSignOut: () -> Unit,
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
@@ -192,6 +210,13 @@ fun SessionListScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = onNewSession,
+                icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
+                text = { Text(stringResource(R.string.sidebar_new_session)) },
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
@@ -502,6 +527,6 @@ private fun SessionListPreview() {
         loaded = true,
     )
     SeekCloudTheme {
-        SessionListScreen(SavedServer("p", "https://seekcloud.example.com"), state, false, false, {}, {}, {}, {}, {})
+        SessionListScreen(SavedServer("p", "https://seekcloud.example.com"), state, false, false, {}, {}, {}, {}, {}, {})
     }
 }
