@@ -204,7 +204,9 @@ class AppUiTest {
         launch()
         connect(siteA)
         signIn()
-        tap(s(R.string.sidebar_new_session))
+        explain("tap new session") {
+            rule.onNode(hasContentDescription(s(R.string.sidebar_new_session)) and hasClickAction()).performClick()
+        }
         // 假主站没关联 GitHub：有关联的说明，只能不使用仓库
         waitFor(s(R.string.github_connect_title))
         val text = "New from the app ${System.nanoTime()}"

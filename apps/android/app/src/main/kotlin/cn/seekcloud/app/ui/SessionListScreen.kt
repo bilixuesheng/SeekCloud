@@ -211,10 +211,13 @@ fun SessionListScreen(
         },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
+            val label = stringResource(R.string.sidebar_new_session)
             ExtendedFloatingActionButton(
                 onClick = onNewSession,
                 icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
-                text = { Text(stringResource(R.string.sidebar_new_session)) },
+                text = { Text(label) },
+                // 扩展的浮动按钮把文字那一块的语义清掉了（Material 3 的做法）：读屏要靠这里的说明
+                modifier = Modifier.semantics { contentDescription = label },
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
