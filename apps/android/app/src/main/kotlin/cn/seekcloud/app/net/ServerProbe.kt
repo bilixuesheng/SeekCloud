@@ -16,6 +16,12 @@ sealed interface ProbeResult {
     data object NeedsCleartextConsent : ProbeResult
 
     /**
+     * 地址是 http，主站让跳到同一台主机的 https（配好域名和证书以后 Caddy 就这样）：改连 [address]。
+     * 只认同一台主机、从 http 升到 https 的跳转，别的跳转一律不跟。
+     */
+    data class UseHttps(val address: ServerAddress) : ProbeResult
+
+    /**
      * 主站的证书系统不信任（自签的，或者链不完整）。把证书的指纹给管理员看，确认以后钉住这一张。
      * [changed] 为 true 时，以前钉住过别的证书：证书换了，要格外小心。
      */
@@ -66,6 +72,12 @@ fun probeServer(
     val request = Request.Builder().url(address.url("/api/health")).get().build()
     return try {
         client.http.newCall(request).execute().use { response ->
+            if (!address.secure && response.isRedirect) {
+                val target = response.header("Location")?.let { request.url.resolve(it) }
+                if (target != null && target.isHttps && target.host == address.host) {
+                    return ProbeResult.UseHttps(ServerAddress(true, target.host, target.port.takeIf { it != 443 }))
+                }
+            }
             val body = response.body.string()
             val health = runCatching { json.decodeFromString<HealthBody>(body) }.getOrNull()
             when {
