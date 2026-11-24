@@ -43,6 +43,8 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
+        // 界面测试（src/androidTest，#205）：CI 里在模拟器上连假主站跑
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -88,6 +90,13 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
+
+    debugImplementation(libs.compose.ui.test.manifest)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.junit)
 
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver)

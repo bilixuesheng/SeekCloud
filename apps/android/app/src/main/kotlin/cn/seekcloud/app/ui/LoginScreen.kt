@@ -70,7 +70,7 @@ fun LoginScreen(
                     context.startActivity(Intent(Intent.ACTION_VIEW, server.origin.toUri()))
                 }
                 Spacer(Modifier.height(8.dp))
-                SecondaryButton(stringResource(R.string.login_check_again), enabled = !ui.busy, onClick = onCheckSetup)
+                SecondaryButton(stringResource(R.string.login_check_again), onClick = onCheckSetup)
             }
             else -> {
                 var password by rememberSaveable { mutableStateOf("") }
