@@ -22,11 +22,20 @@ export type AppKey = keyof typeof appZh;
 export type AppCatalog = { readonly [K in AppKey]: Message };
 
 /**
- * 网页目录里 App 也用的几组，两边说法一样：接口的报错、会话的状态、侧栏和会话列表。
+ * 网页目录里 App 也用的几组，两边说法一样：接口的报错、会话的状态、侧栏和会话列表、会话的菜单、分组、PR、通用的按钮。
  * 键改成安卓的资源名：点换成下划线，驼峰换成下划线（error.rate_limited → error_rate_limited，
  * sessionList.empty → session_list_empty，status.awaitingInput → status_awaiting_input）。
  */
-const SHARED = ["error.", "status.", "sidebar.", "sessionList."];
+const SHARED = [
+  "error.",
+  "status.",
+  "sidebar.",
+  "sessionList.",
+  "session.",
+  "group.",
+  "pr.",
+  "common.",
+];
 
 const snake = (key: string) =>
   key

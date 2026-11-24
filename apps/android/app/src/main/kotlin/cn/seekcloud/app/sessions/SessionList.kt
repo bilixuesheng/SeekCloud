@@ -22,8 +22,17 @@ data class SessionSummary(
     val updatedAt: String,
 )
 
+/** 会话的一个仓库：第一个是主仓库。[pullRequest] 是会话分支上最近的 PR。 */
 @Serializable
-data class SessionRepo(val fullName: String)
+data class SessionRepo(
+    val fullName: String,
+    val branch: String = "",
+    val access: String = "push",
+    val pullRequest: PullRequestRef? = null,
+)
+
+@Serializable
+data class PullRequestRef(val number: Int, val state: String)
 
 /** 侧栏的分组（#153），分组之间按 sortKey 从小到大排。 */
 @Serializable

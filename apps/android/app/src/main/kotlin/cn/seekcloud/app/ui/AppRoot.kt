@@ -61,7 +61,7 @@ fun AppRoot(app: AppViewModel = viewModel()) {
                 server = current.server,
                 // 每台主站一个，换服务器、改地址以后是新的
                 viewModel = viewModel(key = "sessions:${current.server.id}:${current.server.origin}") {
-                    SessionListViewModel(app.client(current.server)) { app.signedOut(current.server) }
+                    SessionListViewModel(app.client(current.server), onSignedOut = { app.signedOut(current.server) })
                 },
                 onSwitchServer = app::showServers,
                 onSignOut = { app.logout(current.server) },
