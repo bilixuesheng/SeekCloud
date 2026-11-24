@@ -1,0 +1,81 @@
+package cn.seekcloud.app.sessions
+
+import cn.seekcloud.app.net.ServerClient
+import cn.seekcloud.app.net.toApiException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+
+/**
+ * 会话页（#182）用的接口，和网页的会话页一样。出错时抛 ApiException，连不上抛 IOException。
+ */
+interface SessionPageApi {
+    /** 会话本身（标题、状态、仓库）；不存在时抛 404。 */
+    fun session(shortId: String): SessionSummary
+
+    /**
+     * 发一条消息。会话在等回复就开始下一个回合；Agent 在工作时 [mode] 为 now 插进当前回合（下一步读到），
+     * later 排队到这个回合结束。
+     */
+    fun send(shortId: String, text: String, mode: String)
+
+    /** 停下当前回合。 */
+    fun stop(shortId: String)
+
+    /** 撤回一条排队的消息，返回它的原文（放回输入框）。 */
+    fun withdraw(shortId: String, queueId: String): String?
+
+    /** 排队的消息立即发送（插进当前回合）。 */
+    fun sendNow(shortId: String, queueId: String)
+}
+
+class HttpSessionPageApi(private val client: ServerClient) : SessionPageApi {
+    override fun session(shortId: String): SessionSummary =
+        json.decodeFromString(SessionSummary.serializer(), get("/api/sessions/$shortId"))
+
+    override fun send(shortId: String, text: String, mode: String) {
+        post("/api/sessions/$shortId/messages", "text" to JsonPrimitive(text), "mode" to JsonPrimitive(mode))
+    }
+
+    override fun stop(shortId: String) {
+        post("/api/sessions/$shortId/stop")
+    }
+
+    override fun withdraw(shortId: String, queueId: String): String? {
+        val body = post("/api/sessions/$shortId/queue/$queueId/withdraw")
+        return runCatching { (json.parseToJsonElement(body).jsonObject["text"] as? JsonPrimitive)?.contentOrNull }.getOrNull()
+    }
+
+    override fun sendNow(shortId: String, queueId: String) {
+        post("/api/sessions/$shortId/queue/$queueId/send-now")
+    }
+
+    private fun get(path: String): String {
+        val request = Request.Builder().url(client.address.url(path)).get().build()
+        return client.http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw response.toApiException()
+            response.body.string()
+        }
+    }
+
+    private fun post(path: String, vararg fields: Pair<String, JsonElement>): String {
+        val body: JsonObject = buildJsonObject { for ((k, v) in fields) put(k, v) }
+        val request = Request.Builder().url(client.address.url(path)).post(body.toString().toRequestBody(JSON)).build()
+        return client.http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw response.toApiException()
+            response.body.string()
+        }
+    }
+
+    private companion object {
+        val JSON = "application/json".toMediaType()
+        val json = Json { ignoreUnknownKeys = true }
+    }
+}

@@ -87,6 +87,7 @@ import cn.seekcloud.app.sessions.NewSessionViewModel
 import cn.seekcloud.app.sessions.SessionGroup
 import cn.seekcloud.app.sessions.SessionListState
 import cn.seekcloud.app.sessions.SessionListViewModel
+import cn.seekcloud.app.sessions.SessionViewModel
 import cn.seekcloud.app.sessions.SessionRepo
 import cn.seekcloud.app.sessions.SessionSummary
 import cn.seekcloud.app.sessions.StatusMark
@@ -101,11 +102,13 @@ fun SessionListRoute(
     nickname: String?,
     viewModel: SessionListViewModel,
     newSession: @Composable () -> NewSessionViewModel,
+    sessionPage: @Composable (shortId: String) -> SessionViewModel,
     onSwitchServer: () -> Unit,
     onSignOut: () -> Unit,
 ) {
-    // 新会话页盖在列表上面，按返回回到列表（转屏不丢）
+    // 新会话页、会话页盖在列表上面，按返回回到列表（转屏不丢）
     var composing by rememberSaveable { mutableStateOf(false) }
+    var openId by rememberSaveable { mutableStateOf<String?>(null) }
     LifecycleStartEffect(viewModel) {
         viewModel.start()
         onStopOrDispose { viewModel.stop() }
@@ -118,8 +121,10 @@ fun SessionListRoute(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val copied = stringResource(R.string.session_link_copied)
-    // 会话页（#182）做好以前，先在浏览器里打开网页上的会话页
-    val openSession = { s: SessionSummary -> context.startActivity(Intent(Intent.ACTION_VIEW, "${server.origin}/s/${s.shortId}".toUri())) }
+    val openSession = { s: SessionSummary ->
+        openId = s.shortId
+        composing = false
+    }
     val waiting = awaitingInput(state.sessions)
     // 宽屏（平板、大屏手机横过来、折叠屏展开）：左边会话列表，右边新会话页（照网页宽屏的布局）
     val wide = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } >= 840.dp
@@ -130,14 +135,28 @@ fun SessionListRoute(
             nickname = nickname,
             waiting = waiting,
             onOpen = openSession,
-            // 发起以后回到列表，新会话实时出现在最上面；会话页（#182）做好以后改成直接进会话页
-            onCreated = { composing = false },
+            // 发起以后直接进会话页
+            onCreated = openSession,
             onBack = onBack,
         )
     }
-    if (composing && !wide) {
-        newSessionPage { composing = false }
-        return
+    val sessionPageFor = @Composable { shortId: String ->
+        SessionRoute(
+            listed = state.sessions.firstOrNull { it.shortId == shortId },
+            viewModel = sessionPage(shortId),
+            onBack = { openId = null },
+        )
+    }
+    val open = openId
+    if (!wide) {
+        if (open != null) {
+            sessionPageFor(open)
+            return
+        }
+        if (composing) {
+            newSessionPage { composing = false }
+            return
+        }
     }
     val list = @Composable { modifier: Modifier ->
         Box(modifier) {
@@ -161,19 +180,22 @@ fun SessionListRoute(
         Row(Modifier.fillMaxSize()) {
             list(Modifier.width(380.dp).fillMaxHeight())
             VerticalDivider()
-            Box(Modifier.weight(1f).fillMaxHeight()) { newSessionPage(null) }
+            // 右边：开着的会话，没有时是新会话页
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                if (open != null) sessionPageFor(open) else newSessionPage(null)
+            }
         }
     } else {
         list(Modifier.fillMaxSize())
     }
-    val open = menu
-    val session = open?.let { m -> state.sessions.firstOrNull { it.shortId == m.shortId } }
-    if (open != null && session != null) {
+    val sheet = menu
+    val session = sheet?.let { m -> state.sessions.firstOrNull { it.shortId == m.shortId } }
+    if (sheet != null && session != null) {
         SessionMenuSheet(
             origin = server.origin,
             session = session,
             groups = state.groups,
-            menu = open,
+            menu = sheet,
             onPage = viewModel::showPage,
             onPerform = viewModel::perform,
             onCopied = {

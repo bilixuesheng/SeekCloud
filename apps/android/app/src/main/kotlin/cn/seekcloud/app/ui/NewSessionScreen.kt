@@ -614,7 +614,7 @@ private fun EffortSlider(model: ModelOption, effort: String, defaultEffort: Stri
 }
 
 @Composable
-private fun effortName(effort: String): String = stringResource(
+internal fun effortName(effort: String): String = stringResource(
     when (effort) {
         "minimal" -> R.string.effort_minimal
         "low" -> R.string.effort_low

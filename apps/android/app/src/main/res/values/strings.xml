@@ -67,6 +67,9 @@
     <string name="update_title">App update required</string>
     <string name="update_body">%1$s requires app version %2$s or later. This is version %3$s. Download the new version, then connect again.</string>
     <string name="update_download">Download new version</string>
+    <string name="link_open_title">Open link</string>
+    <string name="link_open_body">The following address will open in your browser:</string>
+    <string name="link_open_confirm">Open</string>
     <string name="common_cancel" tools:ignore="UnusedResources">Cancel</string>
     <string name="common_close" tools:ignore="UnusedResources">Close</string>
     <string name="common_back" tools:ignore="UnusedResources">Back</string>
@@ -192,6 +195,16 @@
     <string name="environment_default" tools:ignore="UnusedResources">Default</string>
     <string name="environment_deleted" tools:ignore="UnusedResources">Deleted</string>
     <string name="repo_no_repo" tools:ignore="UnusedResources">None</string>
+    <string name="composer_attach" tools:ignore="UnusedResources">Add attachment</string>
+    <string name="composer_image" tools:ignore="UnusedResources">Image</string>
+    <string name="composer_image_soon" tools:ignore="UnusedResources">Not available yet</string>
+    <string name="composer_image_unsupported" tools:ignore="UnusedResources">The current model cannot read images. Switch to a model that supports them.</string>
+    <string name="composer_file" tools:ignore="UnusedResources">File</string>
+    <string name="composer_file_soon" tools:ignore="UnusedResources">Available once files reach the sandbox</string>
+    <string name="composer_stop" tools:ignore="UnusedResources">Stop</string>
+    <string name="composer_send_now" tools:ignore="UnusedResources">Send (the Agent reads it at its next step)</string>
+    <string name="composer_more_send" tools:ignore="UnusedResources">More send options</string>
+    <string name="composer_later" tools:ignore="UnusedResources">Queue for later</string>
     <string name="model_dialog" tools:ignore="UnusedResources">Model and thinking effort</string>
     <string name="model_choose" tools:ignore="UnusedResources">Choose a model. Current: %1$s</string>
     <string name="model_reset_effort" tools:ignore="UnusedResources">Reset to default</string>
@@ -230,6 +243,144 @@
     <string name="pr_merged" tools:ignore="UnusedResources">Merged</string>
     <string name="pr_closed" tools:ignore="UnusedResources">Closed</string>
     <string name="pr_text" tools:ignore="UnusedResources">PR #%1$s · %2$s</string>
+    <string name="chat_placeholder" tools:ignore="UnusedResources">Type / for commands</string>
+    <string name="chat_placeholder_archived" tools:ignore="UnusedResources">Session archived</string>
+    <string name="chat_placeholder_failed" tools:ignore="UnusedResources">The session failed. Send a message to retry</string>
+    <string name="chat_not_found" tools:ignore="UnusedResources">Session not found</string>
+    <string name="chat_not_found_hint" tools:ignore="UnusedResources">It may have been deleted, or the link is incorrect.</string>
+    <string name="chat_queued_waiting" tools:ignore="UnusedResources">Queued, waiting for free resources</string>
+    <string name="chat_seeking" tools:ignore="UnusedResources">Seeking</string>
+    <string name="chat_ai_notice" tools:ignore="UnusedResources">DeepSeek is AI and can make mistakes.</string>
+    <string name="chat_disconnected" tools:ignore="UnusedResources">Lost connection to the server. Refresh the page.</string>
+    <string name="chat_send" tools:ignore="UnusedResources">Send</string>
+    <string name="chat_archived_note" tools:ignore="UnusedResources">This session is archived. Messages cannot be sent.</string>
+    <string name="chat_withdraw" tools:ignore="UnusedResources">Withdraw and edit</string>
+    <string name="chat_send_now" tools:ignore="UnusedResources">Send now</string>
+    <string name="chat_to_bottom" tools:ignore="UnusedResources">Scroll to bottom</string>
+    <string name="chat_sending" tools:ignore="UnusedResources">Sending</string>
+    <string name="chat_delivered" tools:ignore="UnusedResources">Read by DeepSeek</string>
+    <string name="chat_retry" tools:ignore="UnusedResources">Retry</string>
+    <string name="chat_resend" tools:ignore="UnusedResources">Resend this message</string>
+    <string name="chat_cannot_retry" tools:ignore="UnusedResources">Cannot retry while DeepSeek is running</string>
+    <string name="chat_thinking" tools:ignore="UnusedResources">Thinking</string>
+    <string name="chat_switched_model" tools:ignore="UnusedResources">Switched to %1$s · Thinking: %2$s</string>
+    <string name="chat_generating_title" tools:ignore="UnusedResources">Generating title</string>
+    <plurals name="chat_pinned_messages" tools:ignore="UnusedResources">
+        <item quantity="one">%1$d pinned message</item>
+        <item quantity="other">%1$d pinned messages</item>
+    </plurals>
+    <string name="chat_session_start" tools:ignore="UnusedResources">Start of session</string>
+    <string name="chat_pin_fallback" tools:ignore="UnusedResources">Pinned message</string>
+    <string name="chat_tool_input" tools:ignore="UnusedResources">Input</string>
+    <string name="chat_tool_error" tools:ignore="UnusedResources">Error</string>
+    <string name="chat_tool_result" tools:ignore="UnusedResources">Result</string>
+    <string name="chat_no_output" tools:ignore="UnusedResources">(no output)</string>
+    <string name="chat_plan" tools:ignore="UnusedResources">Plan</string>
+    <string name="chat_plan_stale" tools:ignore="UnusedResources">Plan from before your last message</string>
+    <string name="chat_turn_stopped" tools:ignore="UnusedResources">Turn stopped</string>
+    <string name="chat_turn_failed" tools:ignore="UnusedResources">Turn failed</string>
+    <string name="chat_turn_stopped_with" tools:ignore="UnusedResources">Turn stopped: %1$s</string>
+    <string name="chat_turn_failed_with" tools:ignore="UnusedResources">Turn failed: %1$s</string>
+    <string name="chat_session_failed" tools:ignore="UnusedResources">Session failed</string>
+    <string name="chat_session_failed_with" tools:ignore="UnusedResources">Session failed: %1$s</string>
+    <string name="chat_push_follow_up" tools:ignore="UnusedResources">Pushing the session branch failed. SeekCloud passed the error to the Agent.</string>
+    <plurals name="chat_push_gave_up" tools:ignore="UnusedResources">
+        <item quantity="one">Push still failed after %1$d automatic follow-up (%2$s). Check the cause before sending another message.</item>
+        <item quantity="other">Push still failed after %1$d automatic follow-ups (%2$s). Check the cause before sending another message.</item>
+    </plurals>
+    <string name="chat_image_blocked" tools:ignore="UnusedResources">%1$s from %2$s. Click to load.</string>
+    <string name="chat_image_failed" tools:ignore="UnusedResources">%1$s failed to load. Click to view.</string>
+    <string name="chat_image" tools:ignore="UnusedResources">Image</string>
+    <string name="tool_read" tools:ignore="UnusedResources">Read</string>
+    <string name="tool_write" tools:ignore="UnusedResources">Write</string>
+    <string name="tool_edit" tools:ignore="UnusedResources">Edit</string>
+    <string name="tool_bash" tools:ignore="UnusedResources">Run</string>
+    <string name="tool_grep" tools:ignore="UnusedResources">Search</string>
+    <string name="tool_glob" tools:ignore="UnusedResources">Find files</string>
+    <string name="tool_ls" tools:ignore="UnusedResources">List directory</string>
+    <string name="tool_web_fetch" tools:ignore="UnusedResources">Fetch page</string>
+    <string name="tool_web_search" tools:ignore="UnusedResources">Search the web</string>
+    <string name="tool_todo" tools:ignore="UnusedResources">Update to-dos</string>
+    <string name="tool_task" tools:ignore="UnusedResources">DeepSeek subtask</string>
+    <string name="tool_read_active" tools:ignore="UnusedResources">Reading</string>
+    <string name="tool_write_active" tools:ignore="UnusedResources">Writing</string>
+    <string name="tool_edit_active" tools:ignore="UnusedResources">Editing</string>
+    <string name="tool_bash_active" tools:ignore="UnusedResources">Running</string>
+    <string name="tool_grep_active" tools:ignore="UnusedResources">Searching</string>
+    <string name="tool_glob_active" tools:ignore="UnusedResources">Finding files</string>
+    <string name="tool_ls_active" tools:ignore="UnusedResources">Listing directory</string>
+    <string name="tool_web_fetch_active" tools:ignore="UnusedResources">Fetching page</string>
+    <string name="tool_web_search_active" tools:ignore="UnusedResources">Searching the web</string>
+    <string name="tool_todo_active" tools:ignore="UnusedResources">Updating to-dos</string>
+    <string name="tool_task_active" tools:ignore="UnusedResources">Running a DeepSeek subtask</string>
+    <string name="tool_other_active" tools:ignore="UnusedResources">Using %1$s</string>
+    <string name="tool_activity" tools:ignore="UnusedResources">%1$s %2$s</string>
+    <plurals name="tools_read" tools:ignore="UnusedResources">
+        <item quantity="one">read %1$d file</item>
+        <item quantity="other">read %1$d files</item>
+    </plurals>
+    <plurals name="tools_edit" tools:ignore="UnusedResources">
+        <item quantity="one">edited %1$d file</item>
+        <item quantity="other">edited %1$d files</item>
+    </plurals>
+    <plurals name="tools_bash" tools:ignore="UnusedResources">
+        <item quantity="one">ran %1$d command</item>
+        <item quantity="other">ran %1$d commands</item>
+    </plurals>
+    <plurals name="tools_search" tools:ignore="UnusedResources">
+        <item quantity="one">searched once</item>
+        <item quantity="other">searched %1$d times</item>
+    </plurals>
+    <plurals name="tools_fetch" tools:ignore="UnusedResources">
+        <item quantity="one">fetched %1$d page</item>
+        <item quantity="other">fetched %1$d pages</item>
+    </plurals>
+    <plurals name="tools_other" tools:ignore="UnusedResources">
+        <item quantity="one">used %1$d other tool</item>
+        <item quantity="other">used %1$d other tools</item>
+    </plurals>
+    <string name="agent_error_model_unavailable" tools:ignore="UnusedResources">The model service is temporarily unavailable</string>
+    <string name="agent_error_model_rate_limited" tools:ignore="UnusedResources">The model service is busy. Try again later</string>
+    <string name="agent_error_model_rejected" tools:ignore="UnusedResources">The model service rejected the request</string>
+    <string name="agent_error_context_too_long" tools:ignore="UnusedResources">The conversation exceeds the model\'s context limit</string>
+    <string name="agent_error_timeout" tools:ignore="UnusedResources">The model service timed out</string>
+    <string name="agent_error_sandbox_unavailable" tools:ignore="UnusedResources">The sandbox cannot be created right now</string>
+    <string name="agent_error_repo_clone_failed" tools:ignore="UnusedResources">Cloning the repository failed</string>
+    <string name="agent_error_internal" tools:ignore="UnusedResources">Internal service error</string>
+    <string name="agent_error_ref" tools:ignore="UnusedResources">Reference %1$s</string>
+    <string name="agent_error_with_detail" tools:ignore="UnusedResources">%1$s (%2$s)</string>
+    <string name="changes_label" tools:ignore="UnusedResources">Changes in this turn</string>
+    <string name="changes_read_only" tools:ignore="UnusedResources">%1$s is read-only. Changes are not pushed.</string>
+    <string name="changes_push_failed" tools:ignore="UnusedResources">Pushing %1$s failed</string>
+    <string name="changes_undo" tools:ignore="UnusedResources">Undo</string>
+    <string name="changes_undo_hint" tools:ignore="UnusedResources">Undo this file\'s changes from this turn</string>
+    <string name="changes_cannot_undo" tools:ignore="UnusedResources">Cannot undo while DeepSeek is running</string>
+    <string name="changes_undo_prompt" tools:ignore="UnusedResources">Undo the changes to `%1$s` from the previous turn, restoring it to how it was before that turn.</string>
+    <string name="changes_collapse" tools:ignore="UnusedResources">Collapse</string>
+    <string name="changes_view_all" tools:ignore="UnusedResources">See all</string>
+    <plurals name="changes_changed_files" tools:ignore="UnusedResources">
+        <item quantity="one">Changed %1$d file</item>
+        <item quantity="other">Changed %1$d files</item>
+    </plurals>
+    <plurals name="changes_omitted" tools:ignore="UnusedResources">
+        <item quantity="one">%1$d more file not listed</item>
+        <item quantity="other">%1$d more files not listed</item>
+    </plurals>
+    <string name="changes_binary" tools:ignore="UnusedResources">Binary</string>
+    <string name="changes_title" tools:ignore="UnusedResources">Changes</string>
+    <plurals name="changes_file_count" tools:ignore="UnusedResources">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <string name="changes_empty" tools:ignore="UnusedResources">The session branch has no changes compared with the base branch.</string>
+    <string name="changes_compare_with" tools:ignore="UnusedResources">compared with %1$s</string>
+    <string name="changes_truncated" tools:ignore="UnusedResources">Too many changes. The remaining files were sent without content. Compare the branches on GitHub to see them.</string>
+    <string name="changes_renamed_from" tools:ignore="UnusedResources">Renamed from %1$s</string>
+    <string name="changes_binary_file" tools:ignore="UnusedResources">Binary file. Content not shown.</string>
+    <string name="changes_too_large" tools:ignore="UnusedResources">The change is too large to show.</string>
+    <string name="changes_no_patch" tools:ignore="UnusedResources">No content was included.</string>
+    <string name="changes_mode_only" tools:ignore="UnusedResources">Only the file\'s mode or name changed. The content is the same.</string>
+    <string name="changes_no_newline" tools:ignore="UnusedResources">No newline at end of file</string>
     <string name="github_unlink_title" tools:ignore="UnusedResources">Disconnect GitHub?</string>
     <string name="github_unlink_body" tools:ignore="UnusedResources">DeepSeek will lose access to your repositories, and sessions using them will not be able to push. You can connect again at any time.</string>
     <string name="github_unlink" tools:ignore="UnusedResources">Disconnect</string>
@@ -253,4 +404,8 @@
     <string name="effort_high" tools:ignore="UnusedResources">High</string>
     <string name="effort_xhigh" tools:ignore="UnusedResources">Extra high</string>
     <string name="effort_max" tools:ignore="UnusedResources">Max</string>
+    <string name="time_just_now" tools:ignore="UnusedResources">Just now</string>
+    <string name="time_elapsed_seconds" tools:ignore="UnusedResources">%1$ss</string>
+    <string name="time_elapsed_minutes" tools:ignore="UnusedResources">%1$sm %2$ss</string>
+    <string name="time_elapsed_hours" tools:ignore="UnusedResources">%1$sh %2$sm</string>
 </resources>
