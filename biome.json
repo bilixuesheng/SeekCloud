@@ -7,7 +7,8 @@
       "!**/*.md",
       "!**/dist",
       "!**/src/server/db/migrations/meta",
-      "!**/src/server/models/catalog.json"
+      "!**/src/server/models/catalog.json",
+      "!apps/android/api/openapi.json"
     ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
