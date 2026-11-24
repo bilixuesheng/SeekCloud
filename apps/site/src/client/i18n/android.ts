@@ -1,13 +1,14 @@
 import { appEn } from "./app-en";
 import { appZh } from "./app-zh";
-import type { Locale, Message } from "./catalog";
+import type { Catalog, Locale, Message } from "./catalog";
 import { en } from "./en";
 import { zh } from "./zh";
 
 /**
- * 从文案目录生成安卓 App 的 strings.xml（#204）：App 的文案写在 app-zh.ts、app-en.ts，品牌名用网页目录里的。
- * 生成的文件是 apps/android/app/src/main/res/values/strings.xml 和 values-zh/strings.xml，进仓库；
- * 主站的测试（android.test.ts）核对它们是最新的。
+ * 从文案目录生成安卓 App 的 strings.xml（#204）：App 的文案写在 app-zh.ts、app-en.ts；品牌名和接口的报错
+ * （error.<code>，App 里是 error_<code>）用网页目录里的，两边说法一样。
+ * 生成的文件是 apps/android/app/src/main/res/values/strings.xml、values-zh/strings.xml 和报错码对应文案的表
+ * （ANDROID_ERRORS_FILE），进仓库；主站的测试（android.test.ts）核对它们是最新的。
  *
  * 转换的规矩：
  * - {brand} 换成这种语言的品牌名；别的 {名字} 换成 %1$s、%2$s……（{count} 是 %n$d），
@@ -20,16 +21,44 @@ export type AppKey = keyof typeof appZh;
 /** App 的一种语言的目录：键和中文那份完全一样。 */
 export type AppCatalog = { readonly [K in AppKey]: Message };
 
+/** 网页目录里 App 也用的：接口的报错，error.<code> 在 App 里叫 error_<code>。 */
+const SHARED = "error.";
+
+function resources(app: AppCatalog, web: Catalog): Record<string, Message> {
+  const out: Record<string, Message> = {};
+  for (const [key, message] of Object.entries(app)) {
+    if (key.startsWith("error_")) throw new Error(`${key}: error_ is reserved for the web catalog`);
+    out[key] = message;
+  }
+  for (const [key, message] of Object.entries(web)) {
+    if (key.startsWith(SHARED)) out[`error_${key.slice(SHARED.length)}`] = message;
+  }
+  return out;
+}
+
 /** 默认的资源（values）用英文：系统语言 App 不支持时用它，和网页一样。values-zh 包括繁体地区。 */
 export const ANDROID_LOCALES: {
   locale: Locale;
   dir: string;
-  messages: AppCatalog;
+  messages: Record<string, Message>;
   brand: string;
 }[] = [
-  { locale: "en", dir: "values", messages: appEn, brand: en["brand.name"] as string },
-  { locale: "zh-CN", dir: "values-zh", messages: appZh, brand: zh["brand.name"] as string },
+  {
+    locale: "en",
+    dir: "values",
+    messages: resources(appEn, en),
+    brand: en["brand.name"] as string,
+  },
+  {
+    locale: "zh-CN",
+    dir: "values-zh",
+    messages: resources(appZh, zh),
+    brand: zh["brand.name"] as string,
+  },
 ];
+
+/** 基准：中文那一份。 */
+const BASE = resources(appZh, zh);
 
 const KEY = /^[a-z][a-z0-9_]*$/;
 const PLACEHOLDER = /\{([a-zA-Z]+)\}/g;
@@ -83,22 +112,23 @@ export function androidText(text: string, brand: string, order: string[], key = 
 }
 
 // 生成的文件开头的说明（XML 的注释里不能有两个连着的减号，所以不直接写命令）
-const HEADER =
-  "<!-- 由 apps/site/src/client/i18n/app-zh.ts、app-en.ts 生成，不要手改；重新生成的命令是 apps/site/package.json 里的 android:strings -->"; // 不是界面文案
+const GENERATED =
+  "由 apps/site/src/client/i18n/android.ts 从文案目录生成，不要手改；重新生成的命令是 apps/site/package.json 里的 android:strings"; // 不是界面文案
 
 /** 一种语言的 strings.xml 的内容。 */
 export function androidStrings(locale: Locale): string {
   const target = ANDROID_LOCALES.find((l) => l.locale === locale);
   if (!target) throw new Error(`no Android resources for ${locale}`);
-  const lines = ['<?xml version="1.0" encoding="utf-8"?>', HEADER, "<resources>"];
-  for (const key of Object.keys(appZh) as AppKey[]) {
+  const lines = ['<?xml version="1.0" encoding="utf-8"?>', `<!-- ${GENERATED} -->`, "<resources>"];
+  for (const [key, base] of Object.entries(BASE)) {
     if (!KEY.test(key)) throw new Error(`${key}: not a valid Android resource name`);
-    const order = names(appZh[key]);
-    const own = names(target.messages[key]);
+    const message = target.messages[key];
+    if (message === undefined) throw new Error(`${key}: missing in ${locale}`);
+    const order = names(base);
+    const own = names(message);
     if (own.length !== order.length || own.some((n) => !order.includes(n))) {
       throw new Error(`${key}: placeholders differ between languages`);
     }
-    const message = target.messages[key];
     const text = (t: string) => androidText(t, target.brand, order, key);
     if (ANDROID_LOCALES.every((l) => typeof l.messages[key] === "string")) {
       lines.push(`    <string name="${key}">${text(message as string)}</string>`);
@@ -113,4 +143,33 @@ export function androidStrings(locale: Locale): string {
   }
   lines.push("</resources>", "");
   return lines.join("\n");
+}
+
+/** 报错码对应文案的表，App 里 errorText() 用它（R.string 的引用是真的，打包时不会被当作没用的资源删掉）。 */
+export const ANDROID_ERRORS_FILE = "app/src/main/kotlin/cn/seekcloud/app/net/ErrorMessages.kt";
+
+export function androidErrorMessages(): string {
+  const codes = Object.keys(BASE).filter((key) => key.startsWith("error_"));
+  const plural = (key: string) => ANDROID_LOCALES.some((l) => typeof l.messages[key] !== "string");
+  const entries = (plurals: boolean, type: string) =>
+    codes
+      .filter((key) => plural(key) === plurals)
+      .map((key) => `    "${key.slice("error_".length)}" to R.${type}.${key},`);
+  return [
+    `// ${GENERATED}`,
+    "package cn.seekcloud.app.net",
+    "",
+    "import cn.seekcloud.app.R",
+    "",
+    "/** 主站接口的报错码（`{ error: { code } }`）对应的文案，和网页上的说法一样。 */", // 不是界面文案
+    "internal val ERROR_MESSAGES: Map<String, Int> = mapOf(",
+    ...entries(false, "string"),
+    ")",
+    "",
+    "/** 带秒数的报错（Retry-After），按数量选单复数。 */", // 不是界面文案
+    "internal val ERROR_PLURALS: Map<String, Int> = mapOf(",
+    ...entries(true, "plurals"),
+    ")",
+    "",
+  ].join("\n");
 }

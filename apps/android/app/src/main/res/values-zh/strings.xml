@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 由 apps/site/src/client/i18n/app-zh.ts、app-en.ts 生成，不要手改；重新生成的命令是 apps/site/package.json 里的 android:strings -->
+<!-- 由 apps/site/src/client/i18n/android.ts 从文案目录生成，不要手改；重新生成的命令是 apps/site/package.json 里的 android:strings -->
 <resources>
     <string name="app_name">云上求索</string>
     <string name="cancel">取消</string>
@@ -24,4 +24,54 @@
     <string name="connect_cert_changed_body">该服务器的证书与上次确认的不同。如果服务器没有更换证书，连接可能已被拦截。请确认新证书的指纹后再继续。</string>
     <string name="connect_cert_fingerprint">SHA-256 指纹</string>
     <string name="connect_cert_trust">信任此证书</string>
+    <string name="error_network">网络异常，请稍后重试。</string>
+    <string name="error_wrong_password">密码错误。</string>
+    <string name="error_wrong_code">验证码错误。</string>
+    <string name="error_login_expired">登录已超时，请重新输入密码。</string>
+    <plurals name="error_rate_limited">
+        <item quantity="other">操作过于频繁，请 %1$d 秒后重试。</item>
+    </plurals>
+    <string name="error_already_set_up">已设置管理员密码，请直接登录。</string>
+    <string name="error_passkey_invalid">通行密钥验证失败，请重试。</string>
+    <string name="error_already_enabled">两步验证已开启。</string>
+    <string name="error_body_too_large">请求内容过大。</string>
+    <string name="error_code_required">请输入两步验证的验证码。</string>
+    <string name="error_device_not_found">该设备不存在。</string>
+    <string name="error_export_not_found">导出不存在或已过期。</string>
+    <string name="error_forbidden">拒绝来自其他站点的请求。</string>
+    <string name="error_github_unavailable">GitHub 暂时无法访问，请稍后重试。</string>
+    <string name="error_internal_error">服务器错误，请稍后重试。</string>
+    <string name="error_invalid_request"></string>
+    <string name="error_model_error_not_found">该参考号不存在，或已超过保存期限。</string>
+    <string name="error_not_enabled">两步验证未开启。</string>
+    <string name="error_not_found">接口不存在。</string>
+    <string name="error_not_linked">尚未关联 GitHub。</string>
+    <string name="error_passkey_not_found">该通行密钥不存在。</string>
+    <string name="error_request_failed">请求失败。</string>
+    <string name="error_setting_locked">此项设置不可修改。</string>
+    <string name="error_setup_expired">设置已超时，请重新开始。</string>
+    <string name="error_setup_required">请先设置管理员密码。</string>
+    <string name="error_catalog_not_found">目录中没有该提供方。</string>
+    <string name="error_provider_builtin">内置的 DeepSeek 不能删除，可以停用。</string>
+    <string name="error_provider_exists">该 Provider ID 已被使用。</string>
+    <string name="error_provider_not_found">该模型提供方不存在。</string>
+    <string name="error_invalid_models"></string>
+    <string name="error_probe_failed"></string>
+    <string name="error_unauthorized">请先登录。</string>
+    <string name="error_github_not_connected">尚未关联 GitHub 或授权已失效，请重新关联。</string>
+    <string name="error_repo_not_found">仓库不存在，或云上求索无权访问。</string>
+    <string name="error_branch_not_found">仓库中不存在该分支。</string>
+    <string name="error_environment_not_found">环境不存在。</string>
+    <string name="error_model_not_found">模型不存在或已下线。</string>
+    <string name="error_model_gone">该会话使用的模型已不可用，请换一个模型后再发送。</string>
+    <string name="error_model_not_configured">尚无可用的模型，请在“设置 → 模型”中填写 DeepSeek API key 或添加模型提供商。</string>
+    <string name="error_session_not_found">会话不存在。</string>
+    <string name="error_session_closed">会话已归档，请先取消归档再发送消息。</string>
+    <string name="error_queued_not_found">该消息已发送或已撤回。</string>
+    <string name="error_nothing_running">当前没有正在运行的回合。</string>
+    <string name="error_session_archived">已归档的会话不能置顶或放进分组，请先取消归档。</string>
+    <string name="error_message_not_found">该消息不存在，或不是 Agent 的回复。</string>
+    <string name="error_group_not_found">分组不存在。</string>
+    <string name="error_too_many_groups">分组数量已达上限。</string>
+    <string name="error_invalid_group_name">分组名不能为空，且不能超过长度上限。</string>
 </resources>
