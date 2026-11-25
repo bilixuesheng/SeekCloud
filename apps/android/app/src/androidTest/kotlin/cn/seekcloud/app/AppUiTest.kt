@@ -2,10 +2,15 @@ package cn.seekcloud.app
 
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.icu.text.MeasureFormat
+import android.icu.util.Measure
+import android.icu.util.MeasureUnit
+import android.icu.util.ULocale
 import android.view.KeyEvent
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -13,6 +18,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.longClick
@@ -33,6 +39,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import cn.seekcloud.app.settings.AppPreferences
 import org.junit.After
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -398,7 +405,8 @@ class AppUiTest {
             prefs().edit().remove(AppPreferences.RENDER).commit()
             launch()
             waitForSamples()
-            rule.onNode(hasContentDescription(s(R.string.tabs_settings)) and hasClickAction()).performClick()
+            openSettings()
+            tap(s(R.string.settings_section_general))
             waitFor(s(R.string.settings_glass))
             tap(s(R.string.settings_glass_plain))
             Thread.sleep(800)
@@ -422,6 +430,86 @@ class AppUiTest {
     }
 
     private fun prefs() = context.getSharedPreferences(AppPreferences.FILE, Context.MODE_PRIVATE)
+
+    /** 点底栏的"设置"。 */
+    private fun openSettings() = explain("openSettings") {
+        rule.onNode(hasContentDescription(s(R.string.tabs_settings)) and hasClickAction()).performClick()
+        waitFor(s(R.string.settings_section_general))
+    }
+
+    /**
+     * 设置（#181）：主站的设置能读能改、改了当场存到主站；被设置规则锁住的存不上，拨回去并说明；
+     * 外观只存在这台设备上；关于页有 SeekCloud 的署名和许可证。
+     */
+    @Test
+    fun settingsReadSaveAndLock() {
+        launch()
+        connect(siteB)
+        signIn()
+        try {
+            openSettings()
+            tap(s(R.string.settings_section_general))
+            waitFor(s(R.string.general_effort))
+            // 外观固定成深色：存在这台设备上，不经主站
+            tap(s(R.string.general_theme_dark))
+            rule.waitUntil(5_000) { prefs().getString(AppPreferences.THEME, null) == "Dark" }
+            // 默认思考强度：点了就存到主站
+            waitFor(s(R.string.effort_low))
+            tap(s(R.string.effort_low))
+            rule.waitUntil(10_000) { setting(siteB, "default-effort").contains("\"low\"") }
+            // 设置规则锁住以后：存不上，拨回"低"，说明"此项设置不可修改"
+            lock(siteB, "default_effort")
+            tap(s(R.string.effort_max))
+            waitFor(s(R.string.error_setting_locked))
+            rule.onNode(hasText(s(R.string.effort_low)) and isSelected()).assertExists()
+            assertTrue(setting(siteB, "default-effort").contains("\"low\""))
+            // 锁住的那一项不能再点
+            rule.onNode(hasText(s(R.string.effort_max)) and hasClickAction()).assertIsNotEnabled()
+            back()
+
+            // 会话：宿主机断开后等待的时长
+            tap(s(R.string.settings_section_sessions))
+            waitFor(s(R.string.session_settings_grace))
+            val tenMinutes = MeasureFormat.getInstance(ULocale.forLocale(context.resources.configuration.locales[0]), MeasureFormat.FormatWidth.WIDE)
+                .format(Measure(10, MeasureUnit.MINUTE))
+            tap(tenMinutes)
+            rule.waitUntil(10_000) { setting(siteB, "host-offline-grace").contains("600") }
+            back()
+
+            // 关于：署名（附加条款要求的原文）、许可证
+            tap(s(R.string.settings_about))
+            waitFor("基于 SeekCloud")
+            waitFor(s(R.string.legal_agpl))
+            back()
+            waitFor(s(R.string.settings_section_general))
+        } finally {
+            lock(siteB)
+            putSetting(siteB, "default-effort", """{"effort":"high"}""")
+            putSetting(siteB, "host-offline-grace", """{"seconds":120}""")
+        }
+    }
+
+    /** 主站上一项设置现在的值（JSON）。 */
+    private fun setting(site: String, name: String): String {
+        val request = Request.Builder().url("$site/api/settings/$name").header("Authorization", "Bearer ${appToken(site)}").build()
+        return OkHttpClient().newCall(request).execute().use { it.body.string() }
+    }
+
+    private fun putSetting(site: String, name: String, json: String) {
+        val request = Request.Builder().url("$site/api/settings/$name")
+            .header("Authorization", "Bearer ${appToken(site)}")
+            .put(json.toRequestBody(JSON))
+            .build()
+        OkHttpClient().newCall(request).execute().close()
+    }
+
+    /** 让假主站的设置规则不许改这几项（只有测试用的假主站有这个接口，见 app-test-server.ts）；不给就解除。 */
+    private fun lock(site: String, vararg keys: String) {
+        val body = keys.joinToString(",", "{\"keys\":[", "]}") { "\"$it\"" }
+        OkHttpClient().newCall(Request.Builder().url("$site/__test/lock").post(body.toRequestBody(JSON)).build()).execute().use {
+            check(it.isSuccessful) { "lock: HTTP ${it.code}" }
+        }
+    }
 
     /** 以 shell 的身份跑一条命令，等它跑完。 */
     private fun shell(command: String) {

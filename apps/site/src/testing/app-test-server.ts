@@ -3,6 +3,7 @@ import { serve } from "@hono/node-server";
 import type { AgentEvent, RepoDiff } from "@seekcloud/protocol";
 import { desc, eq } from "drizzle-orm";
 import { sessionRepos, sessions, turns } from "../server/db/schema";
+import { adminSettings, type SettingKey } from "../server/settings";
 import { createTemplateDatabase, dropTemplateDatabase } from "./database";
 import { createTestApp } from "./test-app";
 
@@ -17,6 +18,8 @@ import { createTestApp } from "./test-app";
  * 界面测试用它造出等你输入、失败、Agent 正在工作这些状态。
  * `POST /__test/diff`（`{ "shortId": ..., "repos": [...] }`，协议包的 RepoDiff）替假宿主机给这个会话最近的回合
  * 报一份对比基础分支的改动（改动面板用）；会话还没有这些仓库时一起挂上（假主站没关联 GitHub，发起的会话不带仓库）。
+ * `POST /__test/lock`（`{ "keys": ["default_effort", ...] }`）让设置规则不许改这几项（写的时候回 403
+ * setting_locked，下游的设置规则会这样），空数组解除。
  *
  * 用法（在 apps/site 里）：pnpm app-test-server [台数，默认 2]；要一个 PostgreSQL（同主站的测试）。
  */
@@ -25,7 +28,14 @@ const count = Number(process.argv[2] ?? 2);
 await createTemplateDatabase();
 const closers: (() => Promise<void>)[] = [];
 for (let i = 0; i < count; i++) {
-  const t = await createTestApp();
+  // 设置规则：/__test/lock 锁住的几项不能改，其余照主干
+  const locked = new Set<SettingKey>();
+  const t = await createTestApp({
+    settingsPolicy: {
+      defaultValue: adminSettings.defaultValue,
+      canWrite: (key, actor) => !locked.has(key) && adminSettings.canWrite(key, actor),
+    },
+  });
   // 第一次调用时设置管理员密码
   await t.admin();
   // 照 preview-server.ts：把请求转给进程内的主站
@@ -41,6 +51,12 @@ for (let i = 0; i < count; i++) {
       if (body.failSandbox) t.host.failNextSandbox({ code: "sandbox_unavailable" });
       // hold：假宿主机不再回复（新会话一直停在"正在准备沙箱"，测 Agent 工作时的输入框）；false 恢复
       if (body.hold !== undefined) t.host.manual = body.hold;
+      return new Response(null, { status: 204 });
+    }
+    if (url.pathname === "/__test/lock" && req.method === "POST") {
+      const body = (await req.json()) as { keys: SettingKey[] };
+      locked.clear();
+      for (const key of body.keys) locked.add(key);
       return new Response(null, { status: 204 });
     }
     if (url.pathname === "/__test/diff" && req.method === "POST") {

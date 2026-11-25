@@ -5,6 +5,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 // 颜色照 docs/brand/README.md 和主站 apps/site/src/client/styles.css 的变量：浅色、深色各一套
@@ -35,7 +37,15 @@ private val Dark = darkColorScheme(
     error = Color(0xFFF06B64),
 )
 
+/**
+ * 现在是不是深色：外观可以在设置里固定成浅色或深色（#181），和系统的不一样，所以界面里不直接问
+ * isSystemInDarkTheme()，一律读它。
+ */
+val LocalDarkTheme = staticCompositionLocalOf { false }
+
 @Composable
 fun SeekCloudTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (dark) Dark else Light, content = content)
+    CompositionLocalProvider(LocalDarkTheme provides dark) {
+        MaterialTheme(colorScheme = if (dark) Dark else Light, content = content)
+    }
 }

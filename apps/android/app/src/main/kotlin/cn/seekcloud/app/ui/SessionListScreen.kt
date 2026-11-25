@@ -16,6 +16,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
 import cn.seekcloud.app.settings.AppPreferences
+import cn.seekcloud.app.settings.SettingsViewModel
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -121,6 +122,7 @@ fun SessionListRoute(
     viewModel: SessionListViewModel,
     newSession: @Composable () -> NewSessionViewModel,
     sessionPage: @Composable (shortId: String) -> SessionViewModel,
+    settings: @Composable () -> SettingsViewModel,
     preferences: AppPreferences,
     onSwitchServer: () -> Unit,
     onSignOut: () -> Unit,
@@ -229,15 +231,16 @@ fun SessionListRoute(
         TabItem(stringResource(R.string.sidebar_new_session), R.drawable.ic_edit_square, R.drawable.ic_edit_square_filled),
         TabItem(stringResource(R.string.tabs_settings), R.drawable.ic_settings, R.drawable.ic_settings_filled),
     )
-    val settingsPage = @Composable {
-        AppSettingsScreen(
+    // 宽屏时设置在右边那一栏，底栏在左边，不用给底栏留位置
+    val settingsPage = @Composable { inset: Dp ->
+        SettingsRoute(
             server = server,
-            glass = glass,
+            viewModel = settings(),
+            preferences = preferences,
             render = render,
-            onGlass = preferences::setGlass,
             onSwitchServer = onSwitchServer,
             onSignOut = onSignOut,
-            bottomInset = barInset,
+            bottomInset = inset,
         )
     }
     val bar = @Composable { modifier: Modifier ->
@@ -275,7 +278,7 @@ fun SessionListRoute(
             // 右边：设置、开着的会话，都没有时是新会话页
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 when {
-                    tab == TAB_SETTINGS -> settingsPage()
+                    tab == TAB_SETTINGS -> settingsPage(0.dp)
                     open != null -> sessionPageFor(open)
                     else -> newSessionPage(null)
                 }
@@ -287,7 +290,7 @@ fun SessionListRoute(
             Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
                 when (tab) {
                     TAB_NEW -> newSessionPage(null)
-                    TAB_SETTINGS -> settingsPage()
+                    TAB_SETTINGS -> settingsPage(barInset)
                     else -> list(Modifier.fillMaxSize())
                 }
             }

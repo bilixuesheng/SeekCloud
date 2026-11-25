@@ -16,7 +16,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -166,7 +165,7 @@ fun GlassTabBar(
     render: GlassRender,
     modifier: Modifier = Modifier,
 ) {
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDarkTheme.current
     val animationsOff = rememberAnimationsOff()
     val shape = RoundedCornerShape(percent = 50)
     val tint = if (dark) Color(0xFF1D2027) else Color(0xFFFFFFFF)
