@@ -5,6 +5,27 @@ import android.provider.Settings
 import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import cn.seekcloud.app.sessions.ChangesPanelUi
+import cn.seekcloud.app.sessions.DiffFile
+import cn.seekcloud.app.sessions.MessagePin
+import cn.seekcloud.app.sessions.PatchLine
+import cn.seekcloud.app.sessions.RepoDiff
+import cn.seekcloud.app.sessions.patchLines
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,6 +40,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,6 +58,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -88,6 +111,7 @@ import cn.seekcloud.app.net.errorTexts
 import cn.seekcloud.app.net.failureText
 import cn.seekcloud.app.sessions.ComposerUi
 import cn.seekcloud.app.sessions.FileChange
+import cn.seekcloud.app.sessions.ModelList
 import cn.seekcloud.app.sessions.ModelProgress
 import cn.seekcloud.app.sessions.PACED_TICK_MS
 import cn.seekcloud.app.sessions.Plan
@@ -116,6 +140,8 @@ fun SessionRoute(
     listed: SessionSummary?,
     viewModel: SessionViewModel,
     onBack: (() -> Unit)?,
+    /** 打开会话菜单（和会话列表里长按的是同一个）。 */
+    onMenu: (() -> Unit)? = null,
 ) {
     LifecycleStartEffect(viewModel) {
         viewModel.start()
@@ -126,11 +152,25 @@ fun SessionRoute(
     val connected by viewModel.connected.collectAsStateWithLifecycle()
     val missing by viewModel.missing.collectAsStateWithLifecycle()
     val fetched by viewModel.session.collectAsStateWithLifecycle()
+    val models by viewModel.models.collectAsStateWithLifecycle()
+    val choice by viewModel.choice.collectAsStateWithLifecycle()
+    val pins by viewModel.pins.collectAsStateWithLifecycle()
+    val changes by viewModel.changes.collectAsStateWithLifecycle()
     val session = listed ?: fetched
     val markdown = MarkdownEnv(viewModel.images, viewModel.serverHost, session?.repos?.firstOrNull()?.fullName)
     CompositionLocalProvider(LocalMarkdownEnv provides markdown) {
         SessionScreen(
             title = session?.title.orEmpty(),
+            session = session,
+            models = models,
+            choice = choice,
+            onChoose = viewModel::choose,
+            onMenu = onMenu,
+            pins = pins,
+            onPin = viewModel::togglePin,
+            changes = changes,
+            onOpenChanges = viewModel::openChanges,
+            onCloseChanges = viewModel::closeChanges,
             fallbackStatus = session?.status,
             page = page,
             composer = composer,
@@ -176,6 +216,16 @@ private sealed interface Entry {
 fun SessionScreen(
     title: String,
     fallbackStatus: String?,
+    session: SessionSummary? = null,
+    models: ModelList? = null,
+    choice: Pair<String, String>? = null,
+    onChoose: (String, String) -> Unit = { _, _ -> },
+    onMenu: (() -> Unit)? = null,
+    pins: List<MessagePin> = emptyList(),
+    onPin: (Int, Boolean) -> Unit = { _, _ -> },
+    changes: ChangesPanelUi? = null,
+    onOpenChanges: (String?) -> Unit = {},
+    onCloseChanges: () -> Unit = {},
     page: SessionPage,
     composer: ComposerUi,
     connected: Boolean,
@@ -191,6 +241,11 @@ fun SessionScreen(
     onDismissFailure: () -> Unit,
 ) {
     if (onBack != null) BackHandler(onBack = onBack)
+    var info by rememberSaveable { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    var picking by rememberSaveable { mutableStateOf(false) }
+    val nameOf = { id: String -> models?.models?.firstOrNull { it.id == id }?.let { modelName(it) } ?: id.substringAfter('/') }
     val timeline = page.timeline
     val status = timeline.status ?: fallbackStatus
     val working = status == "running" || status == "queued"
@@ -234,11 +289,38 @@ fun SessionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = {
+                    // 点标题打开会话菜单（照网页的标题菜单）
+                    val menuLabel = stringResource(R.string.session_menu)
+                    Row(
+                        Modifier
+                            .then(if (onMenu != null) Modifier.clickable(onClickLabel = menuLabel, onClick = onMenu) else Modifier)
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        if (onMenu != null) Icon(painterResource(R.drawable.ic_expand_more), contentDescription = menuLabel, modifier = Modifier.size(20.dp))
+                    }
+                },
                 navigationIcon = {
                     if (onBack != null) {
                         IconButton(onClick = onBack) {
                             Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.common_back))
+                        }
+                    }
+                },
+                actions = {
+                    if (pins.isNotEmpty()) {
+                        PinNav(pins) { seq ->
+                            // 滚到那条回复（会话开头是列表的最上面）
+                            val target = if (seq == null) "" else "item:${page.adopted[seq] ?: seq}"
+                            val index = if (seq == null) entries.size - 1 else entries.indexOfFirst { it.key == target }
+                            if (index >= 0) scope.launch { listState.revealTop(entries.size - 1 - index) }
+                        }
+                    }
+                    if (session != null) {
+                        IconButton(onClick = { info = true }) {
+                            Icon(painterResource(R.drawable.ic_info), contentDescription = stringResource(R.string.session_info))
                         }
                     }
                 },
@@ -271,7 +353,15 @@ fun SessionScreen(
                 )
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                Conversation(entries, onRetry = onRetry.takeIf { canRetry }, onWithdraw, onSendNow, composer.queue)
+                val actions = TimelineActions(
+                    openChanges = onOpenChanges,
+                    undo = onRetry.takeIf { canRetry },
+                    pins = pins.associateBy { it.seq },
+                    pin = onPin,
+                )
+                CompositionLocalProvider(LocalTimelineActions provides actions) {
+                    Conversation(entries, listState, onRetry = onRetry.takeIf { canRetry }, onWithdraw, onSendNow, composer.queue, nameOf)
+                }
             }
             composer.failure?.let {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -299,8 +389,103 @@ fun SessionScreen(
                 onSend = onSend,
                 onStop = onStop,
             )
+            // 输入框下面：模型和思考强度，换了从下一条消息起生效（照网页的 composer-below）
+            val picked = choice ?: session?.let { it.model to it.effort }
+            val current = picked?.let { (id, _) -> models?.models?.firstOrNull { it.id == id } }
+            if (models != null && picked != null && !closed) {
+                val name = current?.let { modelName(it) } ?: picked.first.substringAfter('/')
+                val label = if (current?.efforts?.isNotEmpty() == true) "$name · ${effortName(picked.second)}" else name
+                val chooseLabel = stringResource(R.string.model_choose, name)
+                TextButton(
+                    onClick = { picking = true },
+                    modifier = Modifier.padding(start = 12.dp, bottom = 4.dp).semantics { contentDescription = chooseLabel },
+                ) {
+                    Text(label, style = MaterialTheme.typography.labelLarge)
+                    Icon(painterResource(R.drawable.ic_expand_more), contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+                if (picking) {
+                    ModelSheet(
+                        models = models,
+                        model = picked.first,
+                        effort = picked.second,
+                        onChange = onChoose,
+                        onDismiss = { picking = false },
+                    )
+                }
+            }
         }
     }
+    changes?.let { ChangesPanel(it, onCloseChanges) }
+    if (info && session != null) SessionInfoSheet(session, page.timeline.status ?: session.status, page.timeline.detail ?: session.detail) { info = false }
+}
+
+/** 会话信息（照网页）：状态、环境、仓库、分支、PR。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SessionInfoSheet(session: SessionSummary, status: String, detail: String?, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+            Text(stringResource(R.string.session_info), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 12.dp).semantics { heading() })
+            InfoRow(stringResource(R.string.session_status), statusText(status, detail))
+            InfoRow(
+                stringResource(R.string.environment_label),
+                when (val env = session.environmentName) {
+                    null -> stringResource(R.string.environment_deleted)
+                    "" -> stringResource(R.string.environment_default)
+                    else -> env
+                },
+            )
+            if (session.repos.isEmpty()) InfoRow(stringResource(R.string.session_repo), stringResource(R.string.repo_no_repo))
+            for (repo in session.repos) {
+                InfoRow(
+                    stringResource(R.string.session_repo),
+                    repo.fullName + if (repo.access == "read") " · " + stringResource(R.string.repo_read_only) else "",
+                )
+                InfoRow(stringResource(R.string.session_branch), listOf(repo.baseBranch, repo.branch).filter { it.isNotEmpty() }.joinToString(" → "), mono = true)
+                repo.pullRequest?.let { pr ->
+                    val state = stringResource(
+                        when (pr.state) {
+                            "draft" -> R.string.pr_draft
+                            "merged" -> R.string.pr_merged
+                            "closed" -> R.string.pr_closed
+                            else -> R.string.pr_open
+                        },
+                    )
+                    InfoRow(stringResource(R.string.session_changes), stringResource(R.string.pr_text, pr.number.toString(), state))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String, mono: Boolean = false) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(88.dp))
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontFamily = if (mono) FontFamily.Monospace else null, modifier = Modifier.weight(1f))
+    }
+}
+
+/** 状态和附加说明（照网页的 statusWithDetail）："运行中 · 正在准备沙箱"。 */
+@Composable
+private fun statusText(status: String, detail: String?): String {
+    val label = stringResource(
+        when (status) {
+            "queued" -> R.string.status_queued
+            "running" -> R.string.status_running
+            "dormant" -> R.string.status_dormant
+            "archived" -> R.string.status_archived
+            "failed" -> R.string.status_failed
+            else -> R.string.status_waiting
+        },
+    )
+    val extra = when (detail) {
+        "preparing_sandbox" -> R.string.status_preparing_sandbox
+        "awaiting_input" -> R.string.status_awaiting_input
+        "done" -> R.string.status_done
+        else -> null
+    } ?: return label
+    return stringResource(R.string.status_with_detail, label, stringResource(extra))
 }
 
 /**
@@ -310,12 +495,13 @@ fun SessionScreen(
 @Composable
 private fun Conversation(
     entries: List<Entry>,
+    listState: LazyListState,
     onRetry: ((String) -> Unit)?,
     onWithdraw: (String, Boolean) -> Unit,
     onSendNow: (String) -> Unit,
     queueActions: Map<String, QueueAction>,
+    nameOf: (String) -> String,
 ) {
-    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var follow by remember { mutableStateOf(true) }
     LaunchedEffect(listState) {
@@ -345,7 +531,7 @@ private fun Conversation(
             items(entries.asReversed(), key = { it.key }) { entry ->
                 Box(Modifier.fillMaxWidth().widthIn(max = 760.dp)) {
                     when (entry) {
-                        is Entry.Item -> TimelineEntry(entry.item, entry.live, now, onRetry)
+                        is Entry.Item -> TimelineEntry(entry.item, entry.live, now, onRetry, nameOf)
                         is Entry.Queued -> QueuedBubble(
                             entry.message,
                             first = entry.first,
@@ -380,7 +566,7 @@ private fun Conversation(
 }
 
 @Composable
-private fun TimelineEntry(item: TimelineItem, live: Boolean, now: Long, onRetry: ((String) -> Unit)?) {
+private fun TimelineEntry(item: TimelineItem, live: Boolean, now: Long, onRetry: ((String) -> Unit)?, nameOf: (String) -> String) {
     when (item) {
         is TimelineItem.User -> UserBubble(item.text, item.at, item.delivered, sending = false, now = now, onRetry = onRetry)
         is TimelineItem.Assistant -> AssistantReply(item, live, now)
@@ -388,7 +574,7 @@ private fun TimelineEntry(item: TimelineItem, live: Boolean, now: Long, onRetry:
         is TimelineItem.Changes -> ChangesCard(item.changes)
         is TimelineItem.Notice -> NoticeLine(noticeText(item.notice), item.notice.error)
         is TimelineItem.ModelSwitch -> NoticeLine(
-            stringResource(R.string.chat_switched_model, item.model.substringAfter('/'), effortName(item.effort)),
+            stringResource(R.string.chat_switched_model, nameOf(item.model), effortName(item.effort)),
             error = false,
         )
     }
@@ -471,7 +657,10 @@ private fun QueuedBubble(message: QueuedMessage, first: Boolean, doing: QueueAct
 @Composable
 private fun AssistantReply(item: TimelineItem.Assistant, live: Boolean, now: Long) {
     val (shown, done) = rememberPacedText(item.text, live)
+    val actions = LocalTimelineActions.current
+    val pin = actions.pins[item.key]
     Column(Modifier.fillMaxWidth()) {
+        if (pin != null) PinTitle(pin)
         item.thinking?.let { Thinking(it) }
         SelectionContainer {
             Markdown(shown)
@@ -484,6 +673,16 @@ private fun AssistantReply(item: TimelineItem.Assistant, live: Boolean, now: Lon
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CopyButton(end.reply)
+                // 回合最后那条回复可以置顶（照 Claude）：上方展开短标题，顶栏出现置顶列表
+                val pinned = pin != null
+                IconButton(onClick = { actions.pin(item.key, !pinned) }) {
+                    Icon(
+                        painterResource(if (pinned) R.drawable.ic_push_pin_filled else R.drawable.ic_push_pin),
+                        contentDescription = stringResource(if (pinned) R.string.session_unpin else R.string.session_pin),
+                        modifier = Modifier.size(18.dp),
+                        tint = if (pinned) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                    )
+                }
                 MetaText(relativeTime(end.at, now))
             }
         }
@@ -648,11 +847,11 @@ private fun CodeBlock(text: String) {
  */
 @Composable
 private fun ChangesCard(changes: TurnChanges) {
-    var all by rememberSaveable { mutableStateOf(false) }
+    val actions = LocalTimelineActions.current
     val several = changes.repos.size > 1
     val rows = changes.repos.flatMap { repo -> repo.files.map { repo.fullName to it } }
     val total = rows.size + changes.repos.sumOf { it.omittedFiles }
-    val shown = if (all) rows else rows.take(SHOWN_FILES)
+    val shown = rows.take(SHOWN_FILES)
     val shownPaths = shown.map { it.second.path }
     val label = stringResource(R.string.changes_label)
     Surface(
@@ -672,9 +871,18 @@ private fun ChangesCard(changes: TurnChanges) {
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
+            val single = if (total == 1) rows.firstOrNull()?.second else null
             Column(Modifier.padding(vertical = 4.dp)) {
                 for ((repo, file) in shown) {
-                    Row(Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // 点文件名打开改动面板，先展开这个文件
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 40.dp)
+                            .clickable { actions.openChanges(file.path) }
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Icon(painterResource(R.drawable.ic_code), contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
                         Spacer(Modifier.width(10.dp))
                         val name = (if (several) "${repo.substringAfter('/')}/" else "") + shortPath(file.path, shownPaths)
@@ -685,6 +893,15 @@ private fun ChangesCard(changes: TurnChanges) {
                             overflow = TextOverflow.Ellipsis,
                         )
                         LineCounts(file)
+                        // 只改了一个文件：撤销这个文件这一回合的改动（作为下一条消息交给 Agent 做；Agent 在工作时是灰的）
+                        if (single != null) {
+                            val undoPrompt = stringResource(R.string.changes_undo_prompt, single.path)
+                            TextButton(onClick = { actions.undo?.invoke(undoPrompt) }, enabled = actions.undo != null) {
+                                Icon(painterResource(R.drawable.ic_undo), contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.changes_undo))
+                            }
+                        }
                     }
                 }
                 if (total > SHOWN_FILES) {
@@ -692,17 +909,14 @@ private fun ChangesCard(changes: TurnChanges) {
                         Modifier
                             .fillMaxWidth()
                             .heightIn(min = 40.dp)
-                            .clickable { all = !all }
+                            .clickable { actions.openChanges(null) }
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(stringResource(if (all) R.string.changes_collapse else R.string.changes_view_all), modifier = Modifier.weight(1f))
+                        Text(stringResource(R.string.changes_view_all), modifier = Modifier.weight(1f))
                         Counts(rows.sumOf { it.second.additions }, rows.sumOf { it.second.deletions })
                     }
                 }
-            }
-            if (all && changes.repos.any { it.omittedFiles > 0 }) {
-                CardNote(pluralStringResource(R.plurals.changes_omitted, changes.repos.sumOf { it.omittedFiles }, changes.repos.sumOf { it.omittedFiles }), error = false)
             }
             for (repo in changes.repos) {
                 when (repo.push) {
@@ -1102,4 +1316,270 @@ private fun agentErrorText(error: SafeError): String {
     )
     val extra = listOfNotNull(error.status?.toString(), error.ref?.let { stringResource(R.string.agent_error_ref, it) })
     return if (extra.isEmpty()) text else stringResource(R.string.agent_error_with_detail, text, extra.joinToString(" · "))
+}
+
+/** 时间线上的几样操作：打开改动面板、撤销一个文件的改动、置顶。 */
+private data class TimelineActions(
+    val openChanges: (String?) -> Unit = {},
+    /** 发一条消息给 Agent（撤销一个文件的改动）；Agent 在工作时为 null。 */
+    val undo: ((String) -> Unit)? = null,
+    val pins: Map<Int, MessagePin> = emptyMap(),
+    val pin: (Int, Boolean) -> Unit = { _, _ -> },
+)
+
+private val LocalTimelineActions = compositionLocalOf { TimelineActions() }
+
+/** 置顶的回复上方的短标题（照网页）：还在生成时是一条占位的闪烁条；取不出标题时写"置顶的消息"。 */
+@Composable
+private fun PinTitle(pin: MessagePin) {
+    Row(Modifier.padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(painterResource(R.drawable.ic_push_pin_filled), contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(6.dp))
+        val title = pin.title
+        if (title == null) {
+            val loading = stringResource(R.string.chat_generating_title)
+            val alpha by rememberInfiniteTransition(label = "pin-title").animateFloat(
+                initialValue = 0.35f,
+                targetValue = 0.8f,
+                animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+                label = "pin-title-alpha",
+            )
+            Box(
+                Modifier
+                    .size(width = 160.dp, height = 14.dp)
+                    .graphicsLayer { this.alpha = alpha }
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(7.dp))
+                    .semantics { contentDescription = loading },
+            )
+        } else {
+            Text(title.ifEmpty { stringResource(R.string.chat_pin_fallback) }, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/** 顶栏的置顶列表（照网页的 PinNav）："会话开头"和每条置顶的短标题，点哪个滚到哪条。 */
+@Composable
+private fun PinNav(pins: List<MessagePin>, onGo: (Int?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(painterResource(R.drawable.ic_toc), contentDescription = pluralStringResource(R.plurals.chat_pinned_messages, pins.size, pins.size))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.chat_session_start)) },
+                onClick = {
+                    open = false
+                    onGo(null)
+                },
+            )
+            for (pin in pins) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            when (val title = pin.title) {
+                                null -> stringResource(R.string.chat_generating_title)
+                                "" -> stringResource(R.string.chat_pin_fallback)
+                                else -> title
+                            },
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_push_pin), contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    onClick = {
+                        open = false
+                        onGo(pin.seq)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 滚到第 [index] 行，让这一行的顶边对齐屏幕上方（列表是倒着排的：先滚到这一行，它在最下面，再往上挪出它多出来的高度）。
+ */
+private suspend fun LazyListState.revealTop(index: Int) {
+    scrollToItem(index)
+    val info = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
+    val viewport = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+    scrollBy((info.offset + info.size - viewport).toFloat())
+}
+
+/**
+ * 改动面板（照网页的 ChangesPanel）：会话分支对比基础分支的改动，占满屏幕。文件少（10 个以内）时都展开，
+ * 从卡片上点文件名打开时先展开、滚到那个文件。逐行的 diff：旧行号、新行号、增删的颜色。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChangesPanel(ui: ChangesPanelUi, onClose: () -> Unit) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize()) {
+                val files = ui.repos?.flatMap { it.files }.orEmpty()
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(stringResource(R.string.changes_title), modifier = Modifier.semantics { heading() })
+                            if (files.isNotEmpty()) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(pluralStringResource(R.plurals.changes_file_count, files.size, files.size), style = MaterialTheme.typography.bodySmall)
+                                    Counts(files.sumOf { it.additions }, files.sumOf { it.deletions })
+                                }
+                            }
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onClose) {
+                            Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.common_close))
+                        }
+                    },
+                )
+                when {
+                    ui.failure != null -> Box(Modifier.padding(16.dp)) { Notice(failureText(ui.failure, LocalResources.current.errorTexts()), error = true) }
+                    ui.repos == null -> Text(stringResource(R.string.common_loading), modifier = Modifier.padding(16.dp))
+                    files.isEmpty() -> Text(stringResource(R.string.changes_empty), modifier = Modifier.padding(16.dp))
+                    else -> DiffList(ui.repos, ui.focus)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiffList(repos: List<RepoDiff>, focus: String?) {
+    val opened = remember(repos) {
+        mutableStateMapOf<String, Boolean>().apply {
+            for (repo in repos) for (file in repo.files) put("${repo.fullName}:${file.path}", file.path == focus || repo.files.size <= 10)
+        }
+    }
+    val listState = rememberLazyListState()
+    // 从卡片上点文件名打开的：滚到那个文件
+    LaunchedEffect(repos, focus) {
+        if (focus == null) return@LaunchedEffect
+        var index = 0
+        for (repo in repos.filter { it.files.isNotEmpty() }) {
+            index++ // 仓库的标题
+            for (file in repo.files) {
+                if (file.path == focus) {
+                    listState.scrollToItem(index)
+                    return@LaunchedEffect
+                }
+                index++
+                if (opened["${repo.fullName}:${file.path}"] == true) index += diffBodySize(file)
+            }
+            if (repo.truncated) index++
+        }
+    }
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)) {
+        for (repo in repos.filter { it.files.isNotEmpty() }) {
+            item(key = "repo:${repo.fullName}") {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(repo.fullName, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f, fill = false))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.changes_compare_with, repo.baseBranch), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            for (file in repo.files) {
+                val id = "${repo.fullName}:${file.path}"
+                val open = opened[id] == true
+                item(key = "file:$id") {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 44.dp)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .clickable { opened[id] = !open }
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Chevron(open)
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            file.path,
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f).semantics { file.from?.let { contentDescription = "$it → ${file.path}" } },
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (file.binary) {
+                            Text(stringResource(R.string.changes_binary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        } else {
+                            Counts(file.additions, file.deletions)
+                        }
+                    }
+                }
+                if (open) diffBody(this, id, file)
+            }
+            if (repo.truncated) {
+                item(key = "truncated:${repo.fullName}") {
+                    Text(stringResource(R.string.changes_truncated), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))
+                }
+            }
+        }
+    }
+}
+
+/** 展开的文件占几行（滚到某个文件时算位置用），和 [diffBody] 放的一样多。 */
+private fun diffBodySize(file: DiffFile): Int {
+    val notes = if (file.from != null) 1 else 0
+    if (file.binary || file.tooLarge || file.patch == null) return notes + 1
+    val lines = patchLines(file.patch).size
+    return notes + if (lines == 0) 1 else lines
+}
+
+private fun diffBody(scope: LazyListScope, id: String, file: DiffFile) {
+    with(scope) {
+        if (file.from != null) item(key = "renamed:$id") { DiffNote(stringResource(R.string.changes_renamed_from, file.from)) }
+        val note = when {
+            file.binary -> R.string.changes_binary_file
+            file.tooLarge -> R.string.changes_too_large
+            file.patch == null -> R.string.changes_no_patch
+            else -> null
+        }
+        if (note != null) {
+            item(key = "note:$id") { DiffNote(stringResource(note)) }
+            return
+        }
+        val lines = patchLines(file.patch.orEmpty())
+        if (lines.isEmpty()) {
+            item(key = "note:$id") { DiffNote(stringResource(R.string.changes_mode_only)) }
+            return
+        }
+        items(lines.size, key = { "line:$id:$it" }) { i -> DiffLine(lines[i]) }
+    }
+}
+
+@Composable
+private fun DiffNote(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+}
+
+/** diff 的一行：旧行号、新行号、正文（太长的折行）。 */
+@Composable
+private fun DiffLine(line: PatchLine) {
+    val dark = isSystemInDarkTheme()
+    val background = when (line.kind) {
+        PatchLine.Kind.Add -> if (dark) Color(0x332EA043) else Color(0xFFE6FFEC)
+        PatchLine.Kind.Del -> if (dark) Color(0x33F85149) else Color(0xFFFFEBE9)
+        PatchLine.Kind.Hunk -> MaterialTheme.colorScheme.surfaceVariant
+        else -> Color.Transparent
+    }
+    val style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(Modifier.fillMaxWidth().background(background).padding(vertical = 1.dp)) {
+        Text(line.old?.toString().orEmpty(), style = style, color = muted, textAlign = TextAlign.End, modifier = Modifier.width(40.dp))
+        Text(line.new?.toString().orEmpty(), style = style, color = muted, textAlign = TextAlign.End, modifier = Modifier.width(40.dp))
+        Spacer(Modifier.width(8.dp))
+        val text = when (line.kind) {
+            PatchLine.Kind.Add -> "+${line.text}"
+            PatchLine.Kind.Del -> "−${line.text}"
+            PatchLine.Kind.NoNewline -> stringResource(R.string.changes_no_newline)
+            PatchLine.Kind.Hunk -> line.text
+            PatchLine.Kind.Ctx -> " ${line.text}"
+        }
+        Text(text, style = style, color = if (line.kind == PatchLine.Kind.Hunk || line.kind == PatchLine.Kind.NoNewline) muted else Color.Unspecified, modifier = Modifier.weight(1f).padding(end = 8.dp))
+    }
 }

@@ -20,12 +20,18 @@ data class SessionSummary(
     val unread: Boolean = false,
     val createdAt: String,
     val updatedAt: String,
+    /** "提供方/模型"和思考强度（会话页的会话信息、换模型时用）。 */
+    val model: String = "",
+    val effort: String = "",
+    /** 会话用的环境的名字；环境被删掉了时为 null；默认环境是空字符串（界面按语言显示名字）。 */
+    val environmentName: String? = null,
 )
 
 /** 会话的一个仓库：第一个是主仓库。[pullRequest] 是会话分支上最近的 PR。 */
 @Serializable
 data class SessionRepo(
     val fullName: String,
+    val baseBranch: String = "",
     val branch: String = "",
     val access: String = "push",
     val pullRequest: PullRequestRef? = null,

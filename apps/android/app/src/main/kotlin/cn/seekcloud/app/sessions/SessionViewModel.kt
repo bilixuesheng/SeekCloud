@@ -42,6 +42,9 @@ data class SessionPage(
 /** 刚发出去、服务器还没回推的消息：先显示出来，不让人等一个来回。[after] 是发的时候已经有几条。 */
 data class PendingMessage(val text: String, val after: Int, val at: String)
 
+/** 改动面板：开着时有它。[repos] 还没取到时为 null；[focus] 是要先展开、滚到的文件。 */
+data class ChangesPanelUi(val focus: String? = null, val repos: List<RepoDiff>? = null, val failure: Throwable? = null)
+
 /** 排队的消息上正在做的操作。 */
 enum class QueueAction { Restore, Delete, SendNow }
 
@@ -86,6 +89,21 @@ class SessionViewModel(
     private val _missing = MutableStateFlow(false)
     val missing: StateFlow<Boolean> = _missing.asStateFlow()
 
+    /** 能用的模型（换模型的弹层）；还没取到或取失败时为 null。 */
+    private val _models = MutableStateFlow<ModelList?>(null)
+    val models: StateFlow<ModelList?> = _models.asStateFlow()
+
+    /** 选了别的模型、思考强度（"提供方/模型"和档位）：随下一条消息发出去，从那个回合起生效；没选时为 null，跟着会话走。 */
+    private val _choice = MutableStateFlow<Pair<String, String>?>(null)
+    val choice: StateFlow<Pair<String, String>?> = _choice.asStateFlow()
+
+    /** 置顶的回复，按在会话里的先后排。 */
+    private val _pins = MutableStateFlow<List<MessagePin>>(emptyList())
+    val pins: StateFlow<List<MessagePin>> = _pins.asStateFlow()
+
+    private val _changes = MutableStateFlow<ChangesPanelUi?>(null)
+    val changes: StateFlow<ChangesPanelUi?> = _changes.asStateFlow()
+
     /** 打开时取一次的会话（会话列表里没有时用它的标题）。 */
     private val _session = MutableStateFlow<SessionSummary?>(null)
     val session: StateFlow<SessionSummary?> = _session.asStateFlow()
@@ -119,6 +137,65 @@ class SessionViewModel(
                 // 连不上：事件流会自己重连，标题先用会话列表里的
             }
         }
+        viewModelScope.launch {
+            _models.value = runCatching { withContext(io) { api.models() } }.getOrNull()
+        }
+        reloadPins()
+    }
+
+    private fun reloadPins() {
+        viewModelScope.launch {
+            runCatching { withContext(io) { api.pins(shortId) } }.onSuccess { _pins.value = it }
+        }
+    }
+
+    /**
+     * 置顶或取消置顶一条回复（照网页）：先在本地改（置顶的短标题是 null，显示占位的闪烁条），主站回来换成正式的列表；
+     * 没成功就换回主站上的样子，说明原因。
+     */
+    fun togglePin(seq: Int, pinned: Boolean) {
+        _pins.update { list ->
+            if (pinned) (list.filterNot { it.seq == seq } + MessagePin(seq, null, now().toString())).sortedBy { it.seq }
+            else list.filterNot { it.seq == seq }
+        }
+        viewModelScope.launch {
+            try {
+                _pins.value = withContext(io) { api.setPinned(shortId, seq, pinned) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (e is ApiException && e.status == 401) onSignedOut()
+                _composer.update { it.copy(failure = e) }
+                reloadPins()
+            }
+        }
+    }
+
+    /** 打开改动面板：每次打开都从主站取最新的一份（每个回合结束时宿主机算的）。 */
+    fun openChanges(focus: String? = null) {
+        _changes.value = ChangesPanelUi(focus)
+        viewModelScope.launch {
+            val result = try {
+                ChangesPanelUi(focus, repos = withContext(io) { api.diff(shortId) })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (e is ApiException && e.status == 401) onSignedOut()
+                ChangesPanelUi(focus, failure = e)
+            }
+            // 关掉了就不再打开
+            _changes.update { if (it != null) result else null }
+        }
+    }
+
+    fun closeChanges() {
+        _changes.value = null
+    }
+
+    /** 换模型或思考强度：模型不支持这一档时换成最近的一档；没声明推理等级的模型只有"关闭"。 */
+    fun choose(model: String, effort: String) {
+        val efforts = _models.value?.models?.firstOrNull { it.id == model }?.efforts.orEmpty()
+        _choice.value = model to (if (efforts.isEmpty()) "off" else fitEffort(efforts, effort) ?: effort)
     }
 
     /** App 在前台、页面开着时连上事件流。 */
@@ -251,9 +328,12 @@ class SessionViewModel(
                 text = if (fromComposer) "" else it.text,
             )
         }
+        val chosen = _choice.value
         viewModelScope.launch {
             try {
-                withContext(io) { api.send(shortId, text, mode) }
+                withContext(io) { api.send(shortId, text, mode, chosen?.first, chosen?.second) }
+                // 换的模型随这条消息生效了，之后跟着会话走
+                if (_choice.value == chosen) _choice.value = null
                 _composer.update { it.copy(busy = false) }
             } catch (e: CancellationException) {
                 throw e
