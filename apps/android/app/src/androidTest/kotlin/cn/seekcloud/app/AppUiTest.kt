@@ -6,7 +6,11 @@ import android.icu.text.MeasureFormat
 import android.icu.util.Measure
 import android.icu.util.MeasureUnit
 import android.icu.util.ULocale
+import android.os.SystemClock
+import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -15,6 +19,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isRoot
@@ -38,6 +43,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import cn.seekcloud.app.settings.AppPreferences
+import cn.seekcloud.app.ui.GLASS_TAB_BAR_TAG
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -135,6 +141,19 @@ class AppUiTest {
     private fun type(text: String) = explain("type") {
         rule.waitUntil(20_000) { rule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
         rule.onNode(hasSetTextAction()).performTextReplacement(text)
+        hideKeyboard()
+    }
+
+    /**
+     * 收起键盘：触摸模式下点输入框会弹出键盘，界面跟着重排；紧接着点下面的按钮时，按下和抬起之间按钮挪了位置，
+     * 这一下就落空了。填完字先收起来，再点按钮。
+     */
+    private fun hideKeyboard() {
+        scenario?.onActivity { activity ->
+            activity.getSystemService(InputMethodManager::class.java)
+                ?.hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+        }
+        rule.waitForIdle()
     }
 
     /** 在"连接服务器"页连一台 http 的假主站：要确认"连接未加密"。 */
@@ -418,6 +437,24 @@ class AppUiTest {
             tap(s(R.string.settings_glass_plain))
             Thread.sleep(800)
             shell("screencap -p $SCREENS/settings-plain-light.png")
+
+            // 按住、拖动、松手的录屏（#178 第二步）：两版玻璃各一段浅色、一段深色。CI 的模拟器关了动画，
+            // 录的时候打开（App 按系统设置决定要不要鼓起），录完改回去
+            val scale = shellOutput("settings get global animator_duration_scale").trim().ifEmpty { "1" }
+            shell("settings put global animator_duration_scale 1")
+            try {
+                for ((night, name) in listOf("no" to "light", "yes" to "dark")) {
+                    shell("cmd uimode night $night")
+                    for (style in listOf("Colorful", "Plain")) {
+                        prefs().edit().putString(AppPreferences.GLASS, style).commit()
+                        launch()
+                        waitForSamples()
+                        recordPress("press-${style.lowercase()}-$name.mp4")
+                    }
+                }
+            } finally {
+                shell("settings put global animator_duration_scale ${if (scale == "null") "1" else scale}")
+            }
         } finally {
             shell("cmd uimode night no")
             // 删掉这些会话：假主站是几个测试共用的，列表太长时别的测试新发起的会话会排到屏幕外面
@@ -437,6 +474,74 @@ class AppUiTest {
     }
 
     private fun prefs() = context.getSharedPreferences(AppPreferences.FILE, Context.MODE_PRIVATE)
+
+    /**
+     * 一边录屏一边模拟手指操作底栏（#178）：按住第一项、慢慢拖到第三项再拖回第二项、松手，然后点一下第一项。
+     * 测试里的动画只在测试时钟往前走时才动，所以录的时候关掉自动走，自己一帧一帧往前推（每帧之间真的等 16 毫秒），
+     * 录下来接近真实的速度。手指的事件经 UiAutomation 直接发给系统，和真的触摸一样。
+     */
+    private fun recordPress(file: String) {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val bar = rule.onNode(hasTestTag(GLASS_TAB_BAR_TAG)).fetchSemanticsNode().boundsInWindow
+        val count = 3
+        val inset = 4 * context.resources.displayMetrics.density
+        val y = bar.center.y
+        fun x(index: Float) = bar.left + inset + (bar.width - 2 * inset) * (index + 0.5f) / count
+        val recording = automation.executeShellCommand("screenrecord --time-limit 12 --size 540x1200 --bit-rate 2000000 $SCREENS/$file")
+        Thread.sleep(1200)
+        rule.mainClock.autoAdvance = false
+        try {
+            fun frames(n: Int) = repeat(n) {
+                rule.mainClock.advanceTimeByFrame()
+                Thread.sleep(16)
+            }
+            var down = SystemClock.uptimeMillis()
+            fun touch(action: Int, at: Float) {
+                val now = SystemClock.uptimeMillis()
+                if (action == MotionEvent.ACTION_DOWN) down = now
+                val event = MotionEvent.obtain(down, now, action, at, y, 0)
+                event.source = InputDevice.SOURCE_TOUCHSCREEN
+                automation.injectInputEvent(event, true)
+                event.recycle()
+            }
+            fun drag(from: Float, to: Float, steps: Int) {
+                for (step in 1..steps) {
+                    touch(MotionEvent.ACTION_MOVE, x(from + (to - from) * step / steps))
+                    frames(2)
+                }
+            }
+            frames(20)
+            // 按住第一项：透镜鼓起来
+            touch(MotionEvent.ACTION_DOWN, x(0f))
+            frames(45)
+            // 慢慢拖到第三项，停一下，再拖回第二项
+            drag(0f, 2f, 40)
+            frames(30)
+            drag(2f, 1f, 20)
+            frames(30)
+            // 松手：落到第二项再缩回去
+            touch(MotionEvent.ACTION_UP, x(1f))
+            frames(60)
+            // 点第一项：透镜滑过去，路上鼓一下
+            touch(MotionEvent.ACTION_DOWN, x(0f))
+            frames(4)
+            touch(MotionEvent.ACTION_UP, x(0f))
+            frames(70)
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
+        // 停下录屏（录屏程序收到 SIGINT 会把文件写完整），等它退出
+        shell("pkill -INT screenrecord")
+        java.io.FileInputStream(recording.fileDescriptor).use { it.readBytes() }
+        recording.close()
+        rule.waitForIdle()
+    }
+
+    /** 以 shell 的身份跑一条命令，返回它的输出。 */
+    private fun shellOutput(command: String): String =
+        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command).use { fd ->
+            java.io.FileInputStream(fd.fileDescriptor).use { String(it.readBytes()) }
+        }
 
     /** 点底栏的"设置"。 */
     private fun openSettings() = explain("openSettings") {

@@ -146,7 +146,7 @@ jobs:
             adb pull /data/local/tmp/seekcloud-screens "$RUNNER_TEMP/screens" || true;
             exit $status
 
-      # 截图缩小一半打进日志（分段，每行一段）：云端会话里没有模拟器，从日志取回来看
+      # 截图缩小一半、录屏原样打进日志（分段，每行一段）：云端会话里没有模拟器，从日志取回来看
       - name: 打印界面截图
         if: always()
         run: |
@@ -156,6 +156,11 @@ jobs:
             convert "$f" -resize 50% -quality 82 "$small" 2>/dev/null || small="$f"
             name=$(basename "$small")
             base64 -w 60000 "$small" | awk -v n="$name" '{ print "SCREENSHOT " n " " NR " " $0 }'
+          done
+          # 录屏（#178 按住底栏的效果）原样打进去
+          for f in "$RUNNER_TEMP"/screens/*.mp4; do
+            name=$(basename "$f")
+            base64 -w 60000 "$f" | awk -v n="$name" '{ print "SCREENSHOT " n " " NR " " $0 }'
           done
 
       - name: 上传界面截图
