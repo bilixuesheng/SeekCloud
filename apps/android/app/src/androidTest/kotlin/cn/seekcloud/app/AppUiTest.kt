@@ -373,7 +373,7 @@ class AppUiTest {
         connect(siteB)
         signIn()
         // 会话多到排进底栏下面，底栏才有内容可以折射（文字、未读的蓝点）
-        repeat(16) { startSession(siteB, "Glass sample ${it + 1}") }
+        val samples = (1..16).map { startSession(siteB, "Glass sample $it") }
         waitForSamples()
         shell("mkdir -p $SCREENS")
         try {
@@ -405,6 +405,13 @@ class AppUiTest {
             shell("screencap -p $SCREENS/settings-plain-light.png")
         } finally {
             shell("cmd uimode night no")
+            // 删掉这些会话：假主站是几个测试共用的，列表太长时别的测试新发起的会话会排到屏幕外面
+            val token = appToken(siteB)
+            for (id in samples) {
+                val request = Request.Builder().url("$siteB/api/sessions/$id/delete").header("Authorization", "Bearer $token")
+                    .post("{}".toRequestBody(JSON)).build()
+                OkHttpClient().newCall(request).execute().close()
+            }
         }
     }
 
