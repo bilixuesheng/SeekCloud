@@ -74,6 +74,8 @@ class AppUiTest {
         assumeTrue("needs siteA, siteB and password", siteA.isNotEmpty() && siteB.isNotEmpty() && password.isNotEmpty())
         // 每个测试从头开始：没有保存的主站、没有令牌
         for (name in listOf("servers", "tokens", AppPreferences.FILE)) context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
+        // 照手指操作的样子：在触摸模式下点按钮不会拿到焦点（别的测试按过返回键会让模拟器离开触摸模式）
+        InstrumentationRegistry.getInstrumentation().setInTouchMode(true)
     }
 
     @After
@@ -364,9 +366,14 @@ class AppUiTest {
         rule.waitUntil(20_000) { rule.onAllNodes(hasText(renamed)).fetchSemanticsNodes().isEmpty() }
     }
 
-    /** 系统的返回键（收起底部弹层）。 */
+    /**
+     * 系统的返回键（收起底部弹层、回到上一页）。按键会让模拟器离开触摸模式，之后点过的按钮会拿到焦点，
+     * 有焦点时第一次按返回只清掉焦点；按完切回触摸模式，和手指操作时一样。
+     */
     private fun back() {
-        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        instrumentation.setInTouchMode(true)
         rule.waitForIdle()
     }
 
@@ -480,7 +487,8 @@ class AppUiTest {
             tap(s(R.string.settings_about))
             waitFor("基于 SeekCloud")
             waitFor(s(R.string.legal_agpl))
-            back()
+            // 顶栏的返回箭头也回到分类列表
+            rule.onNode(hasContentDescription(s(R.string.back)) and hasClickAction()).performClick()
             waitFor(s(R.string.settings_section_general))
         } finally {
             lock(siteB)
