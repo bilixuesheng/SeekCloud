@@ -15,6 +15,8 @@ kotlinxSerialization = "1.13.0"
 openapiGenerator = "7.27.0"
 # 会话页的 Markdown（BSD-2-Clause）；自动识别网址的扩展另依赖 autolink（MIT）
 commonmark = "0.32.0"
+# 底部标签栏的液态玻璃：AndroidLiquidGlass（Kyant0，Apache-2.0），只引入这一个渲染库，版本钉死（#178）
+backdrop = "2.0.1"
 # 只在单元测试里用，和 lifecycle 带进来的 kotlinx-coroutines 版本一样
 coroutines = "1.9.0"
 
@@ -37,6 +39,7 @@ androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver3", version.ref = "okhttp" }
 okhttp-tls = { group = "com.squareup.okhttp3", name = "okhttp-tls", version.ref = "okhttp" }
+backdrop = { group = "io.github.kyant0", name = "backdrop", version.ref = "backdrop" }
 commonmark = { group = "org.commonmark", name = "commonmark", version.ref = "commonmark" }
 commonmark-tables = { group = "org.commonmark", name = "commonmark-ext-gfm-tables", version.ref = "commonmark" }
 commonmark-strikethrough = { group = "org.commonmark", name = "commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }

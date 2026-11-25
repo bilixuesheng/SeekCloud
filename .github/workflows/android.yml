@@ -136,11 +136,36 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           working-directory: apps/android
+          # 跑完把截图（#178 的底栏）从模拟器上拉下来：测试失败也拉，退出码照测试的
           script: >-
             ./gradlew connectedDebugAndroidTest
             -Pandroid.testInstrumentationRunnerArguments.siteA="$SITE_A"
             -Pandroid.testInstrumentationRunnerArguments.siteB="$SITE_B"
-            -Pandroid.testInstrumentationRunnerArguments.password="$SITE_PASSWORD"
+            -Pandroid.testInstrumentationRunnerArguments.password="$SITE_PASSWORD";
+            status=$?;
+            adb pull /data/local/tmp/seekcloud-screens "$RUNNER_TEMP/screens" || true;
+            exit $status
+
+      # 截图缩小一半打进日志（分段，每行一段）：云端会话里没有模拟器，从日志取回来看
+      - name: 打印界面截图
+        if: always()
+        run: |
+          shopt -s nullglob
+          for f in "$RUNNER_TEMP"/screens/*.png; do
+            small="${f%.png}.jpg"
+            convert "$f" -resize 50% -quality 82 "$small" 2>/dev/null || small="$f"
+            name=$(basename "$small")
+            base64 -w 60000 "$small" | awk -v n="$name" '{ print "SCREENSHOT " n " " NR " " $0 }'
+          done
+
+      - name: 上传界面截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-screenshots
+          path: ${{ runner.temp }}/screens/
+          if-no-files-found: ignore
+          retention-days: 14
 
       # 报告要下载才能看：失败的测试和原因直接打在日志里
       - name: 失败时打印失败的测试

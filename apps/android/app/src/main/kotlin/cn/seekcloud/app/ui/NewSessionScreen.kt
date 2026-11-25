@@ -70,6 +70,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -103,6 +104,7 @@ fun NewSessionRoute(
     onOpen: (SessionSummary) -> Unit,
     onCreated: (SessionSummary) -> Unit,
     onBack: (() -> Unit)?,
+    bottomInset: Dp = 0.dp,
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val repos by viewModel.repos.collectAsStateWithLifecycle()
@@ -126,6 +128,7 @@ fun NewSessionRoute(
         onModel = viewModel::setModel,
         onSubmit = viewModel::create,
         onBack = onBack,
+        bottomInset = bottomInset,
     )
 }
 
@@ -146,6 +149,8 @@ fun NewSessionScreen(
     nickname: String? = null,
     waiting: List<SessionSummary> = emptyList(),
     onOpen: (SessionSummary) -> Unit = {},
+    /** 内容下面留出的空白（底栏浮在上面）。 */
+    bottomInset: Dp = 0.dp,
 ) {
     var picker by rememberSaveable { mutableStateOf(Picker.None) }
     val context = LocalContext.current
@@ -174,7 +179,8 @@ fun NewSessionScreen(
                 .fillMaxSize()
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(bottom = bottomInset),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Image(painterResource(R.drawable.whale), contentDescription = null, modifier = Modifier.size(64.dp))

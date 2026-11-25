@@ -1,6 +1,23 @@
 package cn.seekcloud.app.ui
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Dp
+import cn.seekcloud.app.settings.AppPreferences
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.ui.platform.LocalDensity
@@ -104,11 +121,12 @@ fun SessionListRoute(
     viewModel: SessionListViewModel,
     newSession: @Composable () -> NewSessionViewModel,
     sessionPage: @Composable (shortId: String) -> SessionViewModel,
+    preferences: AppPreferences,
     onSwitchServer: () -> Unit,
     onSignOut: () -> Unit,
 ) {
-    // 新会话页、会话页盖在列表上面，按返回回到列表（转屏不丢）
-    var composing by rememberSaveable { mutableStateOf(false) }
+    // 底栏的三项：会话、新会话、设置（#178）；会话页盖在上面，按返回回到列表（转屏不丢）
+    var tab by rememberSaveable { mutableIntStateOf(TAB_SESSIONS) }
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     LifecycleStartEffect(viewModel) {
         viewModel.start()
@@ -124,11 +142,13 @@ fun SessionListRoute(
     val copied = stringResource(R.string.session_link_copied)
     val openSession = { s: SessionSummary ->
         openId = s.shortId
-        composing = false
+        if (tab == TAB_NEW) tab = TAB_SESSIONS
     }
     val waiting = awaitingInput(state.sessions)
     // 宽屏（平板、大屏手机横过来、折叠屏展开）：左边会话列表，右边新会话页（照网页宽屏的布局）
     val wide = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } >= 840.dp
+    // 内容能滚到底栏下面，最后一行不被挡住
+    val barInset = TAB_BAR_HEIGHT + TAB_BAR_MARGIN * 2
     val newSessionPage = @Composable { onBack: (() -> Unit)? ->
         NewSessionRoute(
             origin = server.origin,
@@ -139,6 +159,7 @@ fun SessionListRoute(
             // 发起以后直接进会话页
             onCreated = openSession,
             onBack = onBack,
+            bottomInset = barInset,
         )
     }
     val sessionPageFor = @Composable { shortId: String ->
@@ -165,30 +186,113 @@ fun SessionListRoute(
                 refreshing = refreshing,
                 onRefresh = viewModel::refresh,
                 onOpen = openSession,
-                onNewSession = { composing = true },
+                onNewSession = { tab = TAB_NEW },
                 onMenu = { viewModel.openMenu(it.shortId) },
                 onSwitchServer = onSwitchServer,
                 onSignOut = onSignOut,
                 snackbar = snackbar,
-                showNewSession = !wide,
+                // 底栏里有"新会话"，不要右下角的按钮
+                showNewSession = false,
+                bottomInset = barInset,
             )
         }
     }
+    // 液态玻璃的底栏（#178）：下面的内容画进 backdrop，底栏从它取像素做折射和模糊
+    val glass by preferences.glass.collectAsStateWithLifecycle()
+    val powerSave = rememberPowerSave()
+    val canLiquid = Build.VERSION.SDK_INT >= 33 && !powerSave
+    val slow = rememberSlowRendering(enabled = canLiquid)
+    val render = chooseGlassRender(Build.VERSION.SDK_INT, powerSave, slow, preferences.forcedRender)
+    val backdrop = rememberLayerBackdrop()
+    // 往下滚时收起，往上滚时出现（照 Claude 的 App）；键盘弹出、菜单打开时也收起
+    var scrolledAway by remember { mutableStateOf(false) }
+    val hideOnScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -8f) scrolledAway = true
+                if (available.y > 8f) scrolledAway = false
+                return Offset.Zero
+            }
+        }
+    }
+    val imeOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val barShown = !scrolledAway && !imeOpen && menu == null
+    LaunchedEffect(tab) { scrolledAway = false }
+    val animationsOff = rememberAnimationsOff()
+    val barOffset by animateFloatAsState(
+        if (barShown) 0f else 1f,
+        if (animationsOff) tween(0) else tween(220),
+        label = "tab-bar-offset",
+    )
+    val tabs = listOf(
+        TabItem(stringResource(R.string.tabs_sessions), R.drawable.ic_chat_bubble, R.drawable.ic_chat_bubble_filled),
+        TabItem(stringResource(R.string.sidebar_new_session), R.drawable.ic_edit_square, R.drawable.ic_edit_square_filled),
+        TabItem(stringResource(R.string.tabs_settings), R.drawable.ic_settings, R.drawable.ic_settings_filled),
+    )
+    val settingsPage = @Composable {
+        AppSettingsScreen(
+            server = server,
+            glass = glass,
+            render = render,
+            onGlass = preferences::setGlass,
+            onSwitchServer = onSwitchServer,
+            onSignOut = onSignOut,
+            bottomInset = barInset,
+        )
+    }
+    val bar = @Composable { modifier: Modifier ->
+        GlassTabBar(
+            backdrop = backdrop,
+            tabs = tabs,
+            // 宽屏时右边开着会话算在"会话"
+            selected = tab,
+            onSelect = { index ->
+                tab = index
+                if (index == TAB_NEW) openId = null
+            },
+            style = glass,
+            render = render,
+            modifier = modifier
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp, vertical = TAB_BAR_MARGIN)
+                .graphicsLayer {
+                    translationY = barOffset * (size.height + TAB_BAR_MARGIN.toPx() * 2 + 48.dp.toPx())
+                    alpha = 1f - barOffset
+                },
+        )
+    }
     if (!wide && open != null) {
+        // 进会话页时底栏收起
         sessionPageFor(open)
-    } else if (!wide && composing) {
-        newSessionPage { composing = false }
     } else if (wide) {
         Row(Modifier.fillMaxSize()) {
-            list(Modifier.width(380.dp).fillMaxHeight())
+            // 底栏放在列表那一栏的底部（#178 的边界情况）
+            Box(Modifier.width(380.dp).fillMaxHeight().nestedScroll(hideOnScroll)) {
+                Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) { list(Modifier.fillMaxSize()) }
+                bar(Modifier.align(Alignment.BottomCenter))
+            }
             VerticalDivider()
-            // 右边：开着的会话，没有时是新会话页
+            // 右边：设置、开着的会话，都没有时是新会话页
             Box(Modifier.weight(1f).fillMaxHeight()) {
-                if (open != null) sessionPageFor(open) else newSessionPage(null)
+                when {
+                    tab == TAB_SETTINGS -> settingsPage()
+                    open != null -> sessionPageFor(open)
+                    else -> newSessionPage(null)
+                }
             }
         }
     } else {
-        list(Modifier.fillMaxSize())
+        if (tab != TAB_SESSIONS) BackHandler { tab = TAB_SESSIONS }
+        Box(Modifier.fillMaxSize().nestedScroll(hideOnScroll)) {
+            Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
+                when (tab) {
+                    TAB_NEW -> newSessionPage(null)
+                    TAB_SETTINGS -> settingsPage()
+                    else -> list(Modifier.fillMaxSize())
+                }
+            }
+            bar(Modifier.align(Alignment.BottomCenter))
+        }
     }
     val sheet = menu
     val session = sheet?.let { m -> state.sessions.firstOrNull { it.shortId == m.shortId } }
@@ -226,6 +330,8 @@ fun SessionListScreen(
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     /** 宽屏时新会话页一直在右边，不要右下角的按钮。 */
     showNewSession: Boolean = true,
+    /** 列表下面留出的空白（底栏浮在上面）。 */
+    bottomInset: Dp = 0.dp,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
@@ -308,7 +414,7 @@ fun SessionListScreen(
                     !state.loaded -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
-                    else -> SessionSections(state, query, archivedOpen, { archivedOpen = !archivedOpen }, onOpen, onMenu)
+                    else -> SessionSections(state, query, archivedOpen, { archivedOpen = !archivedOpen }, onOpen, onMenu, bottomInset)
                 }
             }
         }
@@ -357,13 +463,15 @@ private fun SessionSections(
     onToggleArchived: () -> Unit,
     onOpen: (SessionSummary) -> Unit,
     onMenu: (SessionSummary) -> Unit,
+    bottomInset: Dp = 0.dp,
 ) {
+    val padding = PaddingValues(bottom = bottomInset)
     val row: @Composable (SessionSummary) -> Unit = { SessionRow(it, now(state), onOpen, onMenu) }
     val s = sections(state.sessions, state.groups, query)
     val empty = s.pinned.isEmpty() && s.recent.isEmpty() && s.archived.isEmpty() && s.groups.all { it.second.isEmpty() }
     if (empty) {
         // 下拉刷新要有能滚动的内容才拉得动
-        LazyColumn(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
             item { EmptyList(if (query.isBlank()) R.string.session_list_empty else R.string.session_list_no_match) }
         }
         return
@@ -371,7 +479,7 @@ private fun SessionSections(
     val pinned = stringResource(R.string.sidebar_pinned)
     val recent = stringResource(R.string.sidebar_recent)
     val archived = stringResource(R.string.sidebar_archived)
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
         section("pinned", pinned, s.pinned, row)
         for ((group, sessions) in s.groups) section("group:${group.id}", group.name, sessions, row, showEmpty = true)
         section("recent", if (query.isBlank()) recent else null, s.recent, row)
@@ -590,3 +698,7 @@ private fun SessionListPreview() {
         SessionListScreen(SavedServer("p", "https://seekcloud.example.com"), state, false, false, {}, {}, {}, {}, {}, {})
     }
 }
+
+private const val TAB_SESSIONS = 0
+private const val TAB_NEW = 1
+private const val TAB_SETTINGS = 2

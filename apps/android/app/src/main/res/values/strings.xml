@@ -70,6 +70,19 @@
     <string name="link_open_title">Open link</string>
     <string name="link_open_body">The following address will open in your browser:</string>
     <string name="link_open_confirm">Open</string>
+    <string name="tabs_sessions">Sessions</string>
+    <string name="tabs_settings">Settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_glass">Glass effect</string>
+    <string name="settings_glass_colorful">Colorful refraction</string>
+    <string name="settings_glass_colorful_hint">Edges split light into colors, like a prism.</string>
+    <string name="settings_glass_plain">Clear glass</string>
+    <string name="settings_glass_plain_hint">Refraction, highlights and shading only, with no extra color.</string>
+    <string name="settings_glass_frosted">This device shows frosted glass (Android 12 or earlier, Battery Saver, or slow rendering), so both options look the same.</string>
+    <string name="settings_server">Server</string>
+    <string name="settings_web">Open settings on the web</string>
+    <string name="settings_web_hint">Account, GitHub, model and other settings are on the web for now.</string>
     <string name="common_cancel" tools:ignore="UnusedResources">Cancel</string>
     <string name="common_close" tools:ignore="UnusedResources">Close</string>
     <string name="common_back" tools:ignore="UnusedResources">Back</string>
