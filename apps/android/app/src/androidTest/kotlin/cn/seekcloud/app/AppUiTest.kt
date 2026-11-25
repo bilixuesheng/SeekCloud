@@ -31,6 +31,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import cn.seekcloud.app.settings.AppPreferences
 import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -65,7 +66,7 @@ class AppUiTest {
     fun clean() {
         assumeTrue("needs siteA, siteB and password", siteA.isNotEmpty() && siteB.isNotEmpty() && password.isNotEmpty())
         // 每个测试从头开始：没有保存的主站、没有令牌
-        for (name in listOf("servers", "tokens")) context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
+        for (name in listOf("servers", "tokens", AppPreferences.FILE)) context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
     }
 
     @After
@@ -362,6 +363,59 @@ class AppUiTest {
         rule.waitForIdle()
     }
 
+    /**
+     * 底栏的截图（#178）：两版玻璃效果各一张浅色、一张深色，再加一张退回毛玻璃的。截图用 shell 的 screencap
+     * 存到 /data/local/tmp/seekcloud-screens（测试跑完 App 会被卸载，存在 App 自己的目录里会跟着删掉），CI 拉下来传成附件。
+     */
+    @Test
+    fun glassTabBarScreenshots() {
+        launch()
+        connect(siteB)
+        signIn()
+        // 列表里有几个会话，底栏下面有内容可以折射
+        repeat(8) { startSession(siteB, "Glass sample ${it + 1}") }
+        waitFor("Glass sample 8")
+        shell("mkdir -p $SCREENS")
+        try {
+            for ((night, name) in listOf("no" to "light", "yes" to "dark")) {
+                shell("cmd uimode night $night")
+                for (style in listOf("Colorful", "Plain")) {
+                    prefs().edit().putString(AppPreferences.GLASS, style).commit()
+                    launch()
+                    waitFor("Glass sample 8")
+                    rule.waitForIdle()
+                    Thread.sleep(1500)
+                    shell("screencap -p $SCREENS/glass-${style.lowercase()}-$name.png")
+                }
+            }
+            shell("cmd uimode night no")
+            prefs().edit().putString(AppPreferences.GLASS, "Colorful").putString(AppPreferences.RENDER, "Frosted").commit()
+            launch()
+            waitFor("Glass sample 8")
+            Thread.sleep(1500)
+            shell("screencap -p $SCREENS/glass-frosted-light.png")
+            // 设置里切换以后底栏马上换，不用重启 App
+            prefs().edit().remove(AppPreferences.RENDER).commit()
+            launch()
+            rule.onNode(hasContentDescription(s(R.string.tabs_settings)) and hasClickAction()).performClick()
+            waitFor(s(R.string.settings_glass))
+            tap(s(R.string.settings_glass_plain))
+            Thread.sleep(800)
+            shell("screencap -p $SCREENS/settings-plain-light.png")
+        } finally {
+            shell("cmd uimode night no")
+        }
+    }
+
+    private fun prefs() = context.getSharedPreferences(AppPreferences.FILE, Context.MODE_PRIVATE)
+
+    /** 以 shell 的身份跑一条命令，等它跑完。 */
+    private fun shell(command: String) {
+        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command).use { fd ->
+            java.io.FileInputStream(fd.fileDescriptor).use { it.readBytes() }
+        }
+    }
+
     @Test
     fun workingTurnControls() {
         launch()
@@ -443,10 +497,9 @@ class AppUiTest {
         connect(siteA)
         signIn()
         scenario?.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
-        // 横过来以后够宽：左边列表，右边新会话页，没有右下角的"新会话"按钮
+        // 横过来以后够宽：左边列表（底栏在列表那一栏的底部），右边新会话页
         waitFor(s(R.string.new_session_placeholder))
         waitForList()
-        rule.onNode(hasContentDescription(s(R.string.sidebar_new_session)) and hasClickAction()).assertDoesNotExist()
         scenario?.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
         waitForList()
         rule.waitUntil(20_000) {
@@ -585,6 +638,9 @@ class AppUiTest {
 
         /** 假主站的 Agent 默认的回复。 */
         const val REPLY = "收到。"
+
+        /** 截图放在这里（shell 能写、App 卸载以后还在），CI 拉下来。 */
+        const val SCREENS = "/data/local/tmp/seekcloud-screens"
     }
 }
 

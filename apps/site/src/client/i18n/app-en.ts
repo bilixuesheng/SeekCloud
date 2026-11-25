@@ -88,4 +88,20 @@ export const appEn: AppCatalog = {
   link_open_title: "Open link",
   link_open_body: "The following address will open in your browser:",
   link_open_confirm: "Open",
+
+  // Tab bar and app settings (#178; the other settings categories are #181)
+  tabs_sessions: "Sessions",
+  tabs_settings: "Settings",
+  settings_title: "Settings",
+  settings_appearance: "Appearance",
+  settings_glass: "Glass effect",
+  settings_glass_colorful: "Colorful refraction",
+  settings_glass_colorful_hint: "Edges split light into colors, like a prism.",
+  settings_glass_plain: "Clear glass",
+  settings_glass_plain_hint: "Refraction, highlights and shading only, with no extra color.",
+  settings_glass_frosted:
+    "This device shows frosted glass (Android 12 or earlier, Battery Saver, or slow rendering), so both options look the same.",
+  settings_server: "Server",
+  settings_web: "Open settings on the web",
+  settings_web_hint: "Account, GitHub, model and other settings are on the web for now.",
 };

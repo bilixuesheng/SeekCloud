@@ -90,6 +90,7 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.backdrop)
     implementation(libs.commonmark)
     implementation(libs.commonmark.tables)
     implementation(libs.commonmark.strikethrough)

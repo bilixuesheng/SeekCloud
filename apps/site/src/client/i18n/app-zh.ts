@@ -95,4 +95,20 @@ export const appZh = {
   link_open_title: "打开链接",
   link_open_body: "将在浏览器中打开以下地址：",
   link_open_confirm: "打开",
+
+  // 底部标签栏和 App 的设置（#178；设置的其余分类是 #181）
+  tabs_sessions: "会话",
+  tabs_settings: "设置",
+  settings_title: "设置",
+  settings_appearance: "外观",
+  settings_glass: "玻璃效果",
+  settings_glass_colorful: "彩色折射",
+  settings_glass_colorful_hint: "边缘的折射带色散，像棱镜一样有彩边。",
+  settings_glass_plain: "纯玻璃",
+  settings_glass_plain_hint: "只有折射、高光和明暗，没有多余的颜色。",
+  settings_glass_frosted:
+    "此设备显示为毛玻璃（安卓 13 以下、省电模式或画面跟不上时），两版看起来一样。",
+  settings_server: "服务器",
+  settings_web: "在网页上打开设置",
+  settings_web_hint: "账户、GitHub、模型等设置暂时在网页上修改。",
 } as const satisfies Record<string, string>;
