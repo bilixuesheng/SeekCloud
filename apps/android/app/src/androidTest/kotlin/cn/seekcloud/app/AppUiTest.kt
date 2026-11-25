@@ -372,9 +372,9 @@ class AppUiTest {
         launch()
         connect(siteB)
         signIn()
-        // 列表里有几个会话，底栏下面有内容可以折射
-        repeat(8) { startSession(siteB, "Glass sample ${it + 1}") }
-        waitFor("Glass sample 8")
+        // 会话多到排进底栏下面，底栏才有内容可以折射（文字、未读的蓝点）
+        repeat(16) { startSession(siteB, "Glass sample ${it + 1}") }
+        waitForSamples()
         shell("mkdir -p $SCREENS")
         try {
             for ((night, name) in listOf("no" to "light", "yes" to "dark")) {
@@ -382,7 +382,7 @@ class AppUiTest {
                 for (style in listOf("Colorful", "Plain")) {
                     prefs().edit().putString(AppPreferences.GLASS, style).commit()
                     launch()
-                    waitFor("Glass sample 8")
+                    waitForSamples()
                     rule.waitForIdle()
                     Thread.sleep(1500)
                     shell("screencap -p $SCREENS/glass-${style.lowercase()}-$name.png")
@@ -391,12 +391,13 @@ class AppUiTest {
             shell("cmd uimode night no")
             prefs().edit().putString(AppPreferences.GLASS, "Colorful").putString(AppPreferences.RENDER, "Frosted").commit()
             launch()
-            waitFor("Glass sample 8")
+            waitForSamples()
             Thread.sleep(1500)
             shell("screencap -p $SCREENS/glass-frosted-light.png")
             // 设置里切换以后底栏马上换，不用重启 App
             prefs().edit().remove(AppPreferences.RENDER).commit()
             launch()
+            waitForSamples()
             rule.onNode(hasContentDescription(s(R.string.tabs_settings)) and hasClickAction()).performClick()
             waitFor(s(R.string.settings_glass))
             tap(s(R.string.settings_glass_plain))
@@ -405,6 +406,12 @@ class AppUiTest {
         } finally {
             shell("cmd uimode night no")
         }
+    }
+
+    /** 等列表排满一屏（列表只画看得到的行，所以按行数等，不按哪一个）。 */
+    private fun waitForSamples() = explain("waitForSamples") {
+        rule.waitUntil(20_000) { rule.onAllNodes(hasText("Glass sample", substring = true)).fetchSemanticsNodes().size >= 10 }
+        rule.waitForIdle()
     }
 
     private fun prefs() = context.getSharedPreferences(AppPreferences.FILE, Context.MODE_PRIVATE)
