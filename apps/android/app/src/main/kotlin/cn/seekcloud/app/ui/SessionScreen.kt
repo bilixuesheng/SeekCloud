@@ -11,7 +11,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.LocalContentColor
@@ -1560,7 +1559,7 @@ private fun DiffNote(text: String) {
 /** diff 的一行：旧行号、新行号、正文（太长的折行）。 */
 @Composable
 private fun DiffLine(line: PatchLine) {
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDarkTheme.current
     val background = when (line.kind) {
         PatchLine.Kind.Add -> if (dark) Color(0x332EA043) else Color(0xFFE6FFEC)
         PatchLine.Kind.Del -> if (dark) Color(0x33F85149) else Color(0xFFFFEBE9)

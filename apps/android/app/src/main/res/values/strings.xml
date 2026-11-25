@@ -73,7 +73,6 @@
     <string name="tabs_sessions">Sessions</string>
     <string name="tabs_settings">Settings</string>
     <string name="settings_title">Settings</string>
-    <string name="settings_appearance">Appearance</string>
     <string name="settings_glass">Glass effect</string>
     <string name="settings_glass_colorful">Colorful refraction</string>
     <string name="settings_glass_colorful_hint">Edges split light into colors, like a prism.</string>
@@ -83,6 +82,13 @@
     <string name="settings_server">Server</string>
     <string name="settings_web">Open settings on the web</string>
     <string name="settings_web_hint">Account, GitHub, model and other settings are on the web for now.</string>
+    <string name="settings_appearance_hint">Appearance and the glass effect apply only to the app on this device.</string>
+    <string name="settings_app">App</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_source">Source code</string>
+    <string name="settings_load_failed">Settings could not be loaded.</string>
+    <string name="settings_retry">Retry</string>
     <string name="common_cancel" tools:ignore="UnusedResources">Cancel</string>
     <string name="common_close" tools:ignore="UnusedResources">Close</string>
     <string name="common_back" tools:ignore="UnusedResources">Back</string>
@@ -97,6 +103,7 @@
     <string name="common_rename" tools:ignore="UnusedResources">Rename</string>
     <string name="common_save" tools:ignore="UnusedResources">Save</string>
     <string name="common_dismiss" tools:ignore="UnusedResources">Dismiss notification</string>
+    <string name="legal_licenses" tools:ignore="UnusedResources">Open-source notices</string>
     <string name="error_network" tools:ignore="UnusedResources">Network error. Try again later.</string>
     <string name="error_wrong_password" tools:ignore="UnusedResources">Incorrect password.</string>
     <string name="error_wrong_code" tools:ignore="UnusedResources">Incorrect code.</string>
@@ -394,6 +401,9 @@
     <string name="changes_no_patch" tools:ignore="UnusedResources">No content was included.</string>
     <string name="changes_mode_only" tools:ignore="UnusedResources">Only the file\'s mode or name changed. The content is the same.</string>
     <string name="changes_no_newline" tools:ignore="UnusedResources">No newline at end of file</string>
+    <string name="legal_attribution_meaning" tools:ignore="UnusedResources">(Based on SeekCloud)</string>
+    <string name="legal_license" tools:ignore="UnusedResources">SeekCloud is licensed under the %1$s (AGPL-3.0) and comes with no warranty. You may redistribute and modify SeekCloud under the terms of that license. The source code is available at the address above.</string>
+    <string name="legal_agpl" tools:ignore="UnusedResources">GNU Affero General Public License, version 3</string>
     <string name="github_unlink_title" tools:ignore="UnusedResources">Disconnect GitHub?</string>
     <string name="github_unlink_body" tools:ignore="UnusedResources">DeepSeek will lose access to your repositories, and sessions using them will not be able to push. You can connect again at any time.</string>
     <string name="github_unlink" tools:ignore="UnusedResources">Disconnect</string>
@@ -403,6 +413,8 @@
     <string name="common_change" tools:ignore="UnusedResources">Change</string>
     <string name="common_set" tools:ignore="UnusedResources">Set</string>
     <string name="common_continue" tools:ignore="UnusedResources">Continue</string>
+    <string name="session_settings_grace" tools:ignore="UnusedResources">Wait after a host disconnects</string>
+    <string name="session_settings_grace_hint" tools:ignore="UnusedResources">If a host stays disconnected from the site longer than this, its running sessions are marked as failed. The Agent in the sandbox keeps running while disconnected, so sessions continue as usual if the host reconnects in time. Lengthen this on unstable networks.</string>
     <string name="models_deepseek_name" tools:ignore="UnusedResources">DeepSeek</string>
     <string name="models_provider_name_moonshotai" tools:ignore="UnusedResources">Kimi (Moonshot)</string>
     <string name="models_provider_name_moonshotai_cn" tools:ignore="UnusedResources">Kimi (Moonshot China)</string>
@@ -410,6 +422,20 @@
     <string name="models_provider_name_zai_coding_cn" tools:ignore="UnusedResources">Zhipu GLM (China)</string>
     <string name="models_provider_name_minimax_cn" tools:ignore="UnusedResources">MiniMax (China)</string>
     <string name="models_provider_name_xiaomi" tools:ignore="UnusedResources">Xiaomi MiMo</string>
+    <string name="settings_section_general" tools:ignore="UnusedResources">General</string>
+    <string name="settings_section_model" tools:ignore="UnusedResources">Models</string>
+    <string name="settings_section_sessions" tools:ignore="UnusedResources">Sessions</string>
+    <string name="settings_section_github" tools:ignore="UnusedResources">GitHub</string>
+    <string name="settings_section_account" tools:ignore="UnusedResources">Account</string>
+    <string name="settings_section_data" tools:ignore="UnusedResources">Data</string>
+    <string name="general_appearance" tools:ignore="UnusedResources">Appearance</string>
+    <string name="general_theme_light" tools:ignore="UnusedResources">Light</string>
+    <string name="general_theme_dark" tools:ignore="UnusedResources">Dark</string>
+    <string name="general_theme_system" tools:ignore="UnusedResources">Match system</string>
+    <string name="general_effort" tools:ignore="UnusedResources">Default thinking effort</string>
+    <string name="general_effort_hint" tools:ignore="UnusedResources">New sessions start at this level. If the chosen model lacks it, the closest level is used. Existing sessions are not affected.</string>
+    <string name="general_language" tools:ignore="UnusedResources">Language</string>
+    <string name="general_language_hint" tools:ignore="UnusedResources">The language of the interface. The Agent replies in the language you write in, regardless of this setting.</string>
     <string name="effort_off" tools:ignore="UnusedResources">Off</string>
     <string name="effort_minimal" tools:ignore="UnusedResources">Minimal</string>
     <string name="effort_low" tools:ignore="UnusedResources">Low</string>

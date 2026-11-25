@@ -10,7 +10,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -20,6 +19,8 @@ import cn.seekcloud.app.Screen
 import cn.seekcloud.app.connect.ConnectRoute
 import cn.seekcloud.app.net.PreferencesStore
 import cn.seekcloud.app.settings.AppPreferences
+import cn.seekcloud.app.settings.HttpSiteSettings
+import cn.seekcloud.app.settings.SettingsViewModel
 import cn.seekcloud.app.net.eventStream
 import cn.seekcloud.app.sessions.HttpImageLoader
 import cn.seekcloud.app.sessions.HttpSessionPageApi
@@ -31,13 +32,10 @@ import cn.seekcloud.app.sessions.SessionsApi
 
 /** 按 [AppViewModel]（[app]）现在的页面画出来，页面之间淡入淡出。 */
 @Composable
-fun AppRoot(app: AppViewModel = viewModel()) {
+fun AppRoot(preferences: AppPreferences, app: AppViewModel = viewModel()) {
     val screen by app.screen.collectAsStateWithLifecycle()
     val login by app.login.collectAsStateWithLifecycle()
     val retrying by app.retrying.collectAsStateWithLifecycle()
-    // 这台设备上 App 自己的设置（玻璃效果）：整个 App 共用一份，改了马上生效
-    val context = LocalContext.current
-    val preferences = remember { AppPreferences(PreferencesStore(context.applicationContext, AppPreferences.FILE)) }
 
     AnimatedContent(
         targetState = screen,
@@ -103,6 +101,11 @@ fun AppRoot(app: AppViewModel = viewModel()) {
                             images = HttpImageLoader(client),
                             serverHost = client.address.host,
                         )
+                    }
+                },
+                settings = {
+                    viewModel(key = "settings:${current.server.id}:${current.server.origin}") {
+                        SettingsViewModel(HttpSiteSettings(app.client(current.server)), onSignedOut = { app.signedOut(current.server) })
                     }
                 },
                 preferences = preferences,

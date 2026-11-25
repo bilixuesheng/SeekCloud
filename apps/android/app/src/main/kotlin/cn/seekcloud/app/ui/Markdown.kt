@@ -6,7 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -292,7 +291,7 @@ private fun ListView(list: ListBlock) {
 @Composable
 private fun CodeView(code: String, language: String) {
     val source = code.removeSuffix("\n")
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDarkTheme.current
     val highlighted = remember(source, language, dark) { highlighted(source, language, dark) }
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
